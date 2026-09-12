@@ -1,0 +1,26 @@
+[project]
+name = "skywatch"
+version = "0.1.0"
+description = "Liberty University AI Club — SENTINEL aerospace-domain detectors (SkyWatch)"
+requires-python = ">=3.11"
+dependencies = [
+    # Deliberately tiny. Detector logic runs on plain Python + dataclasses so
+    # students can work with no database and no services. Add libraries only
+    # when a lane genuinely needs one (e.g. pandas/pyarrow for EDA).
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+]
+eda = [
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "matplotlib>=3.7",
+]
+
+[tool.pytest.ini_options]
+# Put the repo root on sys.path so `import contracts` and `import air` work
+# without installing anything. Just run `pytest` from the repo root.
+pythonpath = ["."]
+testpaths = ["tests"]

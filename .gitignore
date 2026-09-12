@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Data — never commit large/raw ADS-B captures. Small curated fixtures under
+# air/fixtures/ ARE committed (they are the shared test corpus).
+data/raw/
+data/generated/
+*.parquet
+*.csv.gz
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

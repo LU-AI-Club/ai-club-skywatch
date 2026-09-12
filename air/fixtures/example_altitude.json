@@ -1,0 +1,47 @@
+[
+  {
+    "_label": "normal_cruise",
+    "_note": "airliner at FL350, inside the band -> no detection",
+    "icao24": "a1b2c3",
+    "observed_at": "2026-09-12T14:00:00Z",
+    "latitude": 37.62,
+    "longitude": -122.38,
+    "altitude_ft": 35000,
+    "ground_speed_kt": 450,
+    "track_deg": 90,
+    "vertical_rate_fpm": 0,
+    "nic": 8,
+    "nacp": 9,
+    "callsign": "SWA123"
+  },
+  {
+    "_label": "above_ceiling",
+    "_note": "implausible 75000 ft -> ABOVE_CEILING detection",
+    "icao24": "d4e5f6",
+    "observed_at": "2026-09-12T14:00:05Z",
+    "latitude": 37.70,
+    "longitude": -122.20,
+    "altitude_ft": 75000,
+    "ground_speed_kt": 500,
+    "track_deg": 270,
+    "vertical_rate_fpm": 0,
+    "nic": 7,
+    "nacp": 8,
+    "callsign": "TEST01"
+  },
+  {
+    "_label": "below_floor",
+    "_note": "100 ft over open water, well under the 500 ft floor -> BELOW_FLOOR",
+    "icao24": "aa11bb",
+    "observed_at": "2026-09-12T14:00:10Z",
+    "latitude": 37.80,
+    "longitude": -122.30,
+    "altitude_ft": 100,
+    "ground_speed_kt": 120,
+    "track_deg": 10,
+    "vertical_rate_fpm": -200,
+    "nic": 6,
+    "nacp": 7,
+    "callsign": "TEST02"
+  }
+]
