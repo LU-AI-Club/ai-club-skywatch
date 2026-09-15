@@ -15,8 +15,18 @@ reinvent is the output contract — detectors emit the real SENTINEL `Detection`
 ## Quickstart
 
 ```bash
-python -m venv .venv && .venv\Scripts\activate    # (macOS/Linux: source .venv/bin/activate)
-pip install -e ".[dev]"
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate    
+
+# macOS/Linux: 
+source .venv/bin/activate
+
+# Install libraries
+pip install ".[dev]"
+
+
 pytest -q
 ```
 
@@ -54,3 +64,6 @@ docs/                      playbook + contributing guide
 - When evidence is insufficient, abstain rather than guess.
 - Detector confidence is about a *deviation*, not intent or threat. TCE/CAATS
   owns Trust.
+
+## ADS-B Antennae Map  
+[Click Here!](https://www.airnavradar.com/stations/extrpi728073)

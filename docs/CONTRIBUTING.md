@@ -1,6 +1,6 @@
 # Contributing (start here if you're new)
 
-You do **not** need to be a software pro. Every task is "write one small
+Every task is "write one small
 function and one small test." Here is the whole loop.
 
 ## One-time setup
@@ -13,8 +13,8 @@ python -m venv .venv
 # macOS/Linux:
 source .venv/bin/activate
 
-pip install -e ".[dev]"      # installs pytest
-pip install -e ".[eda]"      # optional: pandas/matplotlib for notebooks
+pip install ".[dev]"      # installs pytest
+pip install ".[eda]"      # optional: pandas/matplotlib for notebooks
 ```
 
 ## Run the tests (do this constantly)
@@ -52,7 +52,7 @@ red, fix that first.
 | shared input model | `air/models/` | `tests/air/models/` |
 | the ADS-B normalizer | `air/normalizers/` | `tests/air/normalizers/` |
 | fixtures (test data) | `air/fixtures/` | — |
-| exploration | `notebooks/` | — |
+| exploration | `notebooks/<your_detector>/` | — |
 
 ## Never edit
 
