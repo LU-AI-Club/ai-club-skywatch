@@ -32,14 +32,14 @@ what makes the work parallel.
 Assign an owner to each (pair up on a 7-person team). Every lane works on the
 same detector but a different stage.
 
-| Lane | Owns | Needs a DB? |
-|------|------|-------------|
-| 1. EDA + Fixtures | explore the data; build positive/negative fixture files everyone tests against | no |
-| 2. Feature engineering | raw `AdsbObservation` → your feature-record dataclass | no |
-| 3. Baseline / reference | defines & versions "normal" (envelopes, zones, corridors) | no |
-| 4. Core detector logic | the flag rule — pure functions over feature records | no |
-| 5. Scoring + output | confidence/severity + emit the `Detection` contract | no |
-| 6. Evaluation + false positives | metrics, threshold sweeps, benign look-alikes | no |
+| Lane | Owns |
+|------|------|
+| 1. EDA + Fixtures | explore the data; build positive/negative fixture files everyone tests against |
+| 2. Feature engineering | raw `AdsbObservation` → your feature-record dataclass |
+| 3. Baseline / reference | defines & versions "normal" (envelopes, zones, corridors) |
+| 4. Core detector logic | the flag rule — pure functions over feature records |
+| 5. Scoring + output | confidence/severity + emit the `Detection` contract |
+| 6. Evaluation + false positives | metrics, threshold sweeps, benign look-alikes |
 
 The Technical Lead (and Xenith) own the DB, the live normalizer, and TCE/CAATS
 wiring — **not** the detector teams.
@@ -48,19 +48,6 @@ wiring — **not** the detector teams.
 
 > A merged pull request containing the function **plus a `pytest` test that runs
 > on a fixture — no database, no services.**
-
-If a task can't be tested without standing up Postgres, it's the wrong task —
-split it until the piece in front of you is a pure function on a dataclass.
-
-## How to actually start (maps to the syllabus 15-week plan)
-
-1. **Weeks 1–2:** the whole team does EDA together in `notebooks/`. This is the
-   on-ramp — no scaffolding, just look at real ADS-B. Then write the Detector
-   Design Card: the card's outputs *are* your two contracts (the feature-record
-   fields, and confirmation you'll emit `Detection`).
-2. **Week 3:** freeze the feature-record dataclass. **This is the fork point** —
-   after it, all six lanes run in parallel.
-3. **Week 4+:** each lane merges fixture-tested PRs independently.
 
 ## Copy the shape
 
