@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from ..geo.altitude import vertical_check
-from ..types import AltitudeSource, ExitReason
+from ...air.detectors.no_fly_zone.geo.altitude import vertical_check
+from ...air.detectors.no_fly_zone.types import AltitudeSource, ExitReason
 from .conftest import make_state
 
 SKIP = pytest.mark.skip(reason="stream D: not implemented")

@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from ..ingest.airspace_loader import load_zones
-from ..types import Activation, ZoneType
+from ...air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
+from ...air.detectors.no_fly_zone.types import Activation, ZoneType
 from .conftest import AIRSPACE_FILE
 
 SKIP = pytest.mark.skip(reason="stream B: not implemented")

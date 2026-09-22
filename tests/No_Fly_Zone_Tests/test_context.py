@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from ..logic.context import gather_signals
+from ...air.detectors.no_fly_zone.logic.context import gather_signals
 from .conftest import make_state
 
 SKIP = pytest.mark.skip(reason="stream F: not implemented")

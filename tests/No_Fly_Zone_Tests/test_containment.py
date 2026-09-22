@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from ..geo.containment import check_containment
-from ..types import ExitReason
+from ...air.detectors.no_fly_zone.geo.containment import check_containment
+from ...air.detectors.no_fly_zone.types import ExitReason
 from .conftest import make_state
 
 SKIP = pytest.mark.skip(reason="stream C: not implemented")

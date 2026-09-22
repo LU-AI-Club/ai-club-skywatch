@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from ..logic.activation import is_active
-from ..types import ActivationState
+from ...air.detectors.no_fly_zone.logic.activation import is_active
+from ...air.detectors.no_fly_zone.types import ActivationState
 
 SKIP = pytest.mark.skip(reason="stream E: not implemented")
 
