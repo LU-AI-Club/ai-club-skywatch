@@ -13,8 +13,8 @@ import pytest
 from contracts import Detection as PlatformDetection
 from contracts import SeverityLevel
 
-from ..emit import to_platform_detection
-from ..types import Detection, Severity
+from ...air.detectors.no_fly_zone.emit import to_platform_detection
+from ...air.detectors.no_fly_zone.types import Detection, Severity
 
 OBSERVED_AT = datetime(2026, 9, 22, 20, 15, tzinfo=UTC)
 

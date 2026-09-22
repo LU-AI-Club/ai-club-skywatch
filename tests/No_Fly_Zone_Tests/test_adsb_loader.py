@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from ..ingest.adsb_loader import load_states
+from ...air.detectors.no_fly_zone.ingest.adsb_loader import load_states
 from .conftest import TRACKS_FILE
 
 SKIP = pytest.mark.skip(reason="stream A: not implemented")

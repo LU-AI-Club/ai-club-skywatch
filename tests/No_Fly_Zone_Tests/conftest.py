@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from ..config import Config, load_config
-from ..types import AircraftState
+from ...air.detectors.no_fly_zone.config import Config, load_config
+from ...air.detectors.no_fly_zone.types import AircraftState
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 AIRSPACE_FILE = FIXTURES / "airspace" / "klyh-150nm.geojson"

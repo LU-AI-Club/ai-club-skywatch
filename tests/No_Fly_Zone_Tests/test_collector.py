@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from ..collect.collector import collect
+from ...air.detectors.no_fly_zone.collect.collector import collect
 
 SKIP = pytest.mark.skip(reason="stream I: not implemented")
 

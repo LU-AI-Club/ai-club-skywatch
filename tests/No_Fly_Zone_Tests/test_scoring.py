@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from ..logic.scoring import build_detection
-from ..types import Severity
+from ...air.detectors.no_fly_zone.logic.scoring import build_detection
+from ...air.detectors.no_fly_zone.types import Severity
 
 SKIP = pytest.mark.skip(reason="stream G: not implemented")
 

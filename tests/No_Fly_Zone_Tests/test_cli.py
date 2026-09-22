@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..cli import build_parser, main
+from ...air.detectors.no_fly_zone.cli import build_parser, main
 from .conftest import AIRSPACE_FILE, TRACKS_FILE
 
 

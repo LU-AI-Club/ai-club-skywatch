@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from ..logic.detector import run
+from ...air.detectors.no_fly_zone.logic.detector import run
 from .conftest import make_state
 
 SKIP = pytest.mark.skip(reason="stream Lead: not implemented")

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from ..dashboard import app
+from ...air.detectors.no_fly_zone.dashboard import app
 
 SKIP = pytest.mark.skip(reason="stream J: not implemented")
 
