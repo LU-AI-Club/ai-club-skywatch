@@ -1,6 +1,6 @@
 # Geometry
 
-**Author:** Manni · **PR:** pending · **File:** `air/detectors/proximity/geometry.py`
+**Author:** Manni · **PR:** #9 · **File:** `air/detectors/proximity/geometry.py`
 
 ## What it does
 
