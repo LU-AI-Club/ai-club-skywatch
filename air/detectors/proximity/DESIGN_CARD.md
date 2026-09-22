@@ -5,9 +5,22 @@
 
 > One page, eight boxes. This is the document Xenith reads to understand what
 > we are building and why. Plain English. Someone who has never heard of ADS-B
-> should be able to follow it. Every answer already exists in the project plan
-> (`SkyWatch — Dangerous Proximity Detector`) — your job is to find it and say
-> it in two or three sentences.
+> should be able to follow it.
+>
+> **Where the answers are.** Almost everything is in
+> [docs/proximity/PROJECT_PLAN.md](../../../docs/proximity/PROJECT_PLAN.md) —
+> each hint below names the section. Two other files help:
+>
+> | You need | Look in |
+> |---|---|
+> | the threshold numbers (box 4) | [`configs/detectors/proximity.yaml`](../../../configs/detectors/proximity.yaml) — every value has a comment |
+> | the output and governance rules (box 5) | [the detector README](README.md) |
+> | everything else | the project plan |
+>
+> Your job is to find each answer and say it in two or three sentences of your
+> own. Do not paste the plan in — a design card that is just a copy of the plan
+> is not a design card. If something in the plan does not make sense, ask Paul;
+> "I could not find this" is a useful thing to report.
 
 | | |
 |---|---|
