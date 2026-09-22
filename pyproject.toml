@@ -11,6 +11,7 @@ dependencies = [
     # Deliberately tiny. Detector logic runs on plain Python + dataclasses so
     # students can work with no database and no services. Add libraries only
     # when a lane genuinely needs one (e.g. pandas/pyarrow for EDA).
+    "pyyaml>=6.0",  # configs/detectors/*.yaml -> frozen config dataclasses
 ]
 
 [project.optional-dependencies]
