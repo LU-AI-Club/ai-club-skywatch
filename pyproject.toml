@@ -11,16 +11,33 @@ dependencies = [
     # Deliberately tiny. Detector logic runs on plain Python + dataclasses so
     # students can work with no database and no services. Add libraries only
     # when a lane genuinely needs one (e.g. pandas/pyarrow for EDA).
+    #
+    # pyyaml is a real runtime dependency: no_fly_zone/config.py imports it at
+    # module level, so without it that package cannot even be imported and the
+    # whole test suite aborts during collection. It is pure Python and ~170 KB.
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
+# Everything needed to meet the definition of done: run the tests, and pass
+# the lint and type checks. One command, no loose extras to remember.
 dev = [
     "pytest>=7.4",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-PyYAML>=6.0",
 ]
 eda = [
     "pandas>=2.0",
     "pyarrow>=14.0",
     "matplotlib>=3.7",
+]
+# No-fly-zone detector geometry. NOT needed to run the tests today: shapely is
+# imported only under TYPE_CHECKING and h3 is not imported yet. Streams B and C
+# need these once they start implementing; everyone else can skip them.
+nfz = [
+    "shapely>=2.0",
+    "h3>=4.0",
 ]
 
 # Only air/ and contracts/ are importable packages; configs/, notebooks/,
@@ -33,4 +50,62 @@ include = ["air*", "contracts*"]
 # Put the repo root on sys.path so `import contracts` and `import air` work
 # without installing anything. Just run `pytest` from the repo root.
 pythonpath = ["."]
-testpaths = ["tests"]
+testpaths = ["tests", "air/detectors/no_fly_zone/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    "contracts",   # vendored read-only copy of the platform contract; see contracts/README.md
+    "build",
+    ".venv",
+    "notebooks",   # EDA scratch; linting these would fight the workflow
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "BLE"]
+
+[tool.ruff.lint.per-file-ignores]
+# Stream tests import the symbol they are about to exercise. The import is the
+# point: if the module or name disappears, the test file fails to collect and
+# the owner finds out immediately instead of at merge time.
+"air/detectors/no_fly_zone/tests/test_*.py" = ["F401"]
+# LEAD-OWNED files (CLAUDE.md: "do not change them unless the user explicitly
+# asks"). These are suppressed, not fixed - raise them with the lead.
+#   UP042: `class X(str, Enum)` is deliberate. It keeps `ZoneType.TFR == "TFR"`
+#          true for JSON round-tripping; StrEnum would change `str()` output.
+#   UP035/E501/C408/UP017: cosmetic only.
+"air/detectors/no_fly_zone/types.py" = ["UP042"]
+"air/detectors/no_fly_zone/config.py" = ["UP035", "E501"]
+"air/detectors/no_fly_zone/tests/test_contracts.py" = ["E501", "C408", "UP017", "F401"]
+
+[tool.mypy]
+# No python_version pin: mypy then targets whichever interpreter you run it
+# with. Pinning 3.11 makes it reject numpy's 3.12+ stubs (numpy arrives via
+# shapely). Ruff's `target-version = "py311"` is what actually guards against
+# using syntax the floor version cannot parse.
+# false on purpose: the overrides below name modules (h3, shapely, streamlit)
+# that no stream imports yet. They are anticipatory, not stale.
+warn_unused_configs = false
+disallow_untyped_defs = true
+warn_return_any = true
+# contracts/ is vendored read-only; do not police someone else's copy.
+exclude = "^(contracts|build|\\.venv)/"
+
+[[tool.mypy.overrides]]
+module = ["h3.*", "shapely.*", "streamlit.*", "folium.*", "pydeck.*"]
+ignore_missing_imports = true
+
+# numpy arrives via shapely. Its bundled stubs use 3.12+ `type` statements,
+# which mypy rejects while targeting 3.11, so don't descend into them.
+# contracts/ is a vendored read-only copy of the platform models
+# ("do not hand-edit" - contracts/README.md). emit.py imports it, so mypy
+# follows it; type-check our code against it, but don't report its findings.
+[[tool.mypy.overrides]]
+module = ["contracts.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["numpy.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
