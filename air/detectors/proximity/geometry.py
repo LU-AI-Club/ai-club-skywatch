@@ -49,7 +49,9 @@ def to_local_xy(lat: float, lon: float, ref_lat: float, ref_lon: float) -> tuple
     The cos() term is the whole trick: a degree of longitude shrinks as you go
     north. Forget it and every east-west distance is ~20% too big at Lynchburg.
     """
-    raise NotImplementedError("TODO Manni: see docstring above and the tests")
+    x_m = EARTH_RADIUS_M * math.radians(lon - ref_lon) * math.cos(math.radians(ref_lat))
+    y_m = EARTH_RADIUS_M * math.radians(lat - ref_lat)
+    return x_m, y_m
 
 
 def velocity_xy(ground_speed_kt: float, track_deg: float) -> tuple[float, float]:
@@ -63,7 +65,9 @@ def velocity_xy(ground_speed_kt: float, track_deg: float) -> tuple[float, float]
     Note that is sin for x and cos for y — the opposite of maths-class angles,
     because compass angles start at north and go clockwise.
     """
-    raise NotImplementedError("TODO Manni: see docstring above and the tests")
+    speed_mps = ground_speed_kt * KT_TO_MPS
+    heading_rad = math.radians(track_deg)
+    return speed_mps * math.sin(heading_rad), speed_mps * math.cos(heading_rad)
 
 
 def time_to_cpa(rx: float, ry: float, vx: float, vy: float) -> float | None:
@@ -82,7 +86,10 @@ def time_to_cpa(rx: float, ry: float, vx: float, vy: float) -> float | None:
     Return ``None`` when |v| is (near) zero — same speed and heading means the
     separation never changes and there is no closest approach to speak of.
     """
-    raise NotImplementedError("TODO Manni: see docstring above and the tests")
+    speed_sq = vx * vx + vy * vy
+    if speed_sq < 1e-18:  # Relative speed below 1 nanometre per second.
+        return None
+    return -(rx * vx + ry * vy) / speed_sq
 
 
 def predicted_separation(
@@ -105,7 +112,9 @@ def predicted_separation(
     signed the same way as ``vertical_now_ft`` (B's altitude - A's altitude).
     Return absolute values — separation is a distance, never negative.
     """
-    raise NotImplementedError("TODO Manni: see docstring above and the tests")
+    horizontal_nm = math.hypot(rx + vx * t_s, ry + vy * t_s) / M_PER_NM
+    vertical_ft = abs(vertical_now_ft + vertical_rate_diff_fpm * t_s / 60.0)
+    return horizontal_nm, vertical_ft
 
 
 __all__ = [
