@@ -245,7 +245,7 @@ Start with `is_airborne`. It's five tests and about twenty minutes.
 
 **Tests:** `tests/air/detectors/proximity/test_proximity_pairs.py` — 14 tests.
 
-### CalebK — `air/detectors/proximity/detector.py`, two functions
+### CalebK — `air/detectors/proximity/rules.py`, two functions
 
 **In one sentence:** given how close two planes are predicted to get, decide
 whether that's HIGH, MEDIUM, LOW, INFO, or nothing at all.
@@ -319,7 +319,7 @@ branch, then a pull request — just a `.md` file instead of a `.py`.
 | Distance between two lat/lon points | `geometry.haversine_nm` |
 | Grouping reports by aircraft, assembling per-second snapshots | `tracks.group_tracks`, `tracks.align_tracks` |
 | Which map square a plane is in | `pairs.cell_of` |
-| Gluing Manni's four functions into one record | `detector.pair_geometry` |
+| Gluing Manni's four functions into one record | `features.pair_geometry` |
 | Scoring and building the final alert | `detector.confidence_for`, `explanation_facts`, `to_detection` |
 | Five test scenarios with known answers | `air/fixtures/proximity_*.json` |
 | The script that regenerates them | `scripts/make_proximity_fixtures.py` |

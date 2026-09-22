@@ -17,7 +17,9 @@ the board. Non-coders: [DESIGN_CARD.md](DESIGN_CARD.md).
 | `tracks.py` | interpolate every aircraft onto one 1-s clock | **Erik** |
 | `pairs.py` | grid-cell binning + cheap filters (airborne, not stacked) | **CalebG** |
 | `geometry.py` | local projection, relative vectors, t_cpa, predicted separation | **Manni** |
-| `detector.py` | `PairGeometry` → gates + tiers → `Detection` → `ProximityDetector` | **CalebK** (rules), **Paul** (wiring) |
+| `features.py` | `PairGeometry` — the record the rules read | done |
+| `rules.py` | gates + severity tiers | **CalebK** |
+| `detector.py` | scoring → `Detection` → `ProximityDetector` | **Paul** |
 | `air/fixtures/proximity_*.json` | five synthetic scenarios with known answers | done |
 | `scripts/make_proximity_fixtures.py` | regenerates those fixtures deterministically | done |
 | `scripts/run_proximity.py` | fixture in → Detection JSON out | done |

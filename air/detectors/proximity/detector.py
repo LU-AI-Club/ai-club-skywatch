@@ -5,10 +5,14 @@ Same skeleton as air/detectors/_example_altitude, with a harder middle:
     config (proximity.yaml)
       -> tracks.align_tracks        every aircraft on one 1-s clock
       -> pairs.candidate_pairs      nearby, airborne, not stacked
-      -> pair_geometry              relative vectors, t_cpa, predicted separation
-      -> flag_pair / severity_for   gates + threshold table       <- CalebK
+      -> features.pair_geometry     relative vectors, t_cpa, predicted separation
+      -> rules.flag_pair            gates + threshold table       <- CalebK
       -> to_detection               the SENTINEL Detection contract
       -> ProximityDetector          wires it all together         <- Paul
+
+This file holds the LAST stage only: scoring, the Detection contract, and the
+detector class. The math is in geometry.py, the feature record in features.py,
+the thresholds in rules.py.
 
 We predict FUTURE separation, not current distance. Two aircraft 6 nm apart
 and closing head-on are a detection; two aircraft 1 nm apart and diverging are
@@ -24,18 +28,12 @@ Governance (do not violate):
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from air.detectors.proximity.config import ProximityConfig, load_config
-from air.detectors.proximity.geometry import (
-    haversine_nm,
-    predicted_separation,
-    time_to_cpa,
-    to_local_xy,
-    velocity_xy,
-)
+from air.detectors.proximity.features import PairGeometry, pair_geometry
 from air.detectors.proximity.pairs import candidate_pairs
+from air.detectors.proximity.rules import flag_pair, severity_for
 from air.detectors.proximity.tracks import align_tracks
 from air.models.observation import AdsbObservation
 from contracts import (
@@ -57,102 +55,6 @@ from contracts import (
 DOMAIN = "air"
 DETECTION_TYPE = "predicted_proximity"
 FEATURE_SCHEMA_VERSION = "air-features-v1"
-
-
-# --- The feature record (the contract between the math and the rules) --------
-@dataclass(frozen=True, slots=True)
-class PairGeometry:
-    """Everything the rules need to know about one pair at one instant."""
-
-    icao_a: str
-    icao_b: str
-    at: datetime
-    horizontal_now_nm: float
-    vertical_now_ft: float
-    closure_rate_kt: float          # + means closing, - means opening
-    t_cpa_s: float | None           # None when relative velocity is ~0
-    predicted_horizontal_nm: float | None
-    predicted_vertical_ft: float | None
-    obs_a: AdsbObservation
-    obs_b: AdsbObservation
-
-    @property
-    def converging(self) -> bool:
-        return self.t_cpa_s is not None and self.t_cpa_s > 0
-
-
-# --- Features (done; pure glue over geometry.py) ------------------------------
-def pair_geometry(a: AdsbObservation, b: AdsbObservation) -> PairGeometry | None:
-    """DONE. Relative state of the pair, or None if a needed field is missing."""
-    if None in (a.altitude_ft, b.altitude_ft, a.ground_speed_kt, b.ground_speed_kt, a.track_deg, b.track_deg):
-        return None
-    assert a.altitude_ft is not None and b.altitude_ft is not None
-    # Local plane centred on A, so A sits at the origin.
-    bx, by = to_local_xy(b.latitude, b.longitude, a.latitude, a.longitude)
-    avx, avy = velocity_xy(a.ground_speed_kt, a.track_deg)  # type: ignore[arg-type]
-    bvx, bvy = velocity_xy(b.ground_speed_kt, b.track_deg)  # type: ignore[arg-type]
-    rx, ry = bx, by
-    vx, vy = bvx - avx, bvy - avy
-
-    vertical_now = b.altitude_ft - a.altitude_ft
-    vrate_diff = (b.vertical_rate_fpm or 0.0) - (a.vertical_rate_fpm or 0.0)
-    dist_m = (rx * rx + ry * ry) ** 0.5
-    # Closure rate = -(rate of change of distance) = -(r . v)/|r|, in knots.
-    closure_mps = 0.0 if dist_m < 1e-6 else -(rx * vx + ry * vy) / dist_m
-    closure_kt = closure_mps * 3600.0 / 1852.0
-
-    t = time_to_cpa(rx, ry, vx, vy)
-    if t is None:
-        pred_h, pred_v = None, None
-    else:
-        pred_h, pred_v = predicted_separation(rx, ry, vx, vy, t, vertical_now, vrate_diff)
-
-    return PairGeometry(
-        icao_a=a.icao24,
-        icao_b=b.icao24,
-        at=a.observed_at,
-        horizontal_now_nm=haversine_nm(a.latitude, a.longitude, b.latitude, b.longitude),
-        vertical_now_ft=abs(vertical_now),
-        closure_rate_kt=closure_kt,
-        t_cpa_s=t,
-        predicted_horizontal_nm=pred_h,
-        predicted_vertical_ft=pred_v,
-        obs_a=a,
-        obs_b=b,
-    )
-
-
-# --- Rules (CalebK) -----------------------------------------------------------
-def severity_for(
-    predicted_horizontal_nm: float, predicted_vertical_ft: float, cfg: ProximityConfig
-) -> SeverityLevel | None:
-    """Look up the severity tier for a predicted separation, or None if none match.
-
-    Walk ``cfg.tiers`` in order (HIGH first — the YAML lists them tightest to
-    loosest) and return the first tier where BOTH hold:
-
-        predicted_horizontal_nm < tier.max_horizontal_nm
-        predicted_vertical_ft   < tier.max_vertical_ft
-
-    Both must hold. 0.2 nm apart horizontally but 2000 ft apart vertically is
-    normal, legal, and returns None.
-    """
-    raise NotImplementedError("TODO CalebK: see docstring above and the tests")
-
-
-def flag_pair(geom: PairGeometry, cfg: ProximityConfig) -> SeverityLevel | None:
-    """Apply the gates, then the threshold table. None means "do not emit".
-
-    Gates, in order — fail any one and return None:
-      1. ``geom.t_cpa_s`` is not None (relative velocity exists)
-      2. ``geom.converging`` (closest approach is in the future, t_cpa > 0)
-      3. ``geom.t_cpa_s <= cfg.max_tcpa_s`` (straight-line prediction is
-         only trusted for the next couple of minutes)
-      4. predicted separations are not None
-
-    Then return ``severity_for(predicted_horizontal, predicted_vertical, cfg)``.
-    """
-    raise NotImplementedError("TODO CalebK: see docstring above and the tests")
 
 
 # --- Scoring + output (done) --------------------------------------------------
@@ -321,12 +223,8 @@ __all__ = [
     "DETECTION_TYPE",
     "FEATURE_SCHEMA_VERSION",
     "LIMITATIONS",
-    "PairGeometry",
     "ProximityDetector",
     "confidence_for",
     "explanation_facts",
-    "flag_pair",
-    "pair_geometry",
-    "severity_for",
     "to_detection",
 ]

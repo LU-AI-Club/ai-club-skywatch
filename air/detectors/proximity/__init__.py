@@ -2,15 +2,13 @@
 
 from air.detectors.proximity.config import ProximityConfig, SeverityTier, load_config
 from air.detectors.proximity.detector import (
-    PairGeometry,
     ProximityDetector,
     confidence_for,
     explanation_facts,
-    flag_pair,
-    pair_geometry,
-    severity_for,
     to_detection,
 )
+from air.detectors.proximity.features import PairGeometry, pair_geometry
+from air.detectors.proximity.rules import flag_pair, severity_for
 
 __all__ = [
     "PairGeometry",
