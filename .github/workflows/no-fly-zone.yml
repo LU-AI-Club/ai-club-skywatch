@@ -1,0 +1,46 @@
+name: no-fly-zone
+
+# Scoped to air/detectors/no_fly_zone on purpose. Running ruff and mypy across
+# the whole repo would fail on pre-existing findings in files this team does
+# not own, and a permanently red build is one nobody reads.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "air/detectors/no_fly_zone/**"
+      - "pyproject.toml"
+      - ".github/workflows/no-fly-zone.yml"
+  pull_request:
+    paths:
+      - "air/detectors/no_fly_zone/**"
+      - "pyproject.toml"
+      - ".github/workflows/no-fly-zone.yml"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e ".[dev,nfz]"
+
+      - name: ruff
+        run: ruff check air/detectors/no_fly_zone/
+
+      - name: mypy
+        run: mypy air/detectors/no_fly_zone/
+
+      - name: pytest
+        run: pytest air/detectors/no_fly_zone/tests -q
+
+      - name: CLI runs end to end
+        # Exit 1 is expected while stages are stubs: it means the harness ran
+        # and reported them. Exit 2 (a real error) or a crash fails the build.
+        run: |
+          python -m air.detectors.no_fly_zone run \
+            --input air/detectors/no_fly_zone/fixtures/tracks/klyh_mixed.json \
+            --out /tmp/nfz-ci || [ $? -eq 1 ]
