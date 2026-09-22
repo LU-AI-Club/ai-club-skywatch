@@ -38,15 +38,21 @@ the command is at the top of each test file.
 ## The loop (same for everyone)
 
 ```bash
-git checkout main && git pull
+git checkout Proximity_Detector && git pull     # our team branch, NOT main
 git checkout -b proximity/<yourname>/<function>      # e.g. proximity/erik/interpolate
 # edit the ONE function, run your test file until it's green
 pytest tests/air/detectors/proximity/test_proximity_<file>.py -q -rxX
 # delete the @todo("You") lines above the tests you made pass
+cp docs/proximity/_TEMPLATE.md docs/proximity/<function>.md   # then fill it in
 git add -A && git commit -m "proximity: implement <function>"
 git push -u origin proximity/<yourname>/<function>
-# open a PR, ask a teammate to review
+# open a PR against Proximity_Detector, ask a teammate to review
 ```
+
+Every PR has three parts: **the function**, **its tests green**, and **a
+markdown file in `docs/proximity/`**. See
+[docs/proximity/PR_GUIDE.md](../../../docs/proximity/PR_GUIDE.md) for how to
+write the description and how to review someone else's.
 
 Rules from the playbook: pure functions only (same input → same output, no
 files, no network, no globals). If you can't tell the answer from the inputs,
