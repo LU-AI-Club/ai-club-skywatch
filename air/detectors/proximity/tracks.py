@@ -79,7 +79,68 @@ def interpolate_to_grid(
     Tip: ``dataclasses.replace(before, observed_at=tick, latitude=..., ...)``
     builds the new observation without retyping every field.
     """
-    raise NotImplementedError("TODO Erik: see docstring above and the tests")
+    # Work in whole microseconds since epoch so tick maths is exact integer
+    # arithmetic -- float seconds (~1.8e9) would drift off :00.000.
+    # datetime cannot represent anything finer than 1 us, so a step that is
+    # not a whole number of microseconds has no honest grid: refuse it rather
+    # than silently resample onto a different one.
+    step_us_float = step_s * 1_000_000
+    if not math.isfinite(step_us_float):
+        raise ValueError(f"step_s must be a positive whole number of microseconds, got {step_s!r}")
+    step_us = round(step_us_float)
+    # abs_tol is a float-precision tolerance, not a detection threshold.
+    if step_us <= 0 or not math.isclose(step_us_float, step_us, rel_tol=0.0, abs_tol=1e-6):
+        raise ValueError(f"step_s must be a positive whole number of microseconds, got {step_s!r}")
+
+    if math.isnan(max_gap_s) or max_gap_s < 0:
+        raise ValueError(f"max_gap_s must be non-negative and not NaN, got {max_gap_s!r}")
+
+    if len(track) < 2:
+        return []
+
+    epoch = datetime(1970, 1, 1, tzinfo=track[0].observed_at.tzinfo)
+    one_us = timedelta(microseconds=1)
+
+    out: list[AdsbObservation] = []
+    last_k: int | None = None  # index of the last tick emitted, to avoid duplicates
+    for before, after in zip(track, track[1:]):
+        b_us = (before.observed_at - epoch) // one_us
+        a_us = (after.observed_at - epoch) // one_us
+        span_us = a_us - b_us
+        # Across a silence (or between duplicate timestamps) only ticks that
+        # land exactly on a real report are emitted; nothing is invented.
+        # Compare in seconds: scaling max_gap_s to microseconds can put an
+        # exact boundary just below the integer span (e.g. 1.001 seconds).
+        can_blend = span_us > 0 and span_us / 1_000_000 <= max_gap_s
+
+        if can_blend:
+            ks = range(-(-b_us // step_us), a_us // step_us + 1)  # ceil .. floor
+        else:
+            ks = [t // step_us for t in (b_us, a_us) if t % step_us == 0]
+
+        for k in ks:
+            if last_k is not None and k <= last_k:
+                continue  # already emitted by the previous segment
+            tick_us = k * step_us
+            if tick_us == b_us:
+                obs = before  # exact hit: the real report, untouched
+            elif tick_us == a_us:
+                obs = after
+            else:
+                frac = (tick_us - b_us) / span_us
+                obs = replace(
+                    before,
+                    observed_at=epoch + timedelta(microseconds=tick_us),
+                    latitude=_lerp(before.latitude, after.latitude, frac),
+                    longitude=_lerp(before.longitude, after.longitude, frac),
+                    altitude_ft=_lerp(before.altitude_ft, after.altitude_ft, frac),
+                    ground_speed_kt=_lerp(before.ground_speed_kt, after.ground_speed_kt, frac),
+                    vertical_rate_fpm=_lerp(before.vertical_rate_fpm, after.vertical_rate_fpm, frac),
+                    track_deg=_lerp_angle(before.track_deg, after.track_deg, frac),
+                )
+            out.append(obs)
+            last_k = k
+    return out
 
 
 def align_tracks(
