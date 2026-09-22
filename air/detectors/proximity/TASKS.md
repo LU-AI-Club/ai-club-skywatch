@@ -24,6 +24,20 @@ severity or None
 Detection  ←  ProximityDetector.detect_observations ← Paul (wire it together)
 ```
 
+## First time only: install the test tools
+
+With your virtual environment active (your prompt shows `(.venv)`), from the
+repo root:
+
+```bash
+pip install -e ".[dev,eda]"
+```
+
+`[dev]` is pytest, `[eda]` is pandas/matplotlib for notebooks. If you get
+`pytest : The term 'pytest' is not recognized`, this is the step you missed.
+Still stuck? `python -m pytest` works even when the `pytest` shortcut is not
+on your PATH.
+
 ## See the board
 
 ```bash
@@ -38,15 +52,36 @@ the command is at the top of each test file.
 ## The loop (same for everyone)
 
 ```bash
-git checkout Proximity_Detector && git pull     # our team branch, NOT main
-git checkout -b proximity/<yourname>/<function>      # e.g. proximity/erik/interpolate
-# edit the ONE function, run your test file until it's green
+# 1. Move to the team branch and get everyone else's latest work
+git checkout Proximity_Detector
+git pull
+
+# 2. Make your own branch to work on, named after you and your function
+git checkout -b proximity/<yourname>/<function>     # e.g. proximity/erik/interpolate
+
+# 3. Open your file, find the line that says raise NotImplementedError,
+#    and replace it with real code. Read the docstring above it first.
+
+# 4. Run your own tests. Repeat steps 3-4 until they all pass.
 pytest tests/air/detectors/proximity/test_proximity_<file>.py -q -rxX
-# delete the @todo("You") lines above the tests you made pass
-cp docs/proximity/_TEMPLATE.md docs/proximity/<function>.md   # then fill it in
-git add -A && git commit -m "proximity: implement <function>"
+
+# 5. In the test file, delete the @todo("YourName") line above every test
+#    you now pass. That is how the board shows you are finished.
+
+# 6. Write up what you built: copy the template, then fill it in
+cp docs/proximity/_TEMPLATE.md docs/proximity/<function>.md
+
+# 7. Check you broke nothing else in the repo
+pytest -q
+
+# 8. Save your work and send it to GitHub
+git add -A
+git commit -m "proximity: implement <function>"
 git push -u origin proximity/<yourname>/<function>
-# open a PR against Proximity_Detector, ask a teammate to review
+
+# 9. On github.com, click "Compare & pull request".
+#    CHANGE THE BASE DROPDOWN from main to Proximity_Detector, then submit.
+#    Ask a teammate to review it.
 ```
 
 Every PR has three parts: **the function**, **its tests green**, and **a
