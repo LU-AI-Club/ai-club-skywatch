@@ -36,9 +36,13 @@ silently mislabels every result.
 """
 from __future__ import annotations
 
+import json
+from datetime import date, datetime 
 from pathlib import Path
 
-from ..types import AirspaceZone
+from shapely.geometry import shape
+
+from ..types import Activation, AirspaceZone, Datum, TimeWindow, ZoneType
 
 
 def load_zones(path: str | Path) -> list[AirspaceZone]:
