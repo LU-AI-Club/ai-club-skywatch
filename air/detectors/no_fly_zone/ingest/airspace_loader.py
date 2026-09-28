@@ -47,4 +47,65 @@ from ..types import Activation, AirspaceZone, Datum, TimeWindow, ZoneType
 
 def load_zones(path: str | Path) -> list[AirspaceZone]:
     """Parse ``path`` into :class:`AirspaceZone` records."""
-    raise NotImplementedError("stream B: airspace_loader")
+    path = Path(path)
+    if not path.exists():
+        raise FileNotFoundError(f"airspace file not found: {path}")
+
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if data.get("type") != "FeatureCollection":
+        raise ValueError(f"expected a FeatureCollection, got {data.get('type')!r}")
+
+    zones: list[AirspaceZone] = []
+    for feature in data.get("features", []):
+        geom_json = feature.get("geometry", {})
+        if geom_json.get("type") != "Polygon":
+            raise ValueError(f"unsupported geometry type: {geom_json.get('type')!r}")
+        geometry = shape(geom_json)
+
+        props = feature.get("properties", {})
+
+        floor_ft = props.get("floor_ft")
+        ceiling_ft = props.get("ceiling_ft")
+        floor_datum_raw = props.get("floor_datum")
+        ceiling_datum_raw = props.get("ceiling_datum")
+
+        if None in (floor_ft, ceiling_ft, floor_datum_raw, ceiling_datum_raw):
+            floor_ft = 0.0
+            floor_datum = Datum.SFC
+            ceiling_ft = float("inf")
+            ceiling_datum = Datum.MSL
+        else:
+            floor_datum = Datum(floor_datum_raw)
+            ceiling_datum = Datum(ceiling_datum_raw)
+
+        active_windows = tuple(
+            TimeWindow(
+                start=datetime.fromisoformat(w["start"]),
+                end=datetime.fromisoformat(w["end"]),
+            )
+            for w in props.get("active_windows", [])
+        )
+
+        source_asof_raw = props.get("source_asof")
+        source_asof = date.fromisoformat(source_asof_raw) if source_asof_raw else None
+
+        zone = AirspaceZone(
+            zone_id=props["zone_id"],
+            name=props.get("name", ""),
+            zone_type=ZoneType(props["zone_type"]),
+            geometry=geometry,
+            floor_ft=float(floor_ft),
+            floor_datum=floor_datum,
+            ceiling_ft=float(ceiling_ft),
+            ceiling_datum=ceiling_datum,
+            activation=Activation(props["activation"]),
+            active_windows=active_windows,
+            controlling_agency=props.get("controlling_agency"),
+            source=props.get("source", ""),
+            source_asof=source_asof,
+        )
+        zones.append(zone)
+
+    return zones
