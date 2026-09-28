@@ -5,8 +5,10 @@ lands: delete the skip mark as you implement, and make it go green.
 """
 from __future__ import annotations
 
-import pytest
 import json
+from pathlib import Path
+
+import pytest
 
 from ..ingest.airspace_loader import load_zones
 from ..types import Activation, ZoneType
@@ -27,8 +29,7 @@ def test_parses_the_three_fixture_zones() -> None:
     assert len(tfr.active_windows) == 1
 
 
-
-def test_rejects_a_file_that_is_not_a_featurecollection(tmp_path) -> None:
+def test_rejects_a_file_that_is_not_a_featurecollection(tmp_path: Path) -> None:
     """Raises ValueError rather than returning an empty list - an empty zone set
     would silently make every aircraft look clean."""
     bad_file = tmp_path / "not_a_featurecollection.json"
