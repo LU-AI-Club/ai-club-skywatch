@@ -1,4 +1,5 @@
 import csv
+from bisect import bisect_right   # <-- add this line
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict,List, Tuple
@@ -94,3 +95,71 @@ def load_faa_registry(file_path: str | Path) -> Dict[str, FAARecord]:
                 raise ValueError(f"Malformed row {row_num} in {path}: {row} ({e})") from e
 
     return registry
+def _parse_icao24(icao24: str | int) -> int:
+    """
+    Normalize an ICAO 24-bit address to an int.
+
+    Accepts "a1b2c3", "A1B2C3", "0xA1B2C3", " a1b2c3 ", or an int.
+    Raises ValueError if it isn't valid hex or falls outside 24 bits.
+    """
+    if isinstance(icao24, int):
+        addr = icao24
+    else:
+        text = str(icao24).strip().lower().replace(" ", "").replace("_", "")
+        if text.startswith("0x"):
+            text = text[2:]
+        if not text:
+            raise ValueError("icao24 is empty")
+        try:
+            addr = int(text, 16)
+        except ValueError as e:
+            raise ValueError(f"icao24 {icao24!r} is not valid hexadecimal") from e
+
+    if not 0 <= addr <= 0xFFFFFF:
+        raise ValueError(f"icao24 0x{addr:X} is outside the 24-bit range")
+    return addr
+
+
+def country_for_icao24(icao24: str | int,
+                       blocks: List[Tuple[int, int, str]]) -> str | None:
+    """
+    Which country owns this ICAO 24-bit address?
+
+    Parameters
+    ----------
+    icao24 : str | int
+        The address as a hex string ("a1b2c3", "0xA1B2C3") or an int.
+    blocks : List[Tuple[int, int, str]]
+        Block list from load_icao_blocks(), sorted by start address.
+
+    Returns
+    -------
+    str | None
+        The owning country, or None if the address falls in no allocated
+        block. None is a meaningful result, not a failure: an address
+        belonging to no state is what a fabricated contact looks like.
+
+    Raises
+    ------
+    ValueError
+        If icao24 is not valid hex or is outside the 24-bit range.
+
+    Notes
+    -----
+    Binary search, so O(log n) per call. load_icao_blocks() already returns
+    the list sorted by start, which is what makes this valid; passing an
+    unsorted list will give wrong answers rather than an error.
+    """
+    addr = _parse_icao24(icao24)
+
+    # bisect_right over the start addresses finds the first block that
+    # starts AFTER addr. The only block that could contain addr is the one
+    # immediately before that.
+    starts = [b[0] for b in blocks]
+    i = bisect_right(starts, addr) - 1
+    if i < 0:
+        return None
+
+    start, end, country = blocks[i]
+    return country if addr <= end else None
+
