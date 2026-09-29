@@ -53,7 +53,7 @@ _M_PER_NM = 1852.0
 _M_PER_DEG_LAT = 111_132.954
 _M_PER_DEG_LON_EQUATOR = 111_319.49
 
-# DO-260B containment radius (Rc) for each NIC value, in metres. These are the
+# DO-260B containment radius (Rc) for each NIC value, in meters. These are the
 # definitions of the NIC field, not tunables. NIC 0 means "unknown", which is
 # treated as missing so the configured default applies.
 _NIC_RADIUS_M = {
@@ -122,7 +122,7 @@ def uncertainty_radius_m(state: AircraftState, cfg: Config) -> float:
 
 
 def _local_projection(lat0: float, lon0: float) -> Callable[..., tuple[float, float]]:
-    """Equirectangular metres around the aircraft. Accurate to well under 1%
+    """Equirectangular meters around the aircraft. Accurate to well under 1%
     across the few miles that matter for a boundary distance."""
     m_per_deg_lon = _M_PER_DEG_LON_EQUATOR * cos(radians(lat0))
 

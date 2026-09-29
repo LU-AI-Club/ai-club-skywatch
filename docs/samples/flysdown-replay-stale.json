@@ -1,0 +1,84 @@
+{
+ "schema": "skywatch.flysdown.report/1",
+ "experimental": true,
+ "generatedAt": "2026-09-29T22:44:05.711407Z",
+ "detector": {
+  "id": "skywatch.no_fly_zone",
+  "version": "0.1.0",
+  "rulesVersion": "nfz-rules-0.1.0"
+ },
+ "scope": {
+  "name": "KLYH",
+  "lat": 37.3267,
+  "lon": -79.2004,
+  "radiusNm": 150
+ },
+ "feed": {
+  "status": "stale",
+  "reason": "the feed marked this snapshot stale",
+  "url": null,
+  "source": "relay/adsb.fi",
+  "via": "relay",
+  "fetchedAt": "2026-09-29T22:30:00Z",
+  "snapshotAgeS": 845.711,
+  "serverAgeMs": 240000.0,
+  "count": 9
+ },
+ "zones": {
+  "ok": true,
+  "source": "flysdown /data/zones.json",
+  "asof": "2026-09-17",
+  "disclaimer": "NOT FOR NAVIGATION. Prohibited-area geometry is the FAA published boundary, simplified for the browser, but activation times, NOTAMs and temporary restrictions are not modeled. Always use current charts and NOTAMs.",
+  "used": [
+   {
+    "id": "faa-p-56-8",
+    "name": "P-56A National Mall",
+    "type": "PROHIBITED",
+    "activation": "ALWAYS",
+    "activationBasis": "FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)"
+   },
+   {
+    "id": "faa-p-56-9",
+    "name": "P-56B Naval Observatory",
+    "type": "PROHIBITED",
+    "activation": "ALWAYS",
+    "activationBasis": "FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)"
+   },
+   {
+    "id": "faa-p-73-11",
+    "name": "P-73 Mount Vernon",
+    "type": "PROHIBITED",
+    "activation": "ALWAYS",
+    "activationBasis": "FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)"
+   },
+   {
+    "id": "fixture-tfr-lyh",
+    "name": "Hand-built test TFR near KLYH (not real)",
+    "type": "TFR",
+    "activation": "NOTAM",
+    "activationBasis": "no activation data in Flys Down zones.json; treated as unknown"
+   }
+  ],
+  "skipped": [
+   {
+    "id": "dc-sfra",
+    "reason": "flight-rules area, not a no-fly zone (Flys Down does not alert on it either)"
+   },
+   {
+    "id": "demo-gulf-lane",
+    "reason": "demonstration watch area, not an official restriction"
+   }
+  ]
+ },
+ "evaluation": {
+  "ran": false,
+  "reason": "feed stale: the feed marked this snapshot stale"
+ },
+ "detections": [],
+ "limitations": [
+  "Experimental. Not for navigation, and not operational safety advice.",
+  "Zone geometry and limits come from Flys Down's zones.json, which simplifies FAA boundaries and does not model NOTAMs, TFRs or activation times.",
+  "No NOTAM, TFR or waiver source was checked. An aircraft inside a zone may be authorized to be there.",
+  "Observation times are estimated from the feed's fetch time minus each position's age; the feed carries no per-aircraft timestamp."
+ ]
+}
