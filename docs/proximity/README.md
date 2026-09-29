@@ -17,5 +17,7 @@ covers. Written by the person who built it, in the same PR as the code.
 | `severity_rules.md` | gates + severity tiers | CalebK |
 | `detect_observations.md` | end-to-end wiring | Paul |
 | `../../air/detectors/proximity/DESIGN_CARD.md` | the one-page design card | Caroline, Faith |
+| `REVIEW_SHEET_TASK.md` | brief for the detection review sheet | Caroline, Faith |
+| `REVIEW_SHEET.md` | how we judge what the detector flags (Week 7) | Caroline, Faith |
 
 Task cards and ownership: [air/detectors/proximity/TASKS.md](../../air/detectors/proximity/TASKS.md).

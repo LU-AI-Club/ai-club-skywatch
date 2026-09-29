@@ -6,12 +6,10 @@ Run just these:  pytest tests/air/detectors/proximity/test_proximity_tracks.py -
 from __future__ import annotations
 
 import math
-import subprocess
-import sys
+import time
 from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import pytest
 
@@ -142,23 +140,15 @@ def test_interpolation_preserves_input_and_is_repeatable():
 
 
 def test_ten_year_gap_with_microsecond_grid_stays_fast():
-    # A subprocess timeout prevents a per-tick regression from hanging pytest.
-    result = subprocess.run(
-        [sys.executable, "-c", """
-from dataclasses import replace
-from air.detectors.proximity.tracks import interpolate_to_grid
-from tests.air.detectors.proximity.test_proximity_tracks import _obs, T0
-before = _obs(0)
-after = replace(before, observed_at=T0.replace(year=T0.year + 10))
-assert interpolate_to_grid([before, after], step_s=1e-6) == [before, after]
-"""],
-        cwd=Path(__file__).resolve().parents[4],
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=10,
-    )
-    assert result.returncode == 0, result.stderr
+    # A ten-year gap at a microsecond grid is 3e14 ticks. If the implementation
+    # walks tick by tick instead of skipping the gap, this never finishes.
+    # Timing it in-process keeps the test portable (a subprocess call fails on
+    # some Windows setups and in CI).
+    before = _obs(0)
+    after = replace(before, observed_at=T0.replace(year=T0.year + 10))
+    started = time.perf_counter()
+    assert interpolate_to_grid([before, after], step_s=1e-6) == [before, after]
+    assert time.perf_counter() - started < 1.0
 
 
 def test_reports_surrounded_by_long_gaps_are_kept_but_not_blended():
