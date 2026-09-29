@@ -31,7 +31,13 @@ def severity_for(
     Both must hold. 0.2 nm apart horizontally but 2000 ft apart vertically is
     normal, legal, and returns None.
     """
-    raise NotImplementedError("TODO CalebK: see docstring above and the tests")
+    for tier in cfg.tiers:
+        if (
+            predicted_horizontal_nm < tier.max_horizontal_nm
+            and predicted_vertical_ft < tier.max_vertical_ft
+        ):
+            return tier.severity
+    return None
 
 
 def flag_pair(geom: PairGeometry, cfg: ProximityConfig) -> SeverityLevel | None:
@@ -46,7 +52,16 @@ def flag_pair(geom: PairGeometry, cfg: ProximityConfig) -> SeverityLevel | None:
 
     Then return ``severity_for(predicted_horizontal, predicted_vertical, cfg)``.
     """
-    raise NotImplementedError("TODO CalebK: see docstring above and the tests")
+    if geom.t_cpa_s is None:
+        return None
+    if not geom.converging:
+        return None
+    if geom.t_cpa_s > cfg.max_tcpa_s:
+        return None
+    if geom.predicted_horizontal_nm is None or geom.predicted_vertical_ft is None:
+        return None
+
+    return severity_for(geom.predicted_horizontal_nm, geom.predicted_vertical_ft, cfg)
 
 
 __all__ = ["flag_pair", "severity_for"]

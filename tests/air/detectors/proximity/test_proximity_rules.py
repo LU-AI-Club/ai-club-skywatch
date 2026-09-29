@@ -31,7 +31,7 @@ def _geom(t_cpa, pred_h, pred_v):
 
 
 # --- severity_for: the table ------------------------------------------------------
-@todo("CalebK")
+
 @pytest.mark.parametrize(
     "h_nm, v_ft, expected",
     [
@@ -53,13 +53,11 @@ def test_severity_table(h_nm, v_ft, expected):
     assert severity_for(h_nm, v_ft, CFG) is expected
 
 
-@todo("CalebK")
 def test_both_limits_must_hold():
     # 0.1 nm horizontal would be HIGH, but 800 ft vertical is only LOW-grade.
     assert severity_for(0.1, 800, CFG) is SeverityLevel.LOW
 
 
-@todo("CalebK")
 def test_severity_reads_config_not_constants():
     from air.detectors.proximity import ProximityConfig, SeverityTier
 
@@ -68,27 +66,22 @@ def test_severity_reads_config_not_constants():
 
 
 # --- flag_pair: the gates -----------------------------------------------------------
-@todo("CalebK")
 def test_flag_converging_inside_window_fires():
     assert flag_pair(_geom(60.0, 0.2, 200.0), CFG) is SeverityLevel.HIGH
 
 
-@todo("CalebK")
 def test_flag_diverging_is_suppressed():
     assert flag_pair(_geom(-60.0, 0.2, 200.0), CFG) is None
 
 
-@todo("CalebK")
 def test_flag_too_far_in_future_is_suppressed():
     assert flag_pair(_geom(CFG.max_tcpa_s + 1, 0.2, 200.0), CFG) is None
     assert flag_pair(_geom(CFG.max_tcpa_s, 0.2, 200.0), CFG) is SeverityLevel.HIGH
 
 
-@todo("CalebK")
 def test_flag_no_relative_motion_is_suppressed():
     assert flag_pair(_geom(None, None, None), CFG) is None
 
 
-@todo("CalebK")
 def test_flag_outside_all_tiers_is_none():
     assert flag_pair(_geom(60.0, 6.0, 200.0), CFG) is None
