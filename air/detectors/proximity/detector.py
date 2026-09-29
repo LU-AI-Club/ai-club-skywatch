@@ -211,7 +211,33 @@ class ProximityDetector(BaseDetector):
                     the one already kept
             return [to_detection(geom, sev, cfg) for geom, sev in best.values()]
         """
-        raise NotImplementedError("TODO Paul: see docstring above and the tests")
+        cfg = self.config
+        snapshots = align_tracks(observations, cfg)
+        best: dict[tuple[str, str], tuple[PairGeometry, SeverityLevel]] = {}
+
+        for snapshot in snapshots.values():
+            for a, b in candidate_pairs(snapshot, cfg):
+                geom = pair_geometry(a, b)
+                if geom is None:
+                    continue
+
+                severity = flag_pair(geom, cfg)
+                if severity is None:
+                    continue
+
+                assert geom.predicted_horizontal_nm is not None
+                key = (a.icao24, b.icao24)
+                previous = best.get(key)
+
+                if previous is None:
+                    best[key] = (geom, severity)
+                else:
+                    previous_geom, _ = previous
+                    assert previous_geom.predicted_horizontal_nm is not None
+                    if geom.predicted_horizontal_nm < previous_geom.predicted_horizontal_nm:
+                        best[key] = (geom, severity)
+
+        return [to_detection(geom, severity, cfg) for geom, severity in best.values()]
 
     def detect(self, context: DetectionContext) -> list[Detection]:
         """BaseDetector entry point (same convention as the example detector)."""

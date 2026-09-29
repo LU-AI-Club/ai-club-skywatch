@@ -12,7 +12,6 @@ import pytest
 
 from air.detectors.proximity import ProximityDetector
 from contracts import Detection, SeverityLevel
-from tests.air.detectors.proximity._todo import todo
 from tests.conftest import FIXTURES_DIR, load_observations
 
 FIXTURES = [
@@ -28,7 +27,6 @@ def _expect(name):
     return json.loads((FIXTURES_DIR / name).read_text(encoding="utf-8"))[0]["_expect"]
 
 
-@todo("Paul")
 @pytest.mark.parametrize("fixture", FIXTURES)
 def test_fixture_produces_expected_detections(fixture):
     expect = _expect(fixture)
@@ -38,13 +36,11 @@ def test_fixture_produces_expected_detections(fixture):
         assert detections[0].severity is SeverityLevel(expect["severity"])
 
 
-@todo("Paul")
 def test_one_encounter_is_one_detection_not_one_per_second():
     detections = ProximityDetector().detect_observations(load_observations("proximity_head_on.json"))
     assert len(detections) == 1
 
 
-@todo("Paul")
 def test_detection_is_the_real_contract_with_two_entities():
     det = ProximityDetector().detect_observations(load_observations("proximity_head_on.json"))[0]
     assert isinstance(det, Detection)
@@ -56,7 +52,6 @@ def test_detection_is_the_real_contract_with_two_entities():
     assert d["provenance"]["processing_chain"][0]["parameters"]["max_tcpa_s"] == 120.0
 
 
-@todo("Paul")
 def test_explanation_facts_are_observations_not_conclusions():
     det = ProximityDetector().detect_observations(load_observations("proximity_head_on.json"))[0]
     facts = " ".join(det.metadata["explanation_facts"]).lower()
@@ -66,7 +61,6 @@ def test_explanation_facts_are_observations_not_conclusions():
     assert det.metadata["limitations"]
 
 
-@todo("Paul")
 def test_head_on_predicts_the_planted_geometry():
     det = ProximityDetector().detect_observations(load_observations("proximity_head_on.json"))[0]
     ev = det.evidence[0].metadata
