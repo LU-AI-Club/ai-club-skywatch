@@ -1,6 +1,6 @@
 # detect_observations
 
-**Author:** Manni · **PR:** Pending · **File:** `air/detectors/proximity/detector.py`
+**Author:** Manni · **PR:** #17 · **File:** `air/detectors/proximity/detector.py`
 
 ## What it does
 
@@ -39,6 +39,10 @@ This function does not split separate encounters involving the same pair within 
 
 The fixtures cover head-on and crossing encounters plus benign diverging, vertically stacked, and ground cases. Additional checks cover one alert per encounter, two aircraft in the Detection contract, serialization and provenance, factual explanations, and the planted head-on geometry.
 
-All five `@todo("Paul")` decorators have been removed. The latest focused run with `-x -q` stopped at the first head-on case because `flag_pair` in `rules.py` still raises `NotImplementedError` (the source labels it TODO CalebK). The tests are not yet green; rerun after the rules implementation is available, then run the fixture command and full suite. No successful fixture screenshot has been captured yet.
+All five `@todo("Paul")` decorators have been removed. The rule implementation is supplied by the companion PR #22 (`proximity/calebg/rules`). The focused detector and rules run reports **28 passed**; the full suite reports **118 passed**, with no expected failures.
 
-The full suite (`pytest -q`) reports **92 passed, 7 failed, and 19 xfailed**. All seven failures reach the unfinished `flag_pair` implementation. A fresh fetch confirms that `origin/Proximity_Detector` still contains the same rules placeholders.
+The head-on fixture command (`python scripts/run_proximity.py air/fixtures/proximity_head_on.json`) completes successfully: **1 detection from 17 observations**, severity HIGH, predicted horizontal separation approximately **0.20 nm**, predicted vertical separation **200 ft**, and time to closest approach approximately **58 seconds**. These results were verified with the companion rules branch included.
+
+## Fixture output screenshot
+
+![Head-on fixture output showing predicted separation of 0.20 nm horizontal and 200 ft vertical, with one detection from 17 observations](detect_observations-output.png)
