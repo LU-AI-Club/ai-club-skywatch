@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import pytest
+import pytest  # type: ignore[import-not-found]
 
 from ..ingest.adsb_loader import load_states
 from .conftest import TRACKS_FILE
