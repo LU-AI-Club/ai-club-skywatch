@@ -1,26 +1,52 @@
-"""Stream E tests - logic/activation.py.
-
-One firing case, one non-firing case. Both are skipped until the stream
-lands: delete the skip mark as you implement, and make it go green.
-"""
+"""Stream E tests - logic/activation.py."""
 from __future__ import annotations
+
+from dataclasses import replace
+from datetime import UTC, datetime
 
 import pytest
 
+from ..ingest.airspace_loader import load_zones
 from ..logic.activation import is_active
-from ..types import ActivationState
+from ..types import Activation, ActivationState
+from .conftest import AIRSPACE_FILE
 
-SKIP = pytest.mark.skip(reason="stream E: not implemented")
+
+def _zone(zone_id: str):  # type: ignore[no-untyped-def]
+    return next(z for z in load_zones(AIRSPACE_FILE) if z.zone_id == zone_id)
 
 
-@SKIP
 def test_tfr_inside_its_window_is_active() -> None:
     """2026-09-22T20:15Z falls inside the fixture TFR window 19:00Z-01:30Z."""
-    pytest.fail('write me: assert state is ActivationState.ACTIVE and the '
-                'basis names the window')
+    result = is_active(_zone("TFR-6/1234"), datetime(2026, 9, 22, 20, 15, tzinfo=UTC))
+    assert result.state is ActivationState.ACTIVE
+    assert "TFR window" in result.basis and "1900Z" in result.basis
 
 
-@SKIP
 def test_tfr_before_its_window_is_inactive() -> None:
     """14:00Z is five hours early, so the same zone is cold."""
-    pytest.fail('write me: assert state is ActivationState.INACTIVE')
+    result = is_active(_zone("TFR-6/1234"), datetime(2026, 9, 22, 14, 0, tzinfo=UTC))
+    assert result.state is ActivationState.INACTIVE
+
+
+def test_window_end_is_exclusive() -> None:
+    result = is_active(_zone("TFR-6/1234"), datetime(2026, 9, 23, 1, 30, tzinfo=UTC))
+    assert result.state is ActivationState.INACTIVE
+
+
+def test_notam_zone_is_unknown_never_assumed_active() -> None:
+    """Missing NOTAM data is not a pass and not a fail: it is UNKNOWN."""
+    zone = replace(_zone("P-901"), activation=Activation.NOTAM)
+    result = is_active(zone, datetime(2026, 9, 22, 20, 15, tzinfo=UTC))
+    assert result.state is ActivationState.UNKNOWN
+
+
+def test_scheduled_zone_with_no_windows_is_unknown() -> None:
+    zone = replace(_zone("LYNCHBURG-MOA"), active_windows=())
+    result = is_active(zone, datetime(2026, 9, 22, 20, 15, tzinfo=UTC))
+    assert result.state is ActivationState.UNKNOWN
+
+
+def test_naive_timestamp_is_rejected() -> None:
+    with pytest.raises(ValueError, match="naive"):
+        is_active(_zone("P-901"), datetime(2026, 9, 22, 20, 15))
