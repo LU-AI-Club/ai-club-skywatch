@@ -36,3 +36,19 @@ so tests can assert against it.
 No fixture yet covers `on_ground`, `bad_input` (both altitudes null) or
 `buffered_only` (just outside the fence with a poor NIC). Whoever owns the
 false-positive lane should add them.
+
+## flysdown/
+
+Fixtures for the experimental live integration (`live/`, `tests/test_live.py`).
+
+- `aircraft_klyh.json` is shaped like Flys Down's
+  `GET /api/aircraft?lat=37.3267&lon=-79.2004&dist=150`, with hand-placed
+  aircraft, one per outcome (see each record's `_expect`, which is not a feed
+  field): confirmed-active in P-56A, above its ceiling, activation-uncertain in
+  a hand-built TFR, on the ground, no `seenPos`, a stale position, clear of
+  everything, outside the 150 NM scope, and just outside P-73 (buffered only).
+- `aircraft_klyh_stale.json` is the same snapshot marked stale, and
+  `aircraft_unavailable.json` is the feed's all-upstreams-refused answer.
+- `zones.json` is trimmed from Flys Down's real `/data/zones.json` (P-56A,
+  P-56B, P-73, the DC SFRA and the demo lane) plus one hand-built TFR,
+  `fixture-tfr-lyh`, which is **not real airspace**.

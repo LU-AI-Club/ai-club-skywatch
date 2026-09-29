@@ -1,0 +1,351 @@
+{
+ "type": "FeatureCollection",
+ "meta": {
+  "updated": "2026-09-17",
+  "sources": [
+   "FAA Special Use Airspace feature service (prohibited areas, real published geometry)",
+   "14 CFR 93 subpart V (DC SFRA)",
+   "FDC 9/3799 (standing Disney TFRs)"
+  ],
+  "disclaimer": "NOT FOR NAVIGATION. Prohibited-area geometry is the FAA published boundary, simplified for the browser, but activation times, NOTAMs and temporary restrictions are not modeled. Always use current charts and NOTAMs.",
+  "altitudeNote": "floorFt/ceilingFt are compared against barometric altitude in feet MSL. Zones whose published limits are AGL are marked agl:true; over terrain that comparison is approximate.",
+  "_fixture": "Trimmed from flysdown.jaronwilson.dev/data/zones.json on 2026-09-29 (P-56A, P-56B, P-73, DC SFRA, demo lane) plus one hand-built TFR. NOT FOR NAVIGATION."
+ },
+ "features": [
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "faa-p-56-8",
+    "name": "P-56A National Mall",
+    "kind": "prohibited",
+    "shape": "polygon",
+    "floorFt": 0,
+    "ceilingFt": 18000,
+    "appliesTo": [
+     "aircraft"
+    ],
+    "approx": false,
+    "simplifiedFrom": 69,
+    "note": "CONTINUOUS",
+    "source": "FAA Special Use Airspace (ArcGIS feature service)",
+    "state": "DC"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -77.00222,
+       38.88878
+      ],
+      [
+       -77.00667,
+       38.88306
+      ],
+      [
+       -77.02,
+       38.88223
+      ],
+      [
+       -77.02,
+       38.88751
+      ],
+      [
+       -77.03361,
+       38.88779
+      ],
+      [
+       -77.04084,
+       38.88667
+      ],
+      [
+       -77.05056,
+       38.8889
+      ],
+      [
+       -77.05639,
+       38.89584
+      ],
+      [
+       -77.05028,
+       38.90223
+      ],
+      [
+       -77.00361,
+       38.90223
+      ],
+      [
+       -76.99889,
+       38.89306
+      ],
+      [
+       -77.00222,
+       38.88878
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "faa-p-56-9",
+    "name": "P-56B Naval Observatory",
+    "kind": "prohibited",
+    "shape": "polygon",
+    "floorFt": 0,
+    "ceilingFt": 18000,
+    "appliesTo": [
+     "aircraft"
+    ],
+    "approx": false,
+    "simplifiedFrom": 6285,
+    "note": "CONTINUOUS",
+    "source": "FAA Special Use Airspace (ArcGIS feature service)",
+    "state": "DC"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -77.06695,
+       38.92865
+      ],
+      [
+       -77.0634,
+       38.9281
+      ],
+      [
+       -77.06039,
+       38.92652
+      ],
+      [
+       -77.05837,
+       38.92417
+      ],
+      [
+       -77.05767,
+       38.92139
+      ],
+      [
+       -77.05837,
+       38.91863
+      ],
+      [
+       -77.06038,
+       38.91627
+      ],
+      [
+       -77.0634,
+       38.9147
+      ],
+      [
+       -77.06695,
+       38.91415
+      ],
+      [
+       -77.07049,
+       38.9147
+      ],
+      [
+       -77.07351,
+       38.91627
+      ],
+      [
+       -77.07552,
+       38.91862
+      ],
+      [
+       -77.07623,
+       38.9214
+      ],
+      [
+       -77.07552,
+       38.92418
+      ],
+      [
+       -77.07351,
+       38.92652
+      ],
+      [
+       -77.07049,
+       38.92809
+      ],
+      [
+       -77.06695,
+       38.92865
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "faa-p-73-11",
+    "name": "P-73 Mount Vernon",
+    "kind": "prohibited",
+    "shape": "polygon",
+    "floorFt": 0,
+    "ceilingFt": 1500,
+    "appliesTo": [
+     "aircraft"
+    ],
+    "approx": false,
+    "simplifiedFrom": 27,
+    "note": "CONTINUOUS",
+    "source": "FAA Special Use Airspace (ArcGIS feature service)",
+    "state": "VA"
+   },
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -77.0839,
+       38.70075
+      ],
+      [
+       -77.08611,
+       38.70054
+      ],
+      [
+       -77.09041,
+       38.70137
+      ],
+      [
+       -77.09373,
+       38.70367
+      ],
+      [
+       -77.09476,
+       38.70521
+      ],
+      [
+       -77.0953,
+       38.70866
+      ],
+      [
+       -77.09476,
+       38.71036
+      ],
+      [
+       -77.09225,
+       38.71321
+      ],
+      [
+       -77.08833,
+       38.71482
+      ],
+      [
+       -77.0839,
+       38.71482
+      ],
+      [
+       -77.08181,
+       38.7142
+      ],
+      [
+       -77.0785,
+       38.7119
+      ],
+      [
+       -77.07693,
+       38.70866
+      ],
+      [
+       -77.07746,
+       38.70521
+      ],
+      [
+       -77.07998,
+       38.70236
+      ],
+      [
+       -77.0839,
+       38.70075
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "dc-sfra",
+    "name": "DC Special Flight Rules Area",
+    "kind": "sfra",
+    "shape": "circle",
+    "radiusNm": 30,
+    "floorFt": 0,
+    "ceilingFt": 18000,
+    "appliesTo": [
+     "aircraft"
+    ],
+    "approx": false,
+    "advisory": true,
+    "note": "A 30 NM radius on the DCA VOR/DME. Entry needs a flight plan, a discrete transponder code and two-way radio, so transiting traffic here is routine. Shown for context and listed under zone checks, but it does not raise alerts.",
+    "source": "14 CFR 93 subpart V"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -77.035,
+     38.8594
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "properties": {
+    "id": "demo-gulf-lane",
+    "name": "Gulf of Finland lane watch",
+    "kind": "custom",
+    "shape": "circle",
+    "radiusNm": 3,
+    "floorFt": 0,
+    "ceilingFt": 60000,
+    "appliesTo": [
+     "vessel",
+     "aircraft"
+    ],
+    "approx": true,
+    "note": "Demonstration watch area on the Helsinki to Tallinn shipping lane, not an official restriction. Sited on open water rather than over a harbor so it shows vessels transiting rather than a list of moored ships.",
+    "source": "flysdown demo"
+   },
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     24.78,
+     59.9
+    ]
+   }
+  },
+  {
+   "type": "Feature",
+   "geometry": {
+    "type": "Point",
+    "coordinates": [
+     -79.26,
+     37.23
+    ]
+   },
+   "properties": {
+    "id": "fixture-tfr-lyh",
+    "name": "Hand-built test TFR near KLYH (not real)",
+    "kind": "tfr",
+    "shape": "circle",
+    "radiusNm": 3,
+    "floorFt": 0,
+    "ceilingFt": 5000,
+    "appliesTo": [
+     "aircraft"
+    ],
+    "approx": true,
+    "note": "Hand-built fixture: a TFR with no activation data, to exercise UNKNOWN activation.",
+    "source": "fixture"
+   }
+  }
+ ]
+}

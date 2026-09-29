@@ -1,0 +1,33 @@
+# Live Flys Down integration settings. Kept apart from config.yaml, which is
+# lead-owned: this file only governs the experimental live adapter in live/.
+# Detection policy (scores, caps, zone types) still comes from config.yaml.
+
+feed:
+  base_url: https://flysdown.jaronwilson.dev
+  # The feed's edge cache holds an answer for 6 s and the relay refreshes a
+  # region about every 8 s, so polling faster than this only re-reads the same
+  # snapshot. 30 s keeps the added D1 writes (relay + reports) small.
+  poll_interval_s: 30
+  min_poll_interval_s: 10
+  max_backoff_s: 300
+  timeout_s: 20
+  # A snapshot older than this is reported as stale and not evaluated.
+  max_snapshot_age_s: 30
+  # A position older than this at evaluation time is skipped, not evaluated.
+  max_position_age_s: 30
+  zones_refresh_s: 3600
+  user_agent: "skywatch-no-fly-zone (LU AI Club; experimental Flys Down integration; contact jaron@jaronwilson.dev)"
+
+zones:
+  # FAA SUA publishes TIMESOFUSE for each prohibited area. When Flys Down's
+  # zone note is exactly that field's value "CONTINUOUS", the zone is treated
+  # as always active, and every detection says the basis was the published
+  # schedule, not a live NOTAM check. Set false to treat every Flys Down zone
+  # as activation-unknown.
+  trust_published_continuous: true
+  circle_segments: 64
+
+publish:
+  max_detections: 100
+  # A report older than this is shown as stale by the site.
+  stale_after_s: 120
