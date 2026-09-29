@@ -27,3 +27,11 @@ data/generated/
 
 # SkyWatch: local answer key, never commit
 proximity_solutions/
+
+# Accidental shell-redirect artifacts (pd, plt, sys...)
+/pd
+/plt
+/sys
+/Main
+/Python_test.py
+build/
