@@ -18,9 +18,38 @@ exact same instant instead of inventing near-misses from mismatched timestamps.
 | out | `list[AdsbObservation]` | — | One observation per grid tick, in time order, no duplicates. Empty if fewer than 2 reports |
 
 ## How it works
-TODO (Erik): 3-5 bullets in my own words — picking the ticks, walking the
-reports in (before, after) pairs, the `frac` formula, the short-way heading,
-and how duplicate ticks are avoided.
+
+> Drafted from the merged code so the PR is complete — Erik, reword these in
+> your own voice and correct anything I misread.
+
+- **Work in whole microseconds, not floats.** Every timestamp is converted to
+  an integer count of microseconds since the epoch, and `step_s` is rejected
+  unless it is a whole number of microseconds. `datetime` cannot represent
+  anything finer, so a step like 1.5 µs has no honest grid — better to refuse
+  it than silently resample onto a different one.
+- **Walk the reports in overlapping `(before, after)` pairs.** Each pair covers
+  one segment of the track. A tick belongs to a segment if it falls between
+  those two timestamps, so the whole track is covered by stepping through the
+  pairs once.
+- **Pick the ticks arithmetically, don't loop.** For a blendable segment the
+  ticks are `ceil(before/step) .. floor(after/step)`. Computing the range
+  directly means a ten-year gap at a microsecond grid costs the same as a
+  two-second gap — a tick-by-tick loop would never finish.
+- **Blend with `frac = (tick - before) / (after - before)`.** Position,
+  altitude, speed and vertical rate are straight linear blends. The compass
+  track uses `_lerp_angle`, which takes the short way round so 350° to 10°
+  passes through 0 and not through 180.
+- **A tick landing exactly on a real report returns that report untouched** —
+  no arithmetic, so the original values and metadata survive rather than being
+  recomputed from its neighbours.
+- **Don't invent positions across a silence.** If a segment spans more than
+  `max_gap_s`, only ticks sitting exactly on the two real reports are emitted;
+  everything between them is skipped. The gap is compared in seconds, because
+  scaling `max_gap_s` into microseconds can push an exact boundary a hair below
+  the integer span.
+- **Duplicates are impossible by construction.** `last_k` records the index of
+  the last tick emitted, and any tick at or below it is skipped — so the report
+  shared by two adjacent segments is only emitted once.
 
 ## Decisions and trade-offs
 - **Exact hits return the real report.** If a tick lands exactly on a report, I
