@@ -1,26 +1,6 @@
 # Detector Design Card — Dangerous / Unusual Proximity
 
-**Owners:** Caroline, Faith. **Reviewer:** Paul.
-**Status:** DRAFT — replace every *italic hint* with real text, then delete the hints.
-
-> One page, eight boxes. This is the document Xenith reads to understand what
-> we are building and why. Plain English. Someone who has never heard of ADS-B
-> should be able to follow it.
->
-> **Where the answers are.** Almost everything is in
-> [docs/proximity/PROJECT_PLAN.md](../../../docs/proximity/PROJECT_PLAN.md) —
-> each hint below names the section. Two other files help:
->
-> | You need | Look in |
-> |---|---|
-> | the threshold numbers (box 4) | [`configs/detectors/proximity.yaml`](../../../configs/detectors/proximity.yaml) — every value has a comment |
-> | the output and governance rules (box 5) | [the detector README](README.md) |
-> | everything else | the project plan |
->
-> Your job is to find each answer and say it in two or three sentences of your
-> own. Do not paste the plan in — a design card that is just a copy of the plan
-> is not a design card. If something in the plan does not make sense, ask Paul;
-> "I could not find this" is a useful thing to report.
+**Owners:** Caroline, Faith. **Reviewer:** Paul. **Status:** v0.1
 
 | | |
 |---|---|
@@ -31,67 +11,136 @@
 
 ## 1. Problem
 
-*What question does an analyst want answered? Two sentences. Hint: the plan's
-"Our detector in one sentence" section, and the difference between measuring
-current distance and predicting future separation.*
+Which pairs of aircraft are on track to come dangerously close to one another,
+early enough that someone could look at them? The detector does not measure how
+far apart two aircraft are right now — it projects them forward along their
+current speed and heading and reports the separation they are predicted to
+reach at their closest point.
 
 ## 2. Inputs
 
-*Which ADS-B fields do we use, and where does the data come from? List the
-fields (the plan's "Inputs" section) and name the two data sources (recorded
-Wingbits/OpenSky data for now; the club receiver later). One sentence on why
-we use recorded data rather than live.*
+**Fields:** `icao24`, `callsign`, `timestamp`, `lat`, `lon`, `baro_altitude`,
+`ground_speed`, `track`, `vertical_rate`, `on_ground`, `NIC`, `NACp`.
+
+**Sources:** recorded ADS-B from the Wingbits network and OpenSky for now; the
+club's own receiver later.
+
+We work from recorded data rather than a live feed for **repeatability** — the
+same file gives the same answer every time, so when we change a threshold we
+can prove the change is what moved the result.
 
 ## 3. Features
 
-*What numbers do we compute for each pair of aircraft? Hint: the plan's
-"Computed features" section. You don't need to explain the math — list the
-features and say in one line what each one means (e.g. "time to closest
-approach: how many seconds until the two aircraft are nearest each other").*
+Computed for each pair of aircraft:
+
+| Feature | What it means |
+|---|---|
+| Horizontal separation | How far apart the two aircraft are side to side |
+| Vertical separation | How far apart they are in altitude |
+| Closure rate | How fast the distance between them is shrinking |
+| Time to CPA | Seconds until they reach their closest point |
+| Predicted CPA distance | How far apart they will be at that closest point |
+| Converging flag | Whether they are still closing or already moving apart — we calculate this ourselves from the sign of the time to closest approach |
+| Track angle difference | The difference between their two compass headings |
 
 ## 4. Baseline / reference behaviour
 
-*What counts as "normal"? This detector is rule-based, so normal is defined by
-published FAA separation standards, not learned from data. Hint: the plan's
-"Thresholds" section — quote the standards, then the four severity tiers as a
-small table. Say where the numbers live (a versioned config file, not code).*
+This is a rule-based detector, so "normal" comes from published FAA separation
+standards rather than being learned from data. That makes every number
+defensible.
+
+**Published standards**
+
+- En route: 5 nautical miles horizontally, 1,000 feet vertically
+- Terminal / approach: 3 nm horizontally, 1,000 feet vertically
+- FAA near-midair-collision definition: under 500 feet of total separation
+
+**Severity tiers** — based on *predicted* separation at closest approach. Both
+conditions must hold.
+
+| Severity | Horizontal | Vertical |
+|---|---|---|
+| HIGH | < 0.5 nm | < 400 ft |
+| MEDIUM | < 1.5 nm | < 700 ft |
+| LOW | < 3 nm | < 1,000 ft |
+| INFO | < 5 nm | < 1,000 ft |
+
+**Where the numbers live:** every threshold is stored in a versioned
+configuration file, never hardcoded — `configs/detectors/proximity.yaml`.
 
 ## 5. Output
 
-*What does the detector produce when it fires? One sentence: a SENTINEL
-`Detection` naming two aircraft, a severity (INFO/LOW/MEDIUM/HIGH), a
-confidence, factual explanation statements and known limitations. Then the
-governance rule: we never say "dangerous" or "violation" — we report distance,
-altitude gap and time to closest approach, and a separate service decides what
-it means.*
+A SENTINEL `Detection` naming the two aircraft, a severity
+(INFO / LOW / MEDIUM / HIGH), a confidence score, factual explanation
+statements and known limitations.
+
+**Governance:** we never say "dangerous" or "violation." We report the
+distance, the altitude gap and the time to closest approach as observations. A
+separate Xenith service decides what those observations mean.
 
 ## 6. Ground truth & evaluation
 
-*How will we know it works? Hint: the plan's "Ground truth" section. Two parts:
-(a) synthetic scenarios we script ourselves where the answer is known by
-construction (we already have five: head-on, diverging, stacked, crossing,
-ground); (b) manual review of what it flags in real data. Be honest that nobody
-labels near-misses in real ADS-B data.*
+Two approaches:
+
+1. **Synthetic scenarios** — we script encounters where the correct outcome is
+   known by construction. We already have five: head-on, diverging, stacked,
+   crossing and ground. These verify the detector identifies qualifying
+   encounters and does not flag scenarios that fall outside its rules.
+2. **Manual review of real data** — we review flagged pairs from real ADS-B
+   data and record the judgements in a labeled evaluation set.
+
+**Limitation:** nobody labels near-misses in real ADS-B data, so we cannot
+treat real-world data as verified ground truth. The two approaches are
+complementary ways to evaluate the detector without overstating its accuracy.
 
 ## 7. False positives
 
-*What harmless situations look like conflicts? Hint: the plan's "False
-positives — the real work" list. Pick the top four and give each one line.
-Number one is aircraft lined up to land at the same runway — that's normal and
-legal, and it's what will dominate our false alarms.*
+The four benign situations most likely to look like conflicts:
+
+1. **Approach sequencing** — aircraft lined up to land on the same runway may
+   be only 3 nm apart. This is normal and legal, and is expected to dominate
+   our false alarms.
+2. **Parallel approaches** — aircraft landing on parallel runways may be only
+   1 nm apart laterally during normal operations.
+3. **Timestamp misalignment** — differences in report times can make aircraft
+   appear closer than they were.
+4. **Vertical-only separation** — aircraft directly above one another but
+   1,000 feet apart are using standard vertical separation.
 
 ## 8. MVP (Week 6) and what comes after
 
-*Smallest thing that works: run on recorded data, emit at least one valid
-Detection for a scripted converging pair. Say which pipeline steps are in the
-MVP (steps 1–8 of the plan's algorithm) and which are deferred to Weeks 9–11
-(context filters for approach traffic, de-duplication).*
+The MVP runs on recorded ADS-B data and produces at least one valid SENTINEL
+Detection for a scripted converging pair.
 
----
+**In the MVP (steps 1–8):**
+
+1. Ingest recorded ADS-B aircraft positions and flight information
+2. Normalize the data into a shared format
+3. Identify aircraft pairs that can be evaluated for proximity
+4. Calculate horizontal and vertical separation
+5. Determine whether the aircraft are converging rather than diverging
+6. Predict closest approach using constant-heading motion over a limited time
+   horizon
+7. Apply the versioned severity thresholds
+8. Generate a valid Detection containing the pair, severity, confidence,
+   factual explanations and known limitations
+
+**Deferred to Weeks 9–11:**
+
+- Approach-traffic context filters, to cut false positives from aircraft
+  following the same landing approach
+- De-duplication, so one encounter produces one detection
+- Further context filtering and integration with the wider platform
 
 ## Known limitations (carry these into every demo)
 
-*Three or four honest caveats. Hint: constant-heading prediction is only
-trusted for ~2 minutes; OpenSky data is sampled every 10 s which is over a
-mile of travel at jet speeds; we cannot see controller instructions or pilot
-intent; we use barometric altitude only.*
+- Constant-heading prediction is only considered reliable for roughly two
+  minutes.
+- OpenSky data is sampled every 10 seconds, which at jet speeds means over a
+  mile of travel between observations.
+- The detector cannot see air traffic control instructions or pilot intent.
+- The MVP uses barometric altitude only.
+
+**Bottom line:** the Week 6 MVP shows the detector can identify a qualifying
+encounter in recorded data. It does not establish that every detection is an
+actual near-miss, or that the detector is ready for operational use.
