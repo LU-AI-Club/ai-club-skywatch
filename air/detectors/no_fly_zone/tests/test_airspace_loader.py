@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from ..ingest.airspace_loader import load_zones
-from ..types import Activation, ZoneType
+from ..types import Activation, Datum, ZoneType
 from .conftest import AIRSPACE_FILE
 
 SKIP = pytest.mark.skip(reason="stream B: not implemented")
@@ -37,3 +37,20 @@ def test_rejects_a_file_that_is_not_a_featurecollection(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         load_zones(bad_file)
+
+
+def test_missing_altitude_defaults_to_surface_to_unlimited(tmp_path: Path) -> None:
+    """A zone with no altitude band is kept, spanning surface to unlimited."""
+    data = json.loads(Path(AIRSPACE_FILE).read_text(encoding="utf-8"))
+    for key in ("floor_ft", "ceiling_ft", "floor_datum", "ceiling_datum"):
+        data["features"][0]["properties"].pop(key, None)
+    no_altitude = tmp_path / "no_altitude.json"
+    no_altitude.write_text(json.dumps(data), encoding="utf-8")
+
+    zone = load_zones(no_altitude)[0]
+
+    assert zone.floor_ft == 0.0
+    assert zone.floor_datum is Datum.SFC
+    assert zone.ceiling_ft == float("inf")
+    assert zone.ceiling_datum is Datum.MSL
+        
