@@ -12,6 +12,7 @@ dependencies = [
     # students can work with no database and no services. Add libraries only
     # when a lane genuinely needs one (e.g. pandas/pyarrow for EDA).
     "pyyaml>=6.0",  # configs/detectors/*.yaml -> frozen config dataclasses
+    "pandas>=2.0",  # air/normalizers reads recorded ADS-B CSVs
 ]
 
 [project.optional-dependencies]
