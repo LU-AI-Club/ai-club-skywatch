@@ -18,6 +18,13 @@ feed:
   zones_refresh_s: 3600
   user_agent: "skywatch-no-fly-zone (LU AI Club; experimental Flys Down integration; contact jaron@jaronwilson.dev)"
 
+# Run-it-yourself sources: the runner asks the aggregator straight from the
+# user's own connection, so no relay or server sits in between. Both publish a
+# limit of about one request a second; one request per poll is far inside it.
+sources:
+  adsb.lol: "https://api.adsb.lol/v2/lat/{lat}/lon/{lon}/dist/{dist}"
+  adsb.fi: "https://opendata.adsb.fi/api/v3/lat/{lat}/lon/{lon}/dist/{dist}"
+
 zones:
   # FAA SUA publishes TIMESOFUSE for each prohibited area. When Flys Down's
   # zone note is exactly that field's value "CONTINUOUS", the zone is treated

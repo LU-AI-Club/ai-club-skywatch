@@ -1,8 +1,14 @@
-"""The live loop: poll Flys Down, evaluate, publish. A separate process.
+"""The live loop: fetch aircraft, evaluate, print or publish. A separate process.
 
-    python -m air.detectors.no_fly_zone.live --once --out report.json
-    SKYWATCH_TOKEN=... python -m air.detectors.no_fly_zone.live \
-        --publish https://flysdown.jaronwilson.dev
+    python -m air.detectors.no_fly_zone.live --once          # one scored report
+    python -m air.detectors.no_fly_zone.live                 # keep watching
+    python -m air.detectors.no_fly_zone.live --once --print json
+    python -m air.detectors.no_fly_zone.live --source flysdown --once
+
+By default it asks adsb.lol directly from your own connection (``--source
+adsb.fi`` also works), so nothing runs on anyone's server: zones come from
+Flys Down's static /data/zones.json, or ``--zones-file``. ``--source
+flysdown`` reads the Flys Down /api/aircraft feed instead.
 
 Like collect/, this is the one place in live/ allowed to touch the network.
 It reads only public, read-only endpoints (``/api/aircraft``,
@@ -40,6 +46,9 @@ import yaml
 
 from ..config import DEFAULT_PATH, Config, load_config
 from .report import build_report
+from .text import render_text
+
+SOURCES = ("adsb.lol", "adsb.fi", "flysdown")
 
 LIVE_CONFIG = Path(__file__).resolve().parent.parent / "config" / "live_flysdown.yaml"
 
@@ -69,6 +78,14 @@ def aircraft_url(base: str, cfg: Config) -> str:
         "dist": scope["radius_nm"],
     })
     return f"{base.rstrip('/')}/api/aircraft?{query}"
+
+
+def source_url(source: str, cfg: Config, live_cfg: Mapping[str, Any]) -> str:
+    scope = cfg["scope"]
+    template = str(live_cfg["sources"][source])
+    return template.format(
+        lat=scope["center_lat"], lon=scope["center_lon"], dist=scope["radius_nm"]
+    )
 
 
 def fetch_json(url: str, live_cfg: Mapping[str, Any]) -> Any:
@@ -119,8 +136,13 @@ def _summary(report: Mapping[str, Any]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="no_fly_zone.live")
+    parser.add_argument("--source", choices=SOURCES, default="adsb.lol",
+                        help="where aircraft come from (default: adsb.lol, directly)")
+    parser.add_argument("--print", dest="print_as", choices=("summary", "text", "json"),
+                        default=None, help="output: text with --once, else a summary line")
     parser.add_argument("--feed", default=None, help="Flys Down base URL (default from config)")
-    parser.add_argument("--feed-file", type=Path, help="replay a saved /api/aircraft response")
+    parser.add_argument("--feed-file", type=Path,
+                        help="replay a saved response in the --source shape")
     parser.add_argument("--zones-file", type=Path, help="use a saved zones.json")
     parser.add_argument("--publish", default=None, help="Flys Down base URL to POST reports to")
     parser.add_argument("--token-file", type=Path, default=None)
@@ -149,7 +171,11 @@ def main(argv: list[str] | None = None) -> int:
         print("--publish needs SKYWATCH_TOKEN or --token-file", file=sys.stderr)
         return 2
 
-    url = aircraft_url(base, cfg)
+    if args.source == "flysdown":
+        url = aircraft_url(base, cfg)
+    else:
+        url = source_url(args.source, cfg, live_cfg)
+    print_as = args.print_as or ("text" if args.once else "summary")
     zones: Any = None
     zones_error: str | None = None
     zones_read_at = 0.0
@@ -162,8 +188,9 @@ def main(argv: list[str] | None = None) -> int:
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    print(f"skywatch live: {url} every {interval:.0f}s"
-          + (f", publishing to {args.publish}" if args.publish else ""), flush=True)
+    if print_as == "summary":
+        print(f"skywatch live: {url} every {interval:.0f}s"
+              + (f", publishing to {args.publish}" if args.publish else ""), flush=True)
 
     while not stopping:
         now = time.monotonic()
@@ -190,10 +217,16 @@ def main(argv: list[str] | None = None) -> int:
         report = build_report(
             payload, zones, cfg, live_cfg, datetime.now(UTC),
             feed_url=None if args.feed_file else url, zones_error=zones_error,
+            source=args.source,
         )
         failures = 0 if report["feed"]["status"] == "fresh" else failures + 1
         stamp = datetime.now(UTC).strftime("%H:%M:%S")
-        print(f"{stamp} {_summary(report)}", flush=True)
+        if print_as == "json":
+            print(json.dumps(report, indent=1), flush=True)
+        elif print_as == "text":
+            print(render_text(report), flush=True)
+        else:
+            print(f"{stamp} {_summary(report)}", flush=True)
 
         if args.out:
             args.out.parent.mkdir(parents=True, exist_ok=True)

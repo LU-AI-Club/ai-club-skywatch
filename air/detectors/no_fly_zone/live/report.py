@@ -40,6 +40,7 @@ from ..logic.context import gather_signals
 from ..logic.detector import run
 from ..types import ActivationState, AircraftState, AirspaceZone, Detection, ExitReason
 from .feed import FRESH, FeedBatch, FeedStatus, map_feed
+from .readsb import map_readsb
 from .zones import ZoneBatch, map_zones
 
 SCHEMA = "skywatch.flysdown.report/1"
@@ -53,13 +54,18 @@ GLOBAL_LIMITATIONS = (
     "boundaries and does not model NOTAMs, TFRs or activation times.",
     "No NOTAM, TFR or waiver source was checked. An aircraft inside a zone may be "
     "authorized to be there.",
-    "Observation times are estimated from the feed's fetch time minus each position's "
-    "age; the feed carries no per-aircraft timestamp.",
+    "Observation times are estimated from the feed's own clock minus each position's "
+    "age; neither feed carries a per-aircraft timestamp.",
 )
 FEED_LIMITATIONS = (
     "Observation time estimated as feed fetchedAt minus seenPos; the relay's "
     "fetch-to-store delay is not measured, so the true time is slightly earlier.",
     "The feed carries no NIC or NACp, so position uncertainty is the configured default.",
+    "Zone geometry is Flys Down's simplified copy of the FAA boundary.",
+)
+DIRECT_LIMITATIONS = (
+    "Observation time estimated as the aggregator's 'now' minus seen_pos.",
+    "Position uncertainty uses the reported NIC when present, else the configured default.",
     "Zone geometry is Flys Down's simplified copy of the FAA boundary.",
 )
 
@@ -88,8 +94,14 @@ def build_report(
     *,
     feed_url: str | None = None,
     zones_error: str | None = None,
+    source: str = "flysdown",
 ) -> dict[str, Any]:
-    """Evaluate one snapshot. Never raises for bad feed data; it reports it."""
+    """Evaluate one snapshot. Never raises for bad feed data; it reports it.
+
+    ``source`` is ``"flysdown"`` for the Flys Down /api/aircraft shape, or an
+    aggregator name (``"adsb.lol"``, ``"adsb.fi"``) for a readsb response
+    fetched directly.
+    """
     scope = cfg["scope"]
     zones: ZoneBatch | None = None
     if zones_error is None:
@@ -98,7 +110,10 @@ def build_report(
         except ValueError as exc:
             zones_error = str(exc)
 
-    batch = map_feed(feed_payload, received_at, live_cfg["feed"], scope)
+    if source == "flysdown":
+        batch = map_feed(feed_payload, received_at, live_cfg["feed"], scope)
+    else:
+        batch = map_readsb(feed_payload, received_at, live_cfg["feed"], scope, source)
     report: dict[str, Any] = {
         "schema": SCHEMA,
         "experimental": True,
@@ -183,7 +198,8 @@ def _detection_json(
 
     timing = batch.timing[state.source_row_id]
     basis = zones.activation_basis.get(zone.zone_id, activation.basis)
-    limitations = tuple(detection.limitations) + FEED_LIMITATIONS
+    extra = DIRECT_LIMITATIONS if batch.status.via == "direct" else FEED_LIMITATIONS
+    limitations = tuple(detection.limitations) + extra
     detection = replace(
         detection,
         limitations=limitations,

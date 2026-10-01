@@ -15,8 +15,11 @@ import pytest
 
 from ..config import Config
 from ..live.feed import FRESH, STALE, TIMESTAMP_BASIS, UNAVAILABLE, map_feed
+from ..live.readsb import TIMESTAMP_BASIS as DIRECT_BASIS
+from ..live.readsb import map_readsb
 from ..live.report import BUFFERED, CONFIRMED, UNCERTAIN, build_report
 from ..live.runner import load_live_config, main
+from ..live.text import render_text
 from ..live.zones import map_zones
 from ..types import Activation, Datum, ZoneType
 
@@ -194,6 +197,7 @@ def test_runner_replays_fixtures_without_network(tmp_path: Path) -> None:
     out = tmp_path / "report.json"
     code = main([
         "--once",
+        "--source", "flysdown",
         "--feed-file", str(FLYSDOWN / "aircraft_klyh.json"),
         "--zones-file", str(FLYSDOWN / "zones.json"),
         "--out", str(out),
@@ -224,3 +228,73 @@ def test_each_detection_publishes_a_score_breakdown_that_adds_up(report: dict[st
     assert uncertain["scoring"]["severityCaps"] == ["activation unknown: capped at LOW"]
     buffered = next(d for d in report["detections"] if d["classification"] == BUFFERED)
     assert buffered["scoring"]["severityCaps"][0].startswith("outside the polygon")
+
+
+# ---------------------------------------------------------------- run it yourself
+
+def test_direct_aggregator_records_map_with_nic_and_tighter_timing(
+    cfg: Config, live_cfg: dict[str, Any]
+) -> None:
+    batch = map_readsb(_load("readsb_klyh.json"), RECEIVED_AT, live_cfg["feed"], cfg["scope"])
+    assert batch.status.status == FRESH and batch.status.via == "direct"
+    state = next(s for s in batch.states if s.icao24 == "a11111")
+    assert state.callsign == "FIXCONF"  # trailing space trimmed
+    assert state.nic == 8 and state.nac_p == 9  # carried, unlike the Flys Down feed
+    assert state.timestamp == FETCHED_AT - timedelta(seconds=0.5)
+    assert batch.timing[state.source_row_id].basis == DIRECT_BASIS
+    ground = next(s for s in batch.states if s.icao24 == "a44444")
+    assert ground.on_ground is True and ground.alt_baro_ft is None
+    assert batch.skipped == {"no_position_age": 1, "stale_position": 1, "outside_scope": 1}
+
+
+def test_direct_run_produces_the_same_classes(cfg: Config, live_cfg: dict[str, Any]) -> None:
+    out = build_report(
+        _load("readsb_klyh.json"), _load("zones.json"), cfg, live_cfg, RECEIVED_AT,
+        source="adsb.lol",
+    )
+    classes = sorted(d["classification"] for d in out["detections"])
+    assert classes == sorted([CONFIRMED, UNCERTAIN, BUFFERED])
+    confirmed = next(d for d in out["detections"] if d["classification"] == CONFIRMED)
+    assert any("aggregator" in lim for lim in confirmed["limitations"])
+    assert out["feed"]["via"] == "direct"
+
+
+def test_old_or_broken_aggregator_answers_are_not_evaluated(
+    cfg: Config, live_cfg: dict[str, Any]
+) -> None:
+    zones = _load("zones.json")
+    late = build_report(_load("readsb_klyh.json"), zones, cfg, live_cfg,
+                        FETCHED_AT + timedelta(minutes=2), source="adsb.lol")
+    assert late["feed"]["status"] == STALE and late["evaluation"]["ran"] is False
+    broken = build_report({"msg": "rate limited"}, zones, cfg, live_cfg, RECEIVED_AT,
+                          source="adsb.lol")
+    assert broken["feed"]["status"] == UNAVAILABLE and broken["detections"] == []
+
+
+def test_text_report_shows_the_arithmetic_and_keeps_the_rules(
+    report: dict[str, Any], cfg: Config, live_cfg: dict[str, Any]
+) -> None:
+    text = render_text(report)
+    assert "EXPERIMENTAL - not for navigation" in text
+    assert "score = base 0.900 (zone type PROHIBITED) + depth 0.002" in text
+    assert "severity activation unknown: capped at LOW" in text
+    stale = build_report(_load("aircraft_klyh_stale.json"), _load("zones.json"), cfg, live_cfg,
+                         RECEIVED_AT)
+    stale_text = render_text(stale)
+    assert "NOT EVALUATED" in stale_text and "not the same as finding nothing" in stale_text
+    assert "score =" not in stale_text
+
+
+def test_runner_prints_a_text_report_from_a_saved_aggregator_answer(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code = main([
+        "--once",
+        "--source", "adsb.lol",
+        "--feed-file", str(FLYSDOWN / "readsb_klyh.json"),
+        "--zones-file", str(FLYSDOWN / "zones.json"),
+    ])
+    assert code == 0
+    printed = capsys.readouterr().out
+    # Replayed long after its 'now', the answer is honestly too old to evaluate.
+    assert "NOT EVALUATED" in printed

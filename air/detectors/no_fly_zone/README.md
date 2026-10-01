@@ -139,34 +139,51 @@ CLAUDE.md's signature table now matches the code, including `cfg` on
 suppressed rather than changed — `str, Enum` keeps `ZoneType.TFR == "TFR"` true
 for JSON round-tripping and `StrEnum` would change `str()` output. Your call.
 
-## Live run against Flys Down (experimental)
+## Live run: run it yourself (experimental)
 
-`live/` runs this same pipeline against the public aircraft feed of Project
-Flys Down (flysdown.jaronwilson.dev) for KLYH at 150 NM, and can publish a
-report the site shows in its own SkyWatch panel. It is a separate process, like
-the collector; the stages it drives are unchanged and still pure. Settings are
-in `config/live_flysdown.yaml`, so `config.yaml` is untouched.
+`live/` runs this same pipeline on live aircraft around KLYH (150 NM) and
+prints a scored report in your terminal. It asks adsb.lol directly from your
+own connection, so nothing runs on anyone's server; the zones come from
+Project Flys Down's static `/data/zones.json` (flysdown.jaronwilson.dev). It
+is a separate process, like the collector; the stages it drives are unchanged
+and still pure. Settings are in `config/live_flysdown.yaml`, so `config.yaml`
+is untouched.
 
 ```bash
-pip install -e ".[dev,nfz]"
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e ".[nfz]"
 
-# One read-only evaluation of the live feed, report to a file:
-python -m air.detectors.no_fly_zone.live --once --out out/report.json
+# One scored report, printed:
+python -m air.detectors.no_fly_zone.live --once
 
-# Replay the recorded fixtures (no network):
-python -m air.detectors.no_fly_zone.live --once \
-    --feed-file air/detectors/no_fly_zone/fixtures/flysdown/aircraft_klyh.json \
-    --zones-file air/detectors/no_fly_zone/fixtures/flysdown/zones.json --out out/replay.json
+# Keep watching, one line every 30 s:
+python -m air.detectors.no_fly_zone.live
 
-# Keep running and publish to a Flys Down instance (local or live):
-SKYWATCH_TOKEN=... python -m air.detectors.no_fly_zone.live --publish http://127.0.0.1:8795
+# The full report as JSON, every score with its breakdown:
+python -m air.detectors.no_fly_zone.live --once --print json
+
+# Other sources: adsb.fi directly, or the Flys Down feed
+python -m air.detectors.no_fly_zone.live --once --source adsb.fi
+python -m air.detectors.no_fly_zone.live --once --source flysdown
+
+# Replay a recorded answer (no network):
+python -m air.detectors.no_fly_zone.live --once --source adsb.lol \
+    --feed-file air/detectors/no_fly_zone/fixtures/flysdown/readsb_klyh.json \
+    --zones-file air/detectors/no_fly_zone/fixtures/flysdown/zones.json
 ```
+
+Each detection prints its class, severity and score with the arithmetic
+behind it: `score = base (zone type) + depth bump - context penalty`, and any
+severity cap. `--print json` carries the same as a `scoring` object.
+`--publish URL` with `SKYWATCH_TOKEN` still posts reports to a Flys Down
+instance that runs `/api/skywatch`, for anyone hosting their own.
 
 What it will and will not claim:
 
-- **Timing.** The feed has no per-aircraft timestamp. Observation time is
-  estimated as the snapshot's `fetchedAt` minus the position's `seenPos`, and
-  every detection says so. A record with no `seenPos` is skipped, never
+- **Timing.** Neither feed has a per-aircraft timestamp. Observation time is
+  estimated as the answer's own clock minus the position's age: adsb.lol's
+  `now` minus `seen_pos` directly, or the Flys Down snapshot's `fetchedAt`
+  minus `seenPos`. Every detection says which. A record with no `seenPos` is skipped, never
   stamped with the fetch time. A snapshot over 30 s old, or one the feed marks
   stale, is not evaluated at all.
 - **Activation.** Flys Down's `zones.json` does not model activation. An FAA
