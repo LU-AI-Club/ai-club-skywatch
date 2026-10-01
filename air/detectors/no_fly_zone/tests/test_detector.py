@@ -1,27 +1,33 @@
-"""Stream Lead tests - logic/detector.py.
-
-One firing case, one non-firing case. Both are skipped until the stream
-lands: delete the skip mark as you implement, and make it go green.
-"""
+"""Stream Lead tests - logic/detector.py."""
 from __future__ import annotations
 
-import pytest
+from collections import Counter
 
+from ..config import Config
+from ..ingest.adsb_loader import load_states
+from ..ingest.airspace_loader import load_zones
 from ..logic.detector import run
-from .conftest import make_state
+from ..types import ExitReason
+from .conftest import AIRSPACE_FILE, TRACKS_FILE, make_state
 
-SKIP = pytest.mark.skip(reason="stream Lead: not implemented")
 
-
-@SKIP
-def test_fixture_track_yields_the_two_expected_detections() -> None:
+def test_fixture_track_yields_the_two_expected_detections(cfg: Config) -> None:
     """fixture-1 and fixture-3 fire; the other three exit. See fixtures/README.md."""
-    pytest.fail('write me: run the 5 fixture states, assert 2 detections, '
-                'one P-901 and one TFR-6/1234')
+    exits: Counter[ExitReason] = Counter()
+    detections = list(run(load_states(TRACKS_FILE), load_zones(AIRSPACE_FILE), cfg, exits))
+    assert sorted(d.extras["zone_id"] for d in detections) == ["P-901", "TFR-6/1234"]
+    assert sorted(d.extras["source_row_id"] for d in detections) == ["fixture-1", "fixture-3"]
+    assert exits == Counter({
+        ExitReason.VERTICAL_CLEAR: 1,
+        ExitReason.ZONE_INACTIVE: 1,
+        ExitReason.NO_CANDIDATE: 1,
+    })
 
 
-@SKIP
-def test_on_ground_state_never_reaches_geometry() -> None:
+def test_on_ground_state_never_reaches_geometry(cfg: Config) -> None:
     """With filters.drop_on_ground true, a taxiing aircraft exits as ON_GROUND
     before any polygon test runs."""
-    pytest.fail('write me: make_state(on_ground=True), assert no detection')
+    exits: Counter[ExitReason] = Counter()
+    out = list(run([make_state(on_ground=True)], load_zones(AIRSPACE_FILE), cfg, exits))
+    assert out == []
+    assert exits == Counter({ExitReason.ON_GROUND: 1})

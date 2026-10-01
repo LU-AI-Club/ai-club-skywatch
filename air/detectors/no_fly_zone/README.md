@@ -9,10 +9,9 @@ The full rules live in [CLAUDE.md](CLAUDE.md). This file is the map.
 
 ## Status
 
-Scaffolded. Every stage is a stub raising `NotImplementedError` with a
-docstring stating its inputs, outputs and failure causes. The harness, the
-config loader, the contracts and the fixtures are real and working, so you can
-run the whole pipeline today and watch your stage light up as you fill it in.
+Streams A-G and the lead wiring are implemented and tested; the collector (I)
+and the Streamlit dashboard (J) are still stubs. The fixture run exits 0 with
+the two detections `fixtures/README.md` expects:
 
 ```
 $ python -m air.detectors.no_fly_zone run \
@@ -21,10 +20,10 @@ $ python -m air.detectors.no_fly_zone run \
 
 no_fly_zone: .../klyh_mixed.json
   config                 ok    baseline=nfz-rules-0.1.0+sua-2026-08-07
-  B airspace_loader      TODO  stream B: airspace_loader
-  A adsb_loader          TODO  stream A: adsb_loader
-  C-G pipeline           TODO  lead: detector wiring
-  output                 ok    out/detections.jsonl
+  B airspace_loader      ok    3 zones
+  A adsb_loader          ok    5 states
+  C-G pipeline           ok    2 detections
+  output                 ok    out/detections.jsonl (2 detections)
 ```
 
 Exit codes: `0` everything ran, `1` some stage is still a stub, `2` a real
@@ -49,6 +48,7 @@ no_fly_zone/
 │   ├── context.py            F  gather_signals(state, cfg)
 │   ├── scoring.py            G  build_detection(...)
 │   └── detector.py        LEAD  run(states, zones, cfg) — wiring only
+├── live/                        experimental Flys Down live run (see below)
 ├── collect/collector.py      I  collect(url, out_dir) — separate process
 ├── dashboard/app.py          J  streamlit run dashboard/app.py
 ├── cli.py                    H  the harness (implemented)
@@ -138,3 +138,66 @@ CLAUDE.md's signature table now matches the code, including `cfg` on
 `class X(str, Enum)`, which ruff flags as `UP042` (suggesting `StrEnum`). It is
 suppressed rather than changed — `str, Enum` keeps `ZoneType.TFR == "TFR"` true
 for JSON round-tripping and `StrEnum` would change `str()` output. Your call.
+
+## Live run: run it yourself (experimental)
+
+`live/` runs this same pipeline on live aircraft around KLYH (150 NM) and
+prints a scored report in your terminal. It asks adsb.lol directly from your
+own connection, so nothing runs on anyone's server; the zones come from
+Project Flys Down's static `/data/zones.json` (flysdown.jaronwilson.dev). It
+is a separate process, like the collector; the stages it drives are unchanged
+and still pure. Settings are in `config/live_flysdown.yaml`, so `config.yaml`
+is untouched.
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install -e ".[nfz]"
+
+# One scored report, printed:
+python -m air.detectors.no_fly_zone.live --once
+
+# Keep watching, one line every 30 s:
+python -m air.detectors.no_fly_zone.live
+
+# The full report as JSON, every score with its breakdown:
+python -m air.detectors.no_fly_zone.live --once --print json
+
+# Other sources: adsb.fi directly, or the Flys Down feed
+python -m air.detectors.no_fly_zone.live --once --source adsb.fi
+python -m air.detectors.no_fly_zone.live --once --source flysdown
+
+# Replay a recorded answer (no network):
+python -m air.detectors.no_fly_zone.live --once --source adsb.lol \
+    --feed-file air/detectors/no_fly_zone/fixtures/flysdown/readsb_klyh.json \
+    --zones-file air/detectors/no_fly_zone/fixtures/flysdown/zones.json
+```
+
+Each detection prints its class, severity and score with the arithmetic
+behind it: `score = base (zone type) + depth bump - context penalty`, and any
+severity cap. `--print json` carries the same as a `scoring` object.
+`--publish URL` with `SKYWATCH_TOKEN` still posts reports to a Flys Down
+instance that runs `/api/skywatch`, for anyone hosting their own.
+
+What it will and will not claim:
+
+- **Timing.** Neither feed has a per-aircraft timestamp. Observation time is
+  estimated as the answer's own clock minus the position's age: adsb.lol's
+  `now` minus `seen_pos` directly, or the Flys Down snapshot's `fetchedAt`
+  minus `seenPos`. Every detection says which. A record with no `seenPos` is skipped, never
+  stamped with the fetch time. A snapshot over 30 s old, or one the feed marks
+  stale, is not evaluated at all.
+- **Activation.** Flys Down's `zones.json` does not model activation. An FAA
+  prohibited area whose published times of use are `CONTINUOUS` is treated as
+  always active (switch off with `zones.trust_published_continuous`); every
+  other zone is NOTAM-activated, so stream E answers UNKNOWN and severity is
+  capped. Missing activation data is never read as active.
+- **Classes.** `confirmed_active` needs strict containment, the altitude band
+  and ACTIVE activation. `activation_uncertain` and `buffered_only` are
+  reported as such and are not violation claims.
+- **Quiet vs broken.** A report says whether the feed was `fresh`, `stale` or
+  `unavailable`, and whether evaluation ran; a quiet fresh run carries the exit
+  reason for every state.
+
+Results are experimental and not for navigation or operational decisions:
+the geometry is Flys Down's simplified copy of the FAA boundary and no NOTAM,
+TFR or waiver source is checked. Tests: `tests/test_live.py`.

@@ -1,0 +1,7 @@
+{
+ "ok": false,
+ "error": "all ADS-B upstreams refused the request",
+ "detail": [
+  "adsb.lol: HTTP 429"
+ ]
+}

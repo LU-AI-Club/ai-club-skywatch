@@ -39,9 +39,43 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ..types import ActivationResult, AirspaceZone
+from ..types import Activation, ActivationResult, ActivationState, AirspaceZone, TimeWindow
 
 
 def is_active(zone: AirspaceZone, ts: datetime) -> ActivationResult:
-    """Decide whether ``zone`` was live at ``ts``."""
-    raise NotImplementedError("stream E: activation")
+    """Decide whether ``zone`` was live at ``ts``.
+
+    Raises:
+        ValueError: ``ts`` is naive.
+    """
+    if ts.tzinfo is None or ts.utcoffset() is None:
+        raise ValueError("is_active needs a tz-aware UTC timestamp, got a naive datetime")
+
+    def result(state: ActivationState, basis: str) -> ActivationResult:
+        return ActivationResult(state=state, zone_id=zone.zone_id, basis=basis)
+
+    if zone.activation is Activation.ALWAYS:
+        return result(ActivationState.ACTIVE, "always active")
+    if zone.activation is Activation.NOTAM:
+        return result(
+            ActivationState.UNKNOWN,
+            "activated by NOTAM, and no NOTAM data was available to check",
+        )
+
+    label = "TFR window" if zone.activation is Activation.WINDOW else "scheduled window"
+    if not zone.active_windows:
+        return result(
+            ActivationState.UNKNOWN,
+            f"{zone.activation.value.lower()} activation, but no windows were published to check",
+        )
+    for window in zone.active_windows:
+        if window.start <= ts < window.end:
+            return result(ActivationState.ACTIVE, f"{label} {_span(window)}")
+    return result(
+        ActivationState.INACTIVE,
+        f"outside every published window ({', '.join(_span(w) for w in zone.active_windows)})",
+    )
+
+
+def _span(window: TimeWindow) -> str:
+    return f"{window.start:%Y-%m-%dT%H%MZ}-{window.end:%Y-%m-%dT%H%MZ}"

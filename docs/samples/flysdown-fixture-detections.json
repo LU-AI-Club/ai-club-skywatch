@@ -1,0 +1,281 @@
+{
+ "schema": "skywatch.flysdown.report/1",
+ "experimental": true,
+ "generatedAt": "2026-09-29T22:30:03Z",
+ "detector": {
+  "id": "skywatch.no_fly_zone",
+  "version": "0.1.0",
+  "rulesVersion": "nfz-rules-0.1.0",
+  "baseline": "nfz-rules-0.1.0+sua-2026-09-17"
+ },
+ "scope": {
+  "name": "KLYH",
+  "lat": 37.3267,
+  "lon": -79.2004,
+  "radiusNm": 150
+ },
+ "feed": {
+  "status": "fresh",
+  "reason": null,
+  "url": null,
+  "source": "relay/adsb.fi",
+  "via": "relay",
+  "fetchedAt": "2026-09-29T22:30:00Z",
+  "snapshotAgeS": 3.0,
+  "serverAgeMs": 2100.0,
+  "count": 9
+ },
+ "zones": {
+  "ok": true,
+  "source": "flysdown /data/zones.json",
+  "asof": "2026-09-17",
+  "disclaimer": "NOT FOR NAVIGATION. Prohibited-area geometry is the FAA published boundary, simplified for the browser, but activation times, NOTAMs and temporary restrictions are not modeled. Always use current charts and NOTAMs.",
+  "used": [
+   {
+    "id": "faa-p-56-8",
+    "name": "P-56A National Mall",
+    "type": "PROHIBITED",
+    "activation": "ALWAYS",
+    "activationBasis": "FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)"
+   },
+   {
+    "id": "faa-p-56-9",
+    "name": "P-56B Naval Observatory",
+    "type": "PROHIBITED",
+    "activation": "ALWAYS",
+    "activationBasis": "FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)"
+   },
+   {
+    "id": "faa-p-73-11",
+    "name": "P-73 Mount Vernon",
+    "type": "PROHIBITED",
+    "activation": "ALWAYS",
+    "activationBasis": "FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)"
+   },
+   {
+    "id": "fixture-tfr-lyh",
+    "name": "Hand-built test TFR near KLYH (not real)",
+    "type": "TFR",
+    "activation": "NOTAM",
+    "activationBasis": "no activation data in Flys Down zones.json; treated as unknown"
+   }
+  ],
+  "skipped": [
+   {
+    "id": "dc-sfra",
+    "reason": "flight-rules area, not a no-fly zone (Flys Down does not alert on it either)"
+   },
+   {
+    "id": "demo-gulf-lane",
+    "reason": "demonstration watch area, not an official restriction"
+   }
+  ]
+ },
+ "evaluation": {
+  "ran": true,
+  "reason": null,
+  "statesEvaluated": 6,
+  "skipped": {
+   "no_position_age": 1,
+   "stale_position": 1,
+   "outside_scope": 1
+  },
+  "exits": {
+   "no_candidate": 1,
+   "on_ground": 1,
+   "vertical_clear": 1
+  },
+  "detections": 3,
+  "confirmedActive": 1,
+  "activationUncertain": 1,
+  "bufferedOnly": 1,
+  "truncated": 0
+ },
+ "detections": [
+  {
+   "aircraftId": "a11111",
+   "entityIds": [
+    "aircraft:a11111"
+   ],
+   "callsign": "FIXCONF",
+   "zoneId": "faa-p-56-8",
+   "zoneName": "P-56A National Mall",
+   "zoneType": "PROHIBITED",
+   "classification": "confirmed_active",
+   "severity": "HIGH",
+   "score": 0.902,
+   "confidence": 1.0,
+   "scoring": {
+    "formula": "clamp(base + min(depth_nm * per_nm, cap) - sum(context weights), 0, 1)",
+    "base": 0.9,
+    "baseReason": "zone type PROHIBITED",
+    "depthNm": 0.2,
+    "depthBumpPerNm": 0.01,
+    "depthBumpCap": 0.1,
+    "depthBump": 0.002,
+    "contextSignals": [],
+    "contextPenalty": 0,
+    "unclamped": 0.902,
+    "score": 0.902,
+    "severityCaps": []
+   },
+   "activation": "ACTIVE",
+   "activationBasis": "FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)",
+   "lat": 38.89098,
+   "lon": -77.02641,
+   "altitudeFt": 1600.0,
+   "altitudeSource": "GEOMETRIC",
+   "penetrationNm": 0.2,
+   "observedAt": "2026-09-29T22:29:59.500000Z",
+   "observedAtBasis": "estimated: feed fetchedAt minus seenPos",
+   "seenPosS": 0.5,
+   "positionAgeS": 3.5,
+   "sourceRowId": "flysdown:relay/adsb.fi:1790721000000:a11111",
+   "feedSource": "relay/adsb.fi",
+   "evidenceRefs": [
+    "adsb:flysdown:relay/adsb.fi:1790721000000:a11111",
+    "airspace:faa-p-56-8"
+   ],
+   "baseline": "nfz-rules-0.1.0+sua-2026-09-17",
+   "explanation": [
+    "Aircraft a11111 was inside zone faa-p-56-8 (PROHIBITED).",
+    "Zone activation was active: always active.",
+    "Altitude 1600 ft was within the zone's vertical band.",
+    "Anomaly score 0.902 = base 0.900 + depth bump 0.002 - context penalty 0.000.",
+    "Activation basis: FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)."
+   ],
+   "limitations": [
+    "Observation time estimated as feed fetchedAt minus seenPos; the relay's fetch-to-store delay is not measured, so the true time is slightly earlier.",
+    "The feed carries no NIC or NACp, so position uncertainty is the configured default.",
+    "Zone geometry is Flys Down's simplified copy of the FAA boundary."
+   ]
+  },
+  {
+   "aircraftId": "a33333",
+   "entityIds": [
+    "aircraft:a33333"
+   ],
+   "callsign": "T3333",
+   "zoneId": "fixture-tfr-lyh",
+   "zoneName": "Hand-built test TFR near KLYH (not real)",
+   "zoneType": "TFR",
+   "classification": "activation_uncertain",
+   "severity": "LOW",
+   "score": 0.73,
+   "confidence": 0.0,
+   "scoring": {
+    "formula": "clamp(base + min(depth_nm * per_nm, cap) - sum(context weights), 0, 1)",
+    "base": 0.7,
+    "baseReason": "zone type TFR",
+    "depthNm": 2.995,
+    "depthBumpPerNm": 0.01,
+    "depthBumpCap": 0.1,
+    "depthBump": 0.0299,
+    "contextSignals": [],
+    "contextPenalty": 0,
+    "unclamped": 0.7299,
+    "score": 0.7299,
+    "severityCaps": [
+     "activation unknown: capped at LOW"
+    ]
+   },
+   "activation": "UNKNOWN",
+   "activationBasis": "no activation data in Flys Down zones.json; treated as unknown",
+   "lat": 37.23,
+   "lon": -79.26,
+   "altitudeFt": 2500.0,
+   "altitudeSource": "GEOMETRIC",
+   "penetrationNm": 2.995,
+   "observedAt": "2026-09-29T22:29:59.500000Z",
+   "observedAtBasis": "estimated: feed fetchedAt minus seenPos",
+   "seenPosS": 0.5,
+   "positionAgeS": 3.5,
+   "sourceRowId": "flysdown:relay/adsb.fi:1790721000000:a33333",
+   "feedSource": "relay/adsb.fi",
+   "evidenceRefs": [
+    "adsb:flysdown:relay/adsb.fi:1790721000000:a33333",
+    "airspace:fixture-tfr-lyh"
+   ],
+   "baseline": "nfz-rules-0.1.0+sua-2026-09-17",
+   "explanation": [
+    "Aircraft a33333 was inside zone fixture-tfr-lyh (TFR).",
+    "Zone activation was unknown: activated by NOTAM, and no NOTAM data was available to check.",
+    "Altitude 2500 ft was within the zone's vertical band.",
+    "Anomaly score 0.730 = base 0.700 + depth bump 0.030 - context penalty 0.000.",
+    "Activation basis: no activation data in Flys Down zones.json; treated as unknown."
+   ],
+   "limitations": [
+    "Zone activation could not be determined.",
+    "Observation time estimated as feed fetchedAt minus seenPos; the relay's fetch-to-store delay is not measured, so the true time is slightly earlier.",
+    "The feed carries no NIC or NACp, so position uncertainty is the configured default.",
+    "Zone geometry is Flys Down's simplified copy of the FAA boundary."
+   ]
+  },
+  {
+   "aircraftId": "a99999",
+   "entityIds": [
+    "aircraft:a99999"
+   ],
+   "callsign": "T9999",
+   "zoneId": "faa-p-73-11",
+   "zoneName": "P-73 Mount Vernon",
+   "zoneType": "PROHIBITED",
+   "classification": "buffered_only",
+   "severity": "INFO",
+   "score": 0.9,
+   "confidence": 0.0,
+   "scoring": {
+    "formula": "clamp(base + min(depth_nm * per_nm, cap) - sum(context weights), 0, 1)",
+    "base": 0.9,
+    "baseReason": "zone type PROHIBITED",
+    "depthNm": 0.0,
+    "depthBumpPerNm": 0.01,
+    "depthBumpCap": 0.1,
+    "depthBump": 0.0,
+    "contextSignals": [],
+    "contextPenalty": 0,
+    "unclamped": 0.9,
+    "score": 0.9,
+    "severityCaps": [
+     "outside the polygon, within uncertainty: capped at INFO"
+    ]
+   },
+   "activation": "ACTIVE",
+   "activationBasis": "FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)",
+   "lat": 38.71602,
+   "lon": -77.08611,
+   "altitudeFt": 1100.0,
+   "altitudeSource": "GEOMETRIC",
+   "penetrationNm": null,
+   "observedAt": "2026-09-29T22:29:59.500000Z",
+   "observedAtBasis": "estimated: feed fetchedAt minus seenPos",
+   "seenPosS": 0.5,
+   "positionAgeS": 3.5,
+   "sourceRowId": "flysdown:relay/adsb.fi:1790721000000:a99999",
+   "feedSource": "relay/adsb.fi",
+   "evidenceRefs": [
+    "adsb:flysdown:relay/adsb.fi:1790721000000:a99999",
+    "airspace:faa-p-73-11"
+   ],
+   "baseline": "nfz-rules-0.1.0+sua-2026-09-17",
+   "explanation": [
+    "Aircraft a99999 was within the uncertainty buffer of zone faa-p-73-11 (PROHIBITED).",
+    "Zone activation was active: always active.",
+    "Altitude 1100 ft was within the zone's vertical band.",
+    "Anomaly score 0.900 = base 0.900 + depth bump 0.000 - context penalty 0.000.",
+    "Activation basis: FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)."
+   ],
+   "limitations": [
+    "Observation time estimated as feed fetchedAt minus seenPos; the relay's fetch-to-store delay is not measured, so the true time is slightly earlier.",
+    "The feed carries no NIC or NACp, so position uncertainty is the configured default.",
+    "Zone geometry is Flys Down's simplified copy of the FAA boundary."
+   ]
+  }
+ ],
+ "limitations": [
+  "Experimental. Not for navigation, and not operational safety advice.",
+  "Zone geometry and limits come from Flys Down's zones.json, which simplifies FAA boundaries and does not model NOTAMs, TFRs or activation times.",
+  "No NOTAM, TFR or waiver source was checked. An aircraft inside a zone may be authorized to be there.",
+  "Observation times are estimated from the feed's fetch time minus each position's age; the feed carries no per-aircraft timestamp."
+ ]
+}

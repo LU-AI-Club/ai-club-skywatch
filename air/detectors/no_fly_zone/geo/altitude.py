@@ -36,9 +36,46 @@ need no conversion; :attr:`Datum.SFC` is stored as 0.
 """
 from __future__ import annotations
 
-from ..types import AircraftState, AirspaceZone, VerticalResult
+from ..types import (
+    AircraftState,
+    AirspaceZone,
+    AltitudeSource,
+    Datum,
+    ExitReason,
+    VerticalResult,
+)
 
 
 def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
-    """Compare ``state``'s altitude to ``zone``'s floor/ceiling band."""
-    raise NotImplementedError("stream D: altitude")
+    """Compare ``state``'s altitude to ``zone``'s floor/ceiling band.
+
+    The band is inclusive at both ends: an aircraft exactly at the ceiling is
+    still in the volume. Never raises; abstentions carry ``BAD_INPUT``.
+    """
+    if state.alt_geom_ft is not None:
+        altitude, source = state.alt_geom_ft, AltitudeSource.GEOMETRIC
+    elif state.alt_baro_ft is not None:
+        altitude, source = state.alt_baro_ft, AltitudeSource.BAROMETRIC
+    else:
+        return VerticalResult(
+            within=False,
+            altitude_ft=None,
+            altitude_source=AltitudeSource.NONE,
+            reason=ExitReason.BAD_INPUT,
+        )
+
+    if Datum.AGL in (zone.floor_datum, zone.ceiling_datum):
+        # No terrain model: comparing an AGL limit to an MSL altitude would be
+        # wrong by the ground elevation, so abstain instead.
+        return VerticalResult(
+            within=False, altitude_ft=altitude, altitude_source=source, reason=ExitReason.BAD_INPUT
+        )
+
+    floor = 0.0 if zone.floor_datum is Datum.SFC else zone.floor_ft
+    within = floor <= altitude <= zone.ceiling_ft
+    return VerticalResult(
+        within=within,
+        altitude_ft=altitude,
+        altitude_source=source,
+        reason=None if within else ExitReason.VERTICAL_CLEAR,
+    )

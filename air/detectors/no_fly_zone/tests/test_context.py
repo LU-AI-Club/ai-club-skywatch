@@ -1,27 +1,25 @@
-"""Stream F tests - logic/context.py.
-
-One firing case, one non-firing case. Both are skipped until the stream
-lands: delete the skip mark as you implement, and make it go green.
-"""
+"""Stream F tests - logic/context.py."""
 from __future__ import annotations
 
-import pytest
-
+from ..config import Config
 from ..logic.context import gather_signals
 from .conftest import make_state
 
-SKIP = pytest.mark.skip(reason="stream F: not implemented")
 
-
-@SKIP
-def test_emergency_squawk_produces_a_weighted_signal() -> None:
+def test_emergency_squawk_produces_a_weighted_signal(cfg: Config) -> None:
     """7700 yields one signal whose weight comes from config, not a literal."""
-    pytest.fail('write me: make_state(squawk=7700), assert one signal named '
-                'emergency_squawk carrying the configured weight')
+    signals = gather_signals(make_state(squawk="7700"), cfg)
+    assert [s.name for s in signals] == ["emergency_squawk"]
+    assert signals[0].weight == cfg["scoring"]["context_weights"]["emergency_squawk"]
 
 
-@SKIP
-def test_ordinary_state_produces_no_signals() -> None:
+def test_ordinary_state_produces_no_signals(cfg: Config) -> None:
     """A VFR squawk on a civil airframe yields an empty list, which is the normal
     case and not a failure."""
-    pytest.fail('write me: default state, assert gather_signals() == []')
+    assert gather_signals(make_state(), cfg) == []
+
+
+def test_discrete_military_and_lifeguard_signals(cfg: Config) -> None:
+    state = make_state(squawk="4521", icao24="ae1234", callsign="LIFEGUARD1")
+    names = {s.name for s in gather_signals(state, cfg)}
+    assert names == {"atc_discrete_squawk", "military_hex", "lifeguard_callsign"}
