@@ -208,3 +208,19 @@ def test_runner_replays_fixtures_without_network(tmp_path: Path) -> None:
 def test_publish_without_a_token_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SKYWATCH_TOKEN", raising=False)
     assert main(["--once", "--publish", "http://127.0.0.1:9"]) == 2
+
+
+def test_each_detection_publishes_a_score_breakdown_that_adds_up(report: dict[str, Any]) -> None:
+    """Anyone reading the raw report can rebuild the score from its parts."""
+    for det in report["detections"]:
+        s = det["scoring"]
+        assert s["unclamped"] == pytest.approx(s["base"] + s["depthBump"] - s["contextPenalty"])
+        assert s["score"] == pytest.approx(min(1.0, max(0.0, s["unclamped"])))
+        assert s["score"] == pytest.approx(det["score"], abs=1e-3)
+    confirmed = next(d for d in report["detections"] if d["classification"] == CONFIRMED)
+    assert confirmed["scoring"]["base"] == 0.9  # PROHIBITED, from config.yaml
+    assert confirmed["scoring"]["severityCaps"] == []
+    uncertain = next(d for d in report["detections"] if d["classification"] == UNCERTAIN)
+    assert uncertain["scoring"]["severityCaps"] == ["activation unknown: capped at LOW"]
+    buffered = next(d for d in report["detections"] if d["classification"] == BUFFERED)
+    assert buffered["scoring"]["severityCaps"][0].startswith("outside the polygon")

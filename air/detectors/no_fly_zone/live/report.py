@@ -36,6 +36,7 @@ from ..emit import to_platform_detection
 from ..geo.altitude import vertical_check
 from ..geo.containment import check_containment
 from ..logic.activation import is_active
+from ..logic.context import gather_signals
 from ..logic.detector import run
 from ..types import ActivationState, AircraftState, AirspaceZone, Detection, ExitReason
 from .feed import FRESH, FeedBatch, FeedStatus, map_feed
@@ -190,6 +191,7 @@ def _detection_json(
     )
     # The platform contract's own validation must accept what we publish.
     to_platform_detection(detection)
+    scoring = _scoring(detection, state, zone, cfg)
 
     return {
         "aircraftId": state.icao24,
@@ -202,6 +204,7 @@ def _detection_json(
         "severity": detection.severity.value,
         "score": round(detection.anomaly_score, 3),
         "confidence": detection.raw_model_confidence,
+        "scoring": scoring,
         "activation": activation.state.value,
         "activationBasis": basis,
         "lat": state.lat,
@@ -220,6 +223,55 @@ def _detection_json(
         "explanation": list(detection.explanation_facts),
         "limitations": list(detection.limitations),
     }
+
+
+def _scoring(
+    detection: Detection, state: AircraftState, zone: AirspaceZone, cfg: Config
+) -> dict[str, Any]:
+    """The score's parts, from the same config and signals stream G used.
+
+    Stream G only returns the total, so the parts are rebuilt here from the
+    documented formula and checked against that total: if scoring.py ever
+    changes shape, this raises instead of publishing parts that no longer add
+    up to the score shown beside them.
+    """
+    scoring = cfg["scoring"]
+    base = float(scoring["base_by_zone_type"][zone.zone_type.value])
+    depth_nm = max(float(detection.extras.get("penetration_nm") or 0.0), 0.0)
+    per_nm = float(scoring["depth_bump_per_nm"])
+    cap = float(scoring["depth_bump_max"])
+    depth_bump = min(depth_nm * per_nm, cap)
+    signals = gather_signals(state, cfg)
+    penalty = sum(s.weight for s in signals)
+    total = min(1.0, max(0.0, base + depth_bump - penalty))
+    if abs(total - detection.anomaly_score) > 1e-9:
+        raise ValueError(
+            f"score breakdown {total} does not match stream G's score {detection.anomaly_score}"
+        )
+    return {
+        "formula": "clamp(base + min(depth_nm * per_nm, cap) - sum(context weights), 0, 1)",
+        "base": base,
+        "baseReason": f"zone type {zone.zone_type.value}",
+        "depthNm": round(depth_nm, 3),
+        "depthBumpPerNm": per_nm,
+        "depthBumpCap": cap,
+        "depthBump": round(depth_bump, 4),
+        "contextSignals": [{"name": s.name, "weight": s.weight, "fact": s.fact} for s in signals],
+        "contextPenalty": round(penalty, 4),
+        "unclamped": round(base + depth_bump - penalty, 4),
+        "score": round(detection.anomaly_score, 4),
+        "severityCaps": _severity_caps(detection, cfg),
+    }
+
+
+def _severity_caps(detection: Detection, cfg: Config) -> list[str]:
+    caps = []
+    if "Zone activation could not be determined." in detection.limitations:
+        caps.append(f"activation unknown: capped at {cfg['severity']['unknown_activation_cap']}")
+    if detection.severity.value == cfg["severity"]["buffered_only"] and not caps:
+        cap = cfg["severity"]["buffered_only"]
+        caps.append(f"outside the polygon, within uncertainty: capped at {cap}")
+    return caps
 
 
 def _feed_json(status: FeedStatus, url: str | None) -> dict[str, Any]:

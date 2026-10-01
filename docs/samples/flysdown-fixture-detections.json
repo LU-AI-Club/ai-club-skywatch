@@ -105,6 +105,20 @@
    "severity": "HIGH",
    "score": 0.902,
    "confidence": 1.0,
+   "scoring": {
+    "formula": "clamp(base + min(depth_nm * per_nm, cap) - sum(context weights), 0, 1)",
+    "base": 0.9,
+    "baseReason": "zone type PROHIBITED",
+    "depthNm": 0.2,
+    "depthBumpPerNm": 0.01,
+    "depthBumpCap": 0.1,
+    "depthBump": 0.002,
+    "contextSignals": [],
+    "contextPenalty": 0,
+    "unclamped": 0.902,
+    "score": 0.902,
+    "severityCaps": []
+   },
    "activation": "ACTIVE",
    "activationBasis": "FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)",
    "lat": 38.89098,
@@ -149,6 +163,22 @@
    "severity": "LOW",
    "score": 0.73,
    "confidence": 0.0,
+   "scoring": {
+    "formula": "clamp(base + min(depth_nm * per_nm, cap) - sum(context weights), 0, 1)",
+    "base": 0.7,
+    "baseReason": "zone type TFR",
+    "depthNm": 2.995,
+    "depthBumpPerNm": 0.01,
+    "depthBumpCap": 0.1,
+    "depthBump": 0.0299,
+    "contextSignals": [],
+    "contextPenalty": 0,
+    "unclamped": 0.7299,
+    "score": 0.7299,
+    "severityCaps": [
+     "activation unknown: capped at LOW"
+    ]
+   },
    "activation": "UNKNOWN",
    "activationBasis": "no activation data in Flys Down zones.json; treated as unknown",
    "lat": 37.23,
@@ -194,6 +224,22 @@
    "severity": "INFO",
    "score": 0.9,
    "confidence": 0.0,
+   "scoring": {
+    "formula": "clamp(base + min(depth_nm * per_nm, cap) - sum(context weights), 0, 1)",
+    "base": 0.9,
+    "baseReason": "zone type PROHIBITED",
+    "depthNm": 0.0,
+    "depthBumpPerNm": 0.01,
+    "depthBumpCap": 0.1,
+    "depthBump": 0.0,
+    "contextSignals": [],
+    "contextPenalty": 0,
+    "unclamped": 0.9,
+    "score": 0.9,
+    "severityCaps": [
+     "outside the polygon, within uncertainty: capped at INFO"
+    ]
+   },
    "activation": "ACTIVE",
    "activationBasis": "FAA SUA times of use: CONTINUOUS (published schedule; NOTAMs and waivers not checked)",
    "lat": 38.71602,
