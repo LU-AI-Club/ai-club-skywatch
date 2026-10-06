@@ -178,9 +178,93 @@ def sweep_threshold(
     return table
 
 
+def implied_speed_histogram(
+    records,
+    teleport_kt: float = 1000.0,
+    bin_width_kt: float = 50.0,
+    max_kt: float = 2000.0,
+):
+    """Chart how many feature records fall at each implied speed.
+
+    `records` is a list of `SpoofingFeatureRecord` (anything with an
+    `implied_speed_kt` attribute works). Real aircraft pile up on the left,
+    impossible jumps land far to the right, and the teleport limit belongs
+    in the empty space between them. A dashed line marks `teleport_kt` so
+    you can see whether it sits in that space.
+
+    Speeds are grouped into bars `bin_width_kt` wide from 0 up to `max_kt`.
+    Anything at or above `max_kt` goes in one last bar, so a single 34,000 kt
+    jump does not squash everything else. The count axis is a log scale so a
+    bar of 1 is still visible next to a bar of hundreds.
+
+    Returns a matplotlib `Figure` (save it with `fig.savefig("chart.png")`),
+    or None if no record has an implied speed. Records whose
+    `implied_speed_kt` is None are left out.
+
+    Needs matplotlib, which is in the `eda` extras: `pip install ".[eda]"`.
+    """
+    # Imported here, not at the top, so the rest of this file still works
+    # for teammates who only installed the dev extras.
+    from matplotlib.figure import Figure
+
+    speeds = [r.implied_speed_kt for r in records if r.implied_speed_kt is not None]
+    if not speeds:
+        return None
+
+    n_bins = int(max_kt // bin_width_kt)
+    counts = [0] * (n_bins + 1)  # the extra bar at the end is "max_kt or faster"
+    for speed in speeds:
+        index = min(int(speed // bin_width_kt), n_bins)
+        counts[index] += 1
+
+    left_edges = [i * bin_width_kt for i in range(n_bins + 1)]
+
+    ink = "#0b0b0b"
+    muted = "#52514e"
+    surface = "#fcfcfb"
+
+    fig = Figure(figsize=(9, 4.5), facecolor=surface)
+    ax = fig.subplots()
+    ax.set_facecolor(surface)
+
+    ax.bar(left_edges, counts, width=bin_width_kt * 0.9, align="edge", color="#2a78d6")
+    ax.axvline(teleport_kt, color=ink, linestyle="--", linewidth=1.5)
+    ax.annotate(
+        f"teleport limit: {teleport_kt:g} kt",
+        xy=(teleport_kt, 1),
+        xycoords=("data", "axes fraction"),
+        xytext=(6, -6),
+        textcoords="offset points",
+        ha="left",
+        va="top",
+        color=ink,
+    )
+
+    ax.set_yscale("log")
+    ax.set_ylim(bottom=0.5)
+    ax.set_xlim(0, max_kt + bin_width_kt)
+    ticks = [max_kt * i / 4 for i in range(5)]
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([f"{t:g}" for t in ticks[:-1]] + [f"{max_kt:g}+"])
+
+    ax.set_title("Implied speed between consecutive reports", color=ink, loc="left")
+    ax.set_xlabel("Implied speed (kt)", color=muted)
+    ax.set_ylabel("Feature records (log scale)", color=muted)
+    ax.tick_params(colors=muted)
+    ax.grid(axis="y", color="#e4e3df", linewidth=0.8)
+    ax.set_axisbelow(True)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(muted)
+
+    fig.tight_layout()
+    return fig
+
+
 __all__ = [
     "run_on_fixtures",
     "confusion_counts",
     "precision_recall",
     "sweep_threshold",
+    "implied_speed_histogram",
 ]
