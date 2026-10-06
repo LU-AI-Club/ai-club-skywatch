@@ -65,4 +65,37 @@ def run_on_fixtures(detector, fixture_folder: str | Path) -> list[dict]:
     return results
 
 
-__all__ = ["run_on_fixtures"]
+def confusion_counts(results: list[dict]) -> dict[str, dict[str, int]]:
+    """Count catches, false alarms and misses per rule.
+
+    `results` is the list `run_on_fixtures` returns. Each result is filed
+    under its `expected_gate` and lands in exactly one of four boxes:
+
+        tp - catch:        should have fired, and did
+        fn - miss:         should have fired, and did not
+        fp - false alarm:  should not have fired, but did
+        tn - correct quiet: should not have fired, and did not
+
+    Returns one dict of those four counts per rule, e.g.
+        {"teleport_v1": {"tp": 1, "fp": 0, "fn": 0, "tn": 1}}
+    """
+    counts: dict[str, dict[str, int]] = {}
+
+    for result in results:
+        gate = result["expected_gate"]
+        if gate not in counts:
+            counts[gate] = {"tp": 0, "fp": 0, "fn": 0, "tn": 0}
+
+        if result["expected_positive"] and result["fired"]:
+            counts[gate]["tp"] += 1
+        elif result["expected_positive"]:
+            counts[gate]["fn"] += 1
+        elif result["fired"]:
+            counts[gate]["fp"] += 1
+        else:
+            counts[gate]["tn"] += 1
+
+    return counts
+
+
+__all__ = ["run_on_fixtures", "confusion_counts"]
