@@ -98,4 +98,30 @@ def confusion_counts(results: list[dict]) -> dict[str, dict[str, int]]:
     return counts
 
 
-__all__ = ["run_on_fixtures", "confusion_counts"]
+def precision_recall(counts: dict[str, int]) -> tuple[float | None, float | None]:
+    """Turn one rule's counts into (precision, recall).
+
+    `counts` is one rule's dict from `confusion_counts`, e.g.
+    `confusion_counts(results)["teleport_v1"]`. Only `tp`, `fp` and `fn` are
+    read.
+
+        precision - of what we flagged, how much was right:   tp / (tp + fp)
+        recall    - of what we planted, how much we caught:   tp / (tp + fn)
+
+    Both are between 0.0 and 1.0. If nothing was flagged, precision has
+    nothing to divide by and is None; if nothing was planted, recall is None.
+    """
+    tp = counts["tp"]
+    fp = counts["fp"]
+    fn = counts["fn"]
+
+    flagged = tp + fp
+    planted = tp + fn
+
+    precision = tp / flagged if flagged > 0 else None
+    recall = tp / planted if planted > 0 else None
+
+    return precision, recall
+
+
+__all__ = ["run_on_fixtures", "confusion_counts", "precision_recall"]
