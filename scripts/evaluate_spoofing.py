@@ -124,4 +124,63 @@ def precision_recall(counts: dict[str, int]) -> tuple[float | None, float | None
     return precision, recall
 
 
-__all__ = ["run_on_fixtures", "confusion_counts", "precision_recall"]
+def sweep_threshold(
+    setting: str,
+    values: list[float],
+    fixture_folder: str | Path,
+    make_detector,
+) -> list[dict]:
+    """Try one limit at many values and score the detector at each one.
+
+    `setting` is the name of the limit to change (e.g. `"teleport_kt"`) and
+    `values` are the numbers to try for it.
+
+    `make_detector` is a function that takes a dict of settings, e.g.
+    `{"teleport_kt": 800}`, and returns a detector built with them. No real
+    spoofing detector exists yet, so the caller has to say how to build one
+    (see tests/air/detectors/spoofing/test_spoofing_sweep_threshold.py for a
+    hand-built fake).
+
+    Returns the table as a list of dicts, one row per value, in the order
+    the values were given:
+        setting    - the name of the limit
+        value      - the value tried on this row
+        tp, fp, fn, tn - counts added up across every rule
+        precision  - from those totals, or None if nothing was flagged
+        recall     - from those totals, or None if nothing was planted
+    """
+    table: list[dict] = []
+
+    for value in values:
+        detector = make_detector({setting: value})
+        results = run_on_fixtures(detector, fixture_folder)
+
+        totals = {"tp": 0, "fp": 0, "fn": 0, "tn": 0}
+        for gate_counts in confusion_counts(results).values():
+            for box in totals:
+                totals[box] += gate_counts[box]
+
+        precision, recall = precision_recall(totals)
+
+        table.append(
+            {
+                "setting": setting,
+                "value": value,
+                "tp": totals["tp"],
+                "fp": totals["fp"],
+                "fn": totals["fn"],
+                "tn": totals["tn"],
+                "precision": precision,
+                "recall": recall,
+            }
+        )
+
+    return table
+
+
+__all__ = [
+    "run_on_fixtures",
+    "confusion_counts",
+    "precision_recall",
+    "sweep_threshold",
+]
