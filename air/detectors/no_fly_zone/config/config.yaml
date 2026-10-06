@@ -23,6 +23,9 @@ airspace:
   fixture_path: fixtures/airspace/klyh-150nm.geojson
   source_asof: "2026-08-07"   # SUA publication cycle; update with the file
   include_types: [PROHIBITED, RESTRICTED, TFR, WARNING, ALERT, MOA]
+  # Community-reported U.S. DoD block; heuristic, not authoritative identity proof.
+  military_icao24_ranges:
+    - ["AE0000", "AFFFFF"]
 
 geometry:
   h3_resolution: 7        # ~5 km cells, matches SENTINEL
