@@ -36,9 +36,70 @@ need no conversion; :attr:`Datum.SFC` is stored as 0.
 """
 from __future__ import annotations
 
-from ..types import AircraftState, AirspaceZone, VerticalResult
+from ..types import (
+    AircraftState,
+    AirspaceZone,
+    AltitudeSource,
+    Datum,
+    ExitReason,
+    VerticalResult,
+)
 
 
 def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
     """Compare ``state``'s altitude to ``zone``'s floor/ceiling band."""
-    raise NotImplementedError("stream D: altitude")
+    # -------------------------------------------------------------------------
+    # 1. Resolve altitude source and value
+    # Geometric altitude is preferred because MSL floors and ceilings are
+    # geometric heights. Barometric altitude is used as a fallback.
+    # If neither altitude is available, abstain with BAD_INPUT (never guess).
+    # -------------------------------------------------------------------------
+    if state.alt_geom_ft is not None:
+        alt = state.alt_geom_ft
+        source = AltitudeSource.GEOMETRIC
+    elif state.alt_baro_ft is not None:
+        alt = state.alt_baro_ft
+        source = AltitudeSource.BAROMETRIC
+    else:
+        return VerticalResult(
+            within=False,
+            altitude_ft=None,
+            altitude_source=AltitudeSource.NONE,
+            reason=ExitReason.BAD_INPUT,
+        )
+
+    # -------------------------------------------------------------------------
+    # 2. Validate zone datums
+    # AGL (Above Ground Level) requires a terrain elevation model that this
+    # detector lacks. Comparing AGL directly against MSL/FL would produce
+    # significant errors, so abstain with BAD_INPUT when AGL is encountered.
+    # Note: Datum.FL is pre-stored in feet and Datum.SFC is stored as 0.0.
+    # -------------------------------------------------------------------------
+    if zone.floor_datum == Datum.AGL or zone.ceiling_datum == Datum.AGL:
+        return VerticalResult(
+            within=False,
+            altitude_ft=alt,
+            altitude_source=source,
+            reason=ExitReason.BAD_INPUT,
+        )
+
+    # -------------------------------------------------------------------------
+    # 3. Check vertical containment within the [floor_ft, ceiling_ft] band
+    # If the aircraft is within the band, report within=True.
+    # Otherwise, it is cleanly above or below the zone, so report VERTICAL_CLEAR.
+    # -------------------------------------------------------------------------
+    if zone.floor_ft <= alt <= zone.ceiling_ft:
+        return VerticalResult(
+            within=True,
+            altitude_ft=alt,
+            altitude_source=source,
+            reason=None,
+        )
+
+    return VerticalResult(
+        within=False,
+        altitude_ft=alt,
+        altitude_source=source,
+        reason=ExitReason.VERTICAL_CLEAR,
+    )
+
