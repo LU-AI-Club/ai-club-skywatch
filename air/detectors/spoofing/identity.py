@@ -1,8 +1,10 @@
+from __future__ import annotations
 import json
 import math
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Optional, Sequence
+
 
 
 EARTH_RADIUS_M = 6_371_000.0
@@ -12,6 +14,7 @@ DEFAULT_MAX_SPEED_MPS = 450.0          # ~Mach 1.3; faster than any airliner
 DEFAULT_MIN_HOPS = 3                   # impossible, direction-flipping hops in a row
 DEFAULT_REVERSAL_TOLERANCE_DEG = 45.0  # how close to a 180-degree turn counts as a flip
 DEFAULT_MIN_HOP_DISTANCE_M = 1.0       # ignore jitter when timestamps coincide
+DEFAULT_REAPPEARANCE_MARGIN_M = 0.0  # extra slack added to the reachable radius
 
 DEFAULT_CONFIG = {
     "window_s": 30,            # only compare reports this close in time
@@ -169,4 +172,32 @@ def flag_pingpong(records: Sequence[Any], config: Any) -> Optional[str]:
             )
  
     return None
+ 
+ 
+def flag_reappearance(last_before: Any, first_after: Any, config: Any) -> Optional[str]:
+    """Flag an aircraft that reappears somewhere it could not have reached.
+ 
+    Draws a circle around the last known position with
+    radius = max_speed_mps * gap_seconds (+ optional margin). A reappearance
+    inside (or exactly on) the circle is normal. Outside means something else
+    picked up the id while the real aircraft was out of range.
+ 
+    The caller decides what counts as a gap; this function judges any pair
+    it is given. A gap of zero or less is not a gap, so it returns None.
+    """
+    max_speed = _cfg(config, "max_speed_mps", DEFAULT_MAX_SPEED_MPS)
+    margin = _cfg(config, "reappearance_margin_m", DEFAULT_REAPPEARANCE_MARGIN_M)
+ 
+    dist, gap, _, _ = _hop(last_before, first_after)
+    if gap <= 0:
+        return None
+ 
+    radius = max_speed * gap + margin
+    if dist <= radius:
+        return None
+ 
+    return (
+        f"reappearance: returned {dist / 1000:.1f} km from last position after a "
+        f"{gap:.0f} s gap; at most {radius / 1000:.1f} km reachable at {max_speed:.0f} m/s"
+    )
  

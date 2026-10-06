@@ -1,9 +1,11 @@
+"""Tests for flag_pingpong and flag_reappearance (air/detectors/spoofing/identity.py)."""
+
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace as NS
 
 import pytest
 
-from air.detectors.spoofing.identity import flag_pingpong
+from air.detectors.spoofing.identity import _hop, flag_pingpong, flag_reappearance
 
 # Two points ~175 km apart (east-west), and one offset north of A.
 A = (38.0, -79.0)
@@ -178,3 +180,104 @@ def test_input_is_not_mutated(cfg):
     snapshot = list(records)
     flag_pingpong(records, cfg)
     assert records == snapshot
+
+
+# ===========================================================================
+# flag_reappearance
+# ===========================================================================
+
+
+# --- should fire -----------------------------------------------------------
+
+def test_reappearance_fires_when_outside_the_circle(cfg):
+    # 175 km in 60 s: only 27 km reachable at 450 m/s
+    result = flag_reappearance(rec(0, A), rec(60, B), cfg)
+    assert result is not None
+    assert "reappearance" in result
+
+
+def test_reappearance_reason_mentions_distance_gap_and_limit(cfg):
+    result = flag_reappearance(rec(0, A), rec(60, B), cfg)
+    assert "60 s" in result
+    assert "450 m/s" in result
+    assert "km" in result
+
+
+def test_reappearance_fires_in_any_direction(cfg):
+    far_north = (40.0, -79.0)
+    assert flag_reappearance(rec(0, A), rec(60, far_north), cfg) is not None
+    assert flag_reappearance(rec(0, B), rec(60, A), cfg) is not None
+
+
+def test_reappearance_datetime_timestamps(cfg):
+    t0 = datetime(2026, 10, 6, 12, 0, 0, tzinfo=timezone.utc)
+    before = {"timestamp": t0, "lat": A[0], "lon": A[1]}
+    after = {"timestamp": t0 + timedelta(seconds=60), "lat": B[0], "lon": B[1]}
+    assert flag_reappearance(before, after, cfg) is not None
+
+
+def test_reappearance_object_records(cfg):
+    before = NS(timestamp=0, lat=A[0], lon=A[1])
+    after = NS(timestamp=60, lat=B[0], lon=B[1])
+    assert flag_reappearance(before, after, cfg) is not None
+
+
+# --- should NOT fire -------------------------------------------------------
+
+def test_reappearance_inside_the_circle_is_normal(cfg):
+    # 175 km in 1 hour: 1620 km reachable
+    assert flag_reappearance(rec(0, A), rec(3600, B), cfg) is None
+
+
+def test_reappearance_long_gap_makes_anywhere_reachable(cfg):
+    far = (-33.9, 151.2)  # Sydney, ~15,000 km away
+    assert flag_reappearance(rec(0, A), rec(24 * 3600, far), cfg) is None
+
+
+def test_reappearance_same_position_is_normal(cfg):
+    assert flag_reappearance(rec(0, A), rec(600, A), cfg) is None
+
+
+def test_reappearance_just_inside_and_just_outside_the_boundary(cfg):
+    dist, _, _, _ = _hop(rec(0, A), rec(1, B))
+    exact_gap = dist / cfg.max_speed_mps
+    assert flag_reappearance(rec(0, A), rec(exact_gap * 1.0001, B), cfg) is None
+    assert flag_reappearance(rec(0, A), rec(exact_gap * 0.9999, B), cfg) is not None
+
+
+@pytest.mark.parametrize("t_after", [0, -30])
+def test_reappearance_zero_or_negative_gap_is_not_a_gap(cfg, t_after):
+    assert flag_reappearance(rec(0, A), rec(t_after, B), cfg) is None
+
+
+# --- config behavior -------------------------------------------------------
+
+def test_reappearance_higher_max_speed_widens_the_circle(cfg):
+    cfg.max_speed_mps = 5000.0  # 300 km reachable in 60 s
+    assert flag_reappearance(rec(0, A), rec(60, B), cfg) is None
+
+
+def test_reappearance_lower_max_speed_shrinks_the_circle(cfg):
+    cfg.max_speed_mps = 100.0  # 175 km needs 1750 s
+    assert flag_reappearance(rec(0, A), rec(1000, B), cfg) is not None
+    assert flag_reappearance(rec(0, A), rec(2000, B), cfg) is None
+
+
+def test_reappearance_margin_extends_the_circle(cfg):
+    # 60 s gap: 27 km reachable, ~175 km actual
+    cfg.reappearance_margin_m = 200_000.0
+    assert flag_reappearance(rec(0, A), rec(60, B), cfg) is None
+    cfg.reappearance_margin_m = 1_000.0
+    assert flag_reappearance(rec(0, A), rec(60, B), cfg) is not None
+
+
+def test_reappearance_defaults_used_when_config_lacks_fields():
+    assert flag_reappearance(rec(0, A), rec(60, B), NS()) is not None
+    assert flag_reappearance(rec(0, A), rec(3600, B), NS()) is None
+
+
+def test_reappearance_inputs_are_not_mutated(cfg):
+    before, after = rec(0, A), rec(60, B)
+    snap = (dict(before), dict(after))
+    flag_reappearance(before, after, cfg)
+    assert (before, after) == snap
