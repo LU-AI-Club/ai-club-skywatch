@@ -1,6 +1,8 @@
 # Proximity detector — docs
 
-**Start here:** [PROJECT_PLAN.md](PROJECT_PLAN.md) is the team reference — what
+**Start here:** [ARCHITECTURE.md](ARCHITECTURE.md) is how the detector works —
+pipeline, modules, config, testing and measured behaviour.
+[PROJECT_PLAN.md](PROJECT_PLAN.md) is the team reference — what
 we are building, the algorithm, the thresholds and where they come from, the
 false positives, the semester milestones. [PR_GUIDE.md](PR_GUIDE.md) is how we
 branch, submit and review.
