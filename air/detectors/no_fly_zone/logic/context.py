@@ -49,7 +49,8 @@ from ..types import AircraftState, ContextSignal
 
 _EMERGENCY_SQUAWKS: frozenset[str] = frozenset({"7500", "7600", "7700"})
 # 7500 is unlawful interference, 7600 is lost comms, 7700 is emergency.
-_NON_DISCRETE_SQUAWKS: frozenset[str] = frozenset({"1200"}) # 1200 is the VFR default squawk in the US, and is not a discrete code. This will have to be expanded once the region is expanded.
+# 0000 is not a valid discrete beacon code; 1200 is the default VFR code.
+_NON_DISCRETE_SQUAWKS: frozenset[str] = frozenset({"0000", "1200"})
 # can be replaced with non_discrete_squawks = cfg["squawks"]["non_discrete"] if the YAML is updated to include a list of regional non-disscrete codes.
 _LIFEGUARD_PREFIXES: tuple[str, ...] = ("LIFEGUARD", "MEDEVAC", "AIREVAC", "HOSP")
 
@@ -58,7 +59,10 @@ def _normalize_squawk(squawk: str | int |None) -> str | None:
     """Normalize and validate a four-digit octal squawk code."""
     if squawk is None:
         return None
-    normalized = str(squawk).strip().zfill(4)  # pad to four digits
+    normalized = str(squawk).strip()
+    if not normalized:
+        return None
+    normalized = normalized.zfill(4)
     if len(normalized) != 4 or any(
         digit not in "01234567" for digit in normalized
     ):
