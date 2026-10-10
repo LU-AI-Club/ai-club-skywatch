@@ -281,3 +281,87 @@ def test_reappearance_inputs_are_not_mutated(cfg):
     snap = (dict(before), dict(after))
     flag_reappearance(before, after, cfg)
     assert (before, after) == snap
+
+
+# ---------------------------------------------------------------------------
+# flag_registry_mismatch
+# ---------------------------------------------------------------------------
+
+from pathlib import Path
+
+import air
+from air.detectors.spoofing.identity import flag_registry_mismatch
+from air.detectors.spoofing.reference import load_faa_registry, load_icao_blocks
+
+_REF = Path(air.__file__).parent / "fixtures" / "spoofing"
+CESSNA = "a7f3d1"   # N412TB, CESSNA 172S: max 124 kt, ceiling 14000 ft
+BOEING = "a1b2c3"   # N447TG, BOEING 737-800: max 470 kt, ceiling 41000 ft
+
+
+@pytest.fixture
+def registry():
+    return load_faa_registry(_REF / "faa_registry_sample.csv")
+
+
+@pytest.fixture
+def blocks():
+    return load_icao_blocks(_REF / "icao_blocks_sample.csv")
+
+
+def obs(icao24, speed=None, alt=None, callsign=None):
+    return {"icao24": icao24, "ground_speed_kt": speed,
+            "altitude_ft": alt, "callsign": callsign}
+
+
+def test_cessna_at_airliner_speed_and_altitude_fires(registry, blocks):
+    reason = flag_registry_mismatch(obs(CESSNA, 450, 35000), registry, blocks)
+    assert reason is not None
+    assert "registry_mismatch" in reason
+    assert "N412TB" in reason and "CESSNA 172S" in reason
+    assert "450 kt" in reason and "35000 ft" in reason
+    assert "United States" in reason
+
+
+def test_speed_alone_fires(registry, blocks):
+    reason = flag_registry_mismatch(obs(CESSNA, 300, 5000), registry, blocks)
+    assert reason is not None and "300 kt" in reason and "ft vs ceiling" not in reason
+
+
+def test_altitude_alone_fires(registry, blocks):
+    reason = flag_registry_mismatch(obs(CESSNA, 110, 25000), registry, blocks)
+    assert reason is not None and "25000 ft" in reason and "kt vs max" not in reason
+
+
+def test_within_envelope_does_not_fire(registry, blocks):
+    assert flag_registry_mismatch(obs(CESSNA, 110, 8000), registry, blocks) is None
+    assert flag_registry_mismatch(obs(BOEING, 450, 35000), registry, blocks) is None
+
+
+def test_margins_allow_tailwind_and_altitude_noise(registry, blocks):
+    # 124 + 50 kt margin, 14000 + 1000 ft margin: right at the edge, no fire
+    assert flag_registry_mismatch(obs(CESSNA, 174, 15000), registry, blocks) is None
+    assert flag_registry_mismatch(obs(CESSNA, 175, 15000), registry, blocks) is not None
+
+
+def test_config_overrides_margins(registry, blocks):
+    strict = NS(registry_speed_margin_kt=0.0, registry_ceiling_margin_ft=0.0)
+    assert flag_registry_mismatch(obs(CESSNA, 130, 8000), registry, blocks, strict) is not None
+
+
+def test_unregistered_foreign_aircraft_does_not_fire(registry, blocks):
+    # German address flying fast and high: normal, the FAA doesn't cover it
+    assert flag_registry_mismatch(obs("3c6444", 480, 39000), registry, blocks) is None
+
+
+def test_callsign_not_matching_tail_does_not_fire(registry, blocks):
+    o = obs(BOEING, 450, 35000, callsign="UAL123")   # tail is N447TG
+    assert flag_registry_mismatch(o, registry, blocks) is None
+
+
+def test_missing_speed_and_altitude_abstains(registry, blocks):
+    assert flag_registry_mismatch(obs(CESSNA), registry, blocks) is None
+
+
+def test_case_insensitive_id_and_object_input(registry, blocks):
+    o = NS(icao24=CESSNA.upper(), ground_speed_kt=450.0, altitude_ft=35000.0, callsign=None)
+    assert flag_registry_mismatch(o, registry, blocks) is not None
