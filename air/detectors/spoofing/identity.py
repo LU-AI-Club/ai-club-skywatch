@@ -254,4 +254,59 @@ def flag_registry_mismatch(observation: Any, registry: Any, blocks: Any,
         f"({record.manufacturer} {record.model}, {country}) but observed "
         + "; ".join(problems)
     )
+
+
+def flag_identity_drift(observations: Sequence[Any]) -> Optional[str]:
+    """Flag one id broadcasting two different callsigns in the same session.
+
+    ``observations`` must all belong to one aircraft. They are walked in time
+    order (``observed_at`` or ``timestamp`` if present, otherwise as given).
+    Callsigns are compared after trimming spaces and uppercasing, since
+    ADS-B pads them to 8 characters. Blank or missing callsigns are skipped,
+    not counted as a change.
+
+    Returns a reason string naming the first change, or None.
+    """
+    def field(obs: Any, name: str) -> Any:
+        if isinstance(obs, dict):
+            return obs.get(name)
+        return getattr(obs, name, None)
+
+    def when(obs: Any) -> Any:
+        t = field(obs, "observed_at")
+        if t is None:
+            t = field(obs, "timestamp")
+        if isinstance(t, str):
+            return _parse_time(t)
+        if isinstance(t, datetime):
+            return t.timestamp()
+        return t
+
+    times = [when(o) for o in observations]
+    if all(t is not None for t in times):
+        ordered = [o for _, o in sorted(zip(times, observations), key=lambda p: p[0])]
+    else:
+        ordered = list(observations)
+
+    first: Optional[str] = None
+    for obs in ordered:
+        raw = field(obs, "callsign")
+        callsign = str(raw).strip().upper() if raw is not None else ""
+        if not callsign:
+            continue
+        if first is None:
+            first = callsign
+        elif callsign != first:
+            seen = []
+            for o in ordered:
+                c = str(field(o, "callsign") or "").strip().upper()
+                if c and c not in seen:
+                    seen.append(c)
+            stamp = field(obs, "observed_at") or field(obs, "timestamp")
+            at = f" at {stamp}" if stamp is not None else ""
+            return (
+                f"identity_drift: {field(obs, 'icao24') or 'aircraft'} changed callsign "
+                f"{first} -> {callsign}{at} (callsigns seen: {', '.join(seen)})"
+            )
+    return None
  

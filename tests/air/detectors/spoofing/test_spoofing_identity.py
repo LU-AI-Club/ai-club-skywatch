@@ -365,3 +365,62 @@ def test_missing_speed_and_altitude_abstains(registry, blocks):
 def test_case_insensitive_id_and_object_input(registry, blocks):
     o = NS(icao24=CESSNA.upper(), ground_speed_kt=450.0, altitude_ft=35000.0, callsign=None)
     assert flag_registry_mismatch(o, registry, blocks) is not None
+
+
+# ---------------------------------------------------------------------------
+# flag_identity_drift
+# ---------------------------------------------------------------------------
+
+from air.detectors.spoofing.identity import flag_identity_drift
+
+
+def cs_track(*callsigns):
+    return [{"icao24": "a1b2c3", "observed_at": f"2026-09-01T00:00:{i * 5:02d}Z",
+             "callsign": c} for i, c in enumerate(callsigns)]
+
+
+def test_drift_fires_on_callsign_change():
+    reason = flag_identity_drift(cs_track("SKY101", "SKY101", "EVIL99"))
+    assert reason is not None
+    assert "identity_drift" in reason
+    assert "SKY101 -> EVIL99" in reason
+    assert "a1b2c3" in reason
+    assert "2026-09-01T00:00:10Z" in reason
+
+
+def test_drift_constant_callsign_does_not_fire():
+    assert flag_identity_drift(cs_track("SKY101", "SKY101", "SKY101")) is None
+
+
+def test_drift_ignores_blank_and_missing_callsigns():
+    assert flag_identity_drift(cs_track("SKY101", None, "", "   ", "SKY101")) is None
+
+
+def test_drift_all_blank_does_not_fire():
+    assert flag_identity_drift(cs_track(None, "", None)) is None
+
+
+def test_drift_fires_across_a_blank_gap():
+    assert flag_identity_drift(cs_track("SKY101", None, "", "EVIL99")) is not None
+
+
+def test_drift_ignores_padding_and_case():
+    assert flag_identity_drift(cs_track("SKY101  ", "sky101", " SKY101")) is None
+
+
+def test_drift_empty_and_single_observation():
+    assert flag_identity_drift([]) is None
+    assert flag_identity_drift(cs_track("SKY101")) is None
+
+
+def test_drift_sorts_by_time_and_lists_all_callsigns():
+    obs = cs_track("SKY101", "EVIL99", "OTHER7")
+    reason = flag_identity_drift(list(reversed(obs)))
+    assert "SKY101 -> EVIL99" in reason
+    assert "SKY101, EVIL99, OTHER7" in reason
+
+
+def test_drift_accepts_objects_with_numeric_timestamps():
+    obs = [NS(icao24="a1b2c3", timestamp=10, callsign="EVIL99"),
+           NS(icao24="a1b2c3", timestamp=0, callsign="SKY101")]
+    assert "SKY101 -> EVIL99" in flag_identity_drift(obs)
