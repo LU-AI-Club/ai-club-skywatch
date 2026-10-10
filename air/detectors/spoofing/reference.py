@@ -163,3 +163,30 @@ def country_for_icao24(icao24: str | int,
     start, end, country = blocks[i]
     return country if addr <= end else None
 
+
+
+def lookup_registration(icao24: str | int,
+                        registry: Dict[str, FAARecord]) -> FAARecord | None:
+    """
+    Which aircraft is this ICAO 24-bit address registered to?
+
+    Parameters
+    ----------
+    icao24 : str | int
+        The address as a hex string ("a1b2c3", "A1B2C3", "0xA1B2C3") or an int.
+    registry : Dict[str, FAARecord]
+        Registry from load_faa_registry(), keyed by lowercase 6-digit hex.
+
+    Returns
+    -------
+    FAARecord | None
+        The registered aircraft, or None if the address isn't in the registry.
+        None is normal: the FAA registry only covers US aircraft.
+
+    Raises
+    ------
+    ValueError
+        If icao24 is not valid hex or is outside the 24-bit range.
+    """
+    addr = _parse_icao24(icao24)
+    return registry.get(f"{addr:06x}")
