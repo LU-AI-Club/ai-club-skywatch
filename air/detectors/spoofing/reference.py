@@ -1,5 +1,5 @@
 import csv
-from bisect import bisect_right   # <-- add this line
+from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict,List, Tuple
