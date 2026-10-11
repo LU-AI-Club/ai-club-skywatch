@@ -15,6 +15,8 @@ DEFAULT_MIN_HOPS = 3                   # impossible, direction-flipping hops in 
 DEFAULT_REVERSAL_TOLERANCE_DEG = 45.0  # how close to a 180-degree turn counts as a flip
 DEFAULT_MIN_HOP_DISTANCE_M = 1.0       # ignore jitter when timestamps coincide
 DEFAULT_REAPPEARANCE_MARGIN_M = 0.0  # extra slack added to the reachable radius
+DEFAULT_REGISTRY_SPEED_MARGIN_KT = 50.0     # ground speed includes wind; allow a tailwind
+DEFAULT_REGISTRY_CEILING_MARGIN_FT = 1000.0  # altitude reporting noise
 
 DEFAULT_CONFIG = {
     "window_s": 30,            # only compare reports this close in time
@@ -200,4 +202,111 @@ def flag_reappearance(last_before: Any, first_after: Any, config: Any) -> Option
         f"reappearance: returned {dist / 1000:.1f} km from last position after a "
         f"{gap:.0f} s gap; at most {radius / 1000:.1f} km reachable at {max_speed:.0f} m/s"
     )
+
+
+def flag_registry_mismatch(observation: Any, registry: Any, blocks: Any,
+                           config: Any = None) -> Optional[str]:
+    """Flag an aircraft flying beyond what its registered type can do.
+
+    Looks the id up in the FAA registry and compares the observed
+    ``ground_speed_kt`` and ``altitude_ft`` against the record's
+    ``max_speed_kt`` and ``ceiling_ft`` (plus margins for wind and altitude
+    noise). A Cessna 172 at 450 kt and 35,000 ft means the id is borrowed.
+
+    Does not fire when:
+      - the id isn't in the registry (foreign aircraft; the FAA only covers US)
+      - the callsign differs from the tail number (airlines fly under their
+        own callsign), so the callsign is never compared at all
+      - speed or altitude is missing; that check abstains
+
+    ``blocks`` is only used to name the allocating country in the reason.
+    Returns a reason string, or None.
+    """
+    from air.detectors.spoofing.reference import country_for_icao24, lookup_registration
+
+    def field(name: str) -> Any:
+        if isinstance(observation, dict):
+            return observation.get(name)
+        return getattr(observation, name, None)
+
+    icao24 = field("icao24")
+    record = lookup_registration(icao24, registry)
+    if record is None:
+        return None
+
+    speed_margin = _cfg(config, "registry_speed_margin_kt", DEFAULT_REGISTRY_SPEED_MARGIN_KT)
+    ceiling_margin = _cfg(config, "registry_ceiling_margin_ft", DEFAULT_REGISTRY_CEILING_MARGIN_FT)
+
+    problems = []
+    speed = field("ground_speed_kt")
+    if speed is not None and speed > record.max_speed_kt + speed_margin:
+        problems.append(f"{speed:.0f} kt vs max {record.max_speed_kt} kt")
+    altitude = field("altitude_ft")
+    if altitude is not None and altitude > record.ceiling_ft + ceiling_margin:
+        problems.append(f"{altitude:.0f} ft vs ceiling {record.ceiling_ft} ft")
+
+    if not problems:
+        return None
+
+    country = country_for_icao24(icao24, blocks) or "unallocated block"
+    return (
+        f"registry_mismatch: {icao24} is registered as {record.n_number} "
+        f"({record.manufacturer} {record.model}, {country}) but observed "
+        + "; ".join(problems)
+    )
+
+
+def flag_identity_drift(observations: Sequence[Any]) -> Optional[str]:
+    """Flag one id broadcasting two different callsigns in the same session.
+
+    ``observations`` must all belong to one aircraft. They are walked in time
+    order (``observed_at`` or ``timestamp`` if present, otherwise as given).
+    Callsigns are compared after trimming spaces and uppercasing, since
+    ADS-B pads them to 8 characters. Blank or missing callsigns are skipped,
+    not counted as a change.
+
+    Returns a reason string naming the first change, or None.
+    """
+    def field(obs: Any, name: str) -> Any:
+        if isinstance(obs, dict):
+            return obs.get(name)
+        return getattr(obs, name, None)
+
+    def when(obs: Any) -> Any:
+        t = field(obs, "observed_at")
+        if t is None:
+            t = field(obs, "timestamp")
+        if isinstance(t, str):
+            return _parse_time(t)
+        if isinstance(t, datetime):
+            return t.timestamp()
+        return t
+
+    times = [when(o) for o in observations]
+    if all(t is not None for t in times):
+        ordered = [o for _, o in sorted(zip(times, observations), key=lambda p: p[0])]
+    else:
+        ordered = list(observations)
+
+    first: Optional[str] = None
+    for obs in ordered:
+        raw = field(obs, "callsign")
+        callsign = str(raw).strip().upper() if raw is not None else ""
+        if not callsign:
+            continue
+        if first is None:
+            first = callsign
+        elif callsign != first:
+            seen = []
+            for o in ordered:
+                c = str(field(o, "callsign") or "").strip().upper()
+                if c and c not in seen:
+                    seen.append(c)
+            stamp = field(obs, "observed_at") or field(obs, "timestamp")
+            at = f" at {stamp}" if stamp is not None else ""
+            return (
+                f"identity_drift: {field(obs, 'icao24') or 'aircraft'} changed callsign "
+                f"{first} -> {callsign}{at} (callsigns seen: {', '.join(seen)})"
+            )
+    return None
  
