@@ -15,7 +15,19 @@ DEFAULT_MIN_HOPS = 3                   # impossible, direction-flipping hops in 
 DEFAULT_REVERSAL_TOLERANCE_DEG = 45.0  # how close to a 180-degree turn counts as a flip
 DEFAULT_MIN_HOP_DISTANCE_M = 1.0       # ignore jitter when timestamps coincide
 DEFAULT_REAPPEARANCE_MARGIN_M = 0.0  # extra slack added to the reachable radius
-DEFAULT_REGISTRY_SPEED_MARGIN_KT = 50.0     # ground speed includes wind; allow a tailwind
+# Ground speed is airspeed plus whatever the wind is doing, and a jet stream
+# adds 200-300 kt routinely, so a small flat margin flags honest traffic:
+# `neg_tailwind_cruise` is a real Gulfstream 292 kt over its book speed.
+#
+# A flat margin alone cannot separate the two cases. What does is the ratio:
+#
+#   Gulfstream  780 / 488 = 1.6x   a tailwind
+#   Cessna 172  450 / 124 = 3.6x   not that aircraft
+#
+# So the speed check fires on either a very large absolute excess or a
+# proportional one. Wind adds an absolute amount, never a multiple.
+DEFAULT_REGISTRY_SPEED_MARGIN_KT = 350.0
+DEFAULT_REGISTRY_SPEED_RATIO = 2.0
 DEFAULT_REGISTRY_CEILING_MARGIN_FT = 1000.0  # altitude reporting noise
 
 DEFAULT_CONFIG = {
@@ -26,14 +38,41 @@ DEFAULT_CONFIG = {
 
 KT_TO_KM_S = 1.852 / 3600
 
-def _get(rec: Any, name: str) -> Any:
-    return rec[name] if isinstance(rec, dict) else getattr(rec, name)
- 
- 
+def _get(rec: Any, *names: str) -> Any:
+    """Read the first field a record actually has, from several spellings.
+
+    These rules are fed two shapes. Tests and fixtures hand in plain dicts
+    using the raw feed's names (``lat``, ``lon``, ``timestamp``); the
+    pipeline hands in ``AdsbObservation`` objects, whose contract names are
+    ``latitude``, ``longitude`` and ``observed_at``. Rather than force either
+    side to convert, the accessor accepts both.
+    """
+    for name in names:
+        if isinstance(rec, dict):
+            if name in rec:
+                return rec[name]
+        elif hasattr(rec, name):
+            return getattr(rec, name)
+    raise KeyError(f"record has none of {names!r}")
+
+
+def _lat(rec: Any) -> float:
+    return float(_get(rec, "latitude", "lat"))
+
+
+def _lon(rec: Any) -> float:
+    return float(_get(rec, "longitude", "lon"))
+
+
 def _ts(rec: Any) -> float:
-    t = _get(rec, "timestamp")
-    return t.timestamp() if isinstance(t, datetime) else float(t)
- 
+    """Seconds since the epoch, from a datetime, an ISO string or a number."""
+    t = _get(rec, "observed_at", "timestamp")
+    if isinstance(t, datetime):
+        return t.timestamp()
+    if isinstance(t, str):
+        return _parse_time(t)
+    return float(t)
+
  
 def _cfg(config: Any, name: str, default: float) -> float:
     value = getattr(config, name, None)
@@ -42,8 +81,8 @@ def _cfg(config: Any, name: str, default: float) -> float:
  
 def _hop(a: Any, b: Any) -> tuple[float, float, float, float]:
     """Return (dist_m, dt_s, east_m, north_m) for the move a -> b."""
-    lat1, lon1 = math.radians(_get(a, "lat")), math.radians(_get(a, "lon"))
-    lat2, lon2 = math.radians(_get(b, "lat")), math.radians(_get(b, "lon"))
+    lat1, lon1 = math.radians(_lat(a)), math.radians(_lon(a))
+    lat2, lon2 = math.radians(_lat(b)), math.radians(_lon(b))
     dlat, dlon = lat2 - lat1, lon2 - lon1
  
     h = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
@@ -70,21 +109,45 @@ def _distance_km(lat1, lon1, lat2, lon2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
+def _receiver(rec: Any) -> Any:
+    """The receiver that heard a report, when the shape carries one."""
+    try:
+        return _get(rec, "receiver_id")
+    except KeyError:
+        return None
+
+
 def flag_coexistence(reports, config=None):
     """
     Flag an ICAO address reported from two places at once.
 
-    reports: list of dicts with icao24, observed_at, latitude, longitude
-             (receiver_id is used in the message if present)
-    config:  optional dict overriding DEFAULT_CONFIG
+    reports: any mix of dicts or ``AdsbObservation`` objects. Dicts may use
+             either the feed's names (``lat``, ``lon``, ``timestamp``) or the
+             contract's (``latitude``, ``longitude``, ``observed_at``).
+    config:  a dict overriding DEFAULT_CONFIG, or a ``SpoofingConfig``.
+
+    One aircraft cannot be in two places at once. For every pair of reports
+    carrying the same id within ``window_s`` of each other, the distance
+    between them is compared against what a single aircraft could have
+    covered in that time. Farther apart than that means two transmitters are
+    using one identity.
 
     Returns a reason string if a conflict is found, else None.
     """
-    cfg = {**DEFAULT_CONFIG, **(config or {})}
+    if config is None:
+        cfg = dict(DEFAULT_CONFIG)
+    elif isinstance(config, dict):
+        cfg = {**DEFAULT_CONFIG, **config}
+    else:
+        # A SpoofingConfig: teleport_kt is the fastest plausible ground speed.
+        cfg = {
+            **DEFAULT_CONFIG,
+            "max_speed_kt": getattr(config, "teleport_kt", DEFAULT_CONFIG["max_speed_kt"]),
+        }
 
     by_id = defaultdict(list)
     for r in reports:
-        by_id[r["icao24"]].append((_parse_time(r["observed_at"]), r))
+        by_id[_get(r, "icao24")].append((_ts(r), r))
 
     for icao, items in by_id.items():
         items.sort(key=lambda x: x[0])
@@ -93,15 +156,14 @@ def flag_coexistence(reports, config=None):
                 dt = t2 - t1
                 if dt > cfg["window_s"]:
                     break  # sorted, so everything after is even later
-                dist = _distance_km(a["latitude"], a["longitude"],
-                                    b["latitude"], b["longitude"])
+                dist = _distance_km(_lat(a), _lon(a), _lat(b), _lon(b))
                 max_dist = (cfg["max_speed_kt"] * KT_TO_KM_S * dt
                             + cfg["position_tolerance_km"])
                 if dist > max_dist:
                     return (
                         f"{icao} reported {dist:.1f} km apart in {dt:.0f}s "
                         f"(max plausible {max_dist:.1f} km); "
-                        f"receivers {a.get('receiver_id')} / {b.get('receiver_id')}"
+                        f"receivers {_receiver(a)} / {_receiver(b)}"
                     )
     return None
 
@@ -237,10 +299,19 @@ def flag_registry_mismatch(observation: Any, registry: Any, blocks: Any,
     speed_margin = _cfg(config, "registry_speed_margin_kt", DEFAULT_REGISTRY_SPEED_MARGIN_KT)
     ceiling_margin = _cfg(config, "registry_ceiling_margin_ft", DEFAULT_REGISTRY_CEILING_MARGIN_FT)
 
+    speed_ratio = _cfg(config, "registry_speed_ratio", DEFAULT_REGISTRY_SPEED_RATIO)
+
     problems = []
     speed = field("ground_speed_kt")
-    if speed is not None and speed > record.max_speed_kt + speed_margin:
-        problems.append(f"{speed:.0f} kt vs max {record.max_speed_kt} kt")
+    # A max speed of 0 means the registry has no figure for this record --
+    # ground vehicles carry one, and anything moving beats a ratio against
+    # zero. Without this guard `neg_ground_vehicle` flags at 12 kt.
+    if speed is not None and record.max_speed_kt and record.max_speed_kt > 0:
+        if (
+            speed > record.max_speed_kt + speed_margin
+            or speed > record.max_speed_kt * speed_ratio
+        ):
+            problems.append(f"{speed:.0f} kt vs max {record.max_speed_kt} kt")
     altitude = field("altitude_ft")
     if altitude is not None and altitude > record.ceiling_ft + ceiling_margin:
         problems.append(f"{altitude:.0f} ft vs ceiling {record.ceiling_ft} ft")

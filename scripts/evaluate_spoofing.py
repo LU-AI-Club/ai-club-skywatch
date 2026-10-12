@@ -261,10 +261,56 @@ def implied_speed_histogram(
     return fig
 
 
+def alerts_per_hour(detections: list, hours: float) -> float:
+    """How many alerts a person would actually receive per hour.
+
+    This is the number that decides whether the detector is usable at all.
+    Precision and recall can both look respectable while the thing still
+    emits four hundred alerts an hour, at which point nobody reads any of
+    them and the detector may as well not exist.
+
+    Returns 0.0 for a zero or negative window rather than raising -- an
+    empty replay is a valid thing to measure.
+    """
+    if hours <= 0:
+        return 0.0
+    return len(detections) / float(hours)
+
+
+def attribute_false_positives(results: list[dict]) -> list[tuple[str, int]]:
+    """Group the wrong alarms by what caused them, worst first.
+
+    A false positive is a fixture that should have stayed quiet and did not.
+    Each one is filed under the condition it was built to represent, taken
+    from its file name -- so `neg_tailwind_cruise.json` firing means a jet
+    stream tailwind caused it.
+
+    `results` is the list `run_on_fixtures` returns. Returns
+    `[(cause, count), ...]` sorted most common first, which is the order
+    Week 9 should fix them in: the top of this list is where the detector
+    loses its credibility fastest.
+    """
+    causes: dict[str, int] = {}
+    for result in results:
+        if result["expected_positive"] or not result["fired"]:
+            continue
+        name = str(result.get("fixture_name", "unknown"))
+        if name.startswith("neg_"):
+            name = name[len("neg_"):]
+        if name.endswith(".json"):
+            name = name[: -len(".json")]
+        cause = name or "unknown"
+        causes[cause] = causes.get(cause, 0) + 1
+
+    return sorted(causes.items(), key=lambda pair: (-pair[1], pair[0]))
+
+
 __all__ = [
     "run_on_fixtures",
     "confusion_counts",
     "precision_recall",
     "sweep_threshold",
     "implied_speed_histogram",
+    "alerts_per_hour",
+    "attribute_false_positives",
 ]
