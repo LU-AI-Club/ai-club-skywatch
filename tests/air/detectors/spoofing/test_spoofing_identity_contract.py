@@ -101,3 +101,30 @@ def test_two_aircraft_flying_close_together_are_not_an_identity_finding(
     """Different ids, so proximity alone must never read as impersonation."""
     obs_list = observations_from("spoofing/neg_close_formation.json")
     assert SpoofingDetector().detect_observations(obs_list) == []
+
+
+def test_a_non_icao_address_does_not_crash_the_run():
+    """readsb prefixes TIS-B and anonymised targets with "~".
+
+    Those are not hex, so the registry lookup rejects them. The detector must
+    abstain on such a track rather than take the whole replay down -- this
+    crashed a full-file run before it was guarded.
+    """
+    from air.detectors.spoofing.reference import load_faa_registry, load_icao_blocks
+
+    ref = "air/fixtures/spoofing"
+    detector = SpoofingDetector(
+        registry=load_faa_registry(f"{ref}/faa_registry_sample.csv"),
+        icao_blocks=load_icao_blocks(f"{ref}/icao_blocks_sample.csv"),
+    )
+    track = [
+        AdsbObservation(
+            icao24="~aaae4b",
+            observed_at=T0 + timedelta(seconds=i * 5),
+            latitude=37.0 + i * 0.01,
+            longitude=-79.0,
+            ground_speed_kt=450.0,
+        )
+        for i in range(5)
+    ]
+    assert detector.detect_observations(track) == []
