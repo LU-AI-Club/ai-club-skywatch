@@ -262,13 +262,20 @@ class SpoofingDetector(BaseDetector):
         if fastest is None:
             return []
 
-        reason = flag_registry_mismatch(
-            fastest, self.registry, self.icao_blocks or [], self.config
-        )
-        if reason is None:
+        try:
+            reason = flag_registry_mismatch(
+                fastest, self.registry, self.icao_blocks or [], self.config
+            )
+            record = lookup_registration(fastest.icao24, self.registry)
+        except ValueError:
+            # Not every address is a real ICAO hex code. readsb prefixes
+            # non-ICAO addresses with "~" (TIS-B targets, anonymised
+            # aircraft), and the registry lookup rejects them. Nothing to
+            # compare against, so abstain rather than crash the run.
             return []
 
-        record = lookup_registration(fastest.icao24, self.registry)
+        if reason is None:
+            return []
         return [
             event(
                 "registry_mismatch_v1",
