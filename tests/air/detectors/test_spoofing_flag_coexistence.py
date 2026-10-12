@@ -6,15 +6,28 @@ from datetime import datetime, timedelta, timezone
 from air.detectors.spoofing.identity import flag_coexistence
  
 HERE = os.path.dirname(os.path.abspath(__file__))
- 
- 
+
+# The shared corpus lives in air/fixtures/spoofing/. It used to be looked for
+# beside this file, so the five fixture tests below silently skipped and had
+# never actually run.
+FIXTURES = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(HERE))),
+    "air", "fixtures", "spoofing",
+)
+
+
+def _path(name):
+    beside = os.path.join(HERE, name)
+    return beside if os.path.exists(beside) else os.path.join(FIXTURES, name)
+
+
 def load_fixture(name):
-    with open(os.path.join(HERE, name)) as f:
+    with open(_path(name)) as f:
         return json.load(f)
- 
- 
+
+
 def has_fixture(name):
-    return os.path.exists(os.path.join(HERE, name))
+    return os.path.exists(_path(name))
  
  
 BASE = datetime(2026, 9, 1, 0, 0, 0, tzinfo=timezone.utc)

@@ -296,6 +296,7 @@ from air.detectors.spoofing.reference import load_faa_registry, load_icao_blocks
 _REF = Path(air.__file__).parent / "fixtures" / "spoofing"
 CESSNA = "a7f3d1"   # N412TB, CESSNA 172S: max 124 kt, ceiling 14000 ft
 BOEING = "a1b2c3"   # N447TG, BOEING 737-800: max 470 kt, ceiling 41000 ft
+GULFSTREAM = "ad4e21"  # N778JX, GULFSTREAM G550: max 488 kt, ceiling 51000 ft
 
 
 @pytest.fixture
@@ -323,8 +324,19 @@ def test_cessna_at_airliner_speed_and_altitude_fires(registry, blocks):
 
 
 def test_speed_alone_fires(registry, blocks):
+    # 300 kt is 2.4x a Cessna's 124 kt book speed, past the 2.0x ratio.
     reason = flag_registry_mismatch(obs(CESSNA, 300, 5000), registry, blocks)
     assert reason is not None and "300 kt" in reason and "ft vs ceiling" not in reason
+
+
+def test_a_real_tailwind_does_not_fire(registry, blocks):
+    """`neg_tailwind_cruise` is a Gulfstream 292 kt over book speed, honestly.
+
+    With the old 50 kt margin this rule flagged it, which is simply what a
+    jet stream does to ground speed. Altitude is not wind-contaminated, so
+    that half of the rule carries the weight.
+    """
+    assert flag_registry_mismatch(obs(GULFSTREAM, 780, 39000), registry, blocks) is None
 
 
 def test_altitude_alone_fires(registry, blocks):
@@ -338,9 +350,10 @@ def test_within_envelope_does_not_fire(registry, blocks):
 
 
 def test_margins_allow_tailwind_and_altitude_noise(registry, blocks):
-    # 124 + 50 kt margin, 14000 + 1000 ft margin: right at the edge, no fire
-    assert flag_registry_mismatch(obs(CESSNA, 174, 15000), registry, blocks) is None
-    assert flag_registry_mismatch(obs(CESSNA, 175, 15000), registry, blocks) is not None
+    # The ratio bites first for a slow aircraft: 124 x 2.0 = 248 kt, and
+    # 14000 + 1000 ft. Right at the edge, no fire.
+    assert flag_registry_mismatch(obs(CESSNA, 248, 15000), registry, blocks) is None
+    assert flag_registry_mismatch(obs(CESSNA, 249, 15000), registry, blocks) is not None
 
 
 def test_config_overrides_margins(registry, blocks):
@@ -424,3 +437,14 @@ def test_drift_accepts_objects_with_numeric_timestamps():
     obs = [NS(icao24="a1b2c3", timestamp=10, callsign="EVIL99"),
            NS(icao24="a1b2c3", timestamp=0, callsign="SKY101")]
     assert "SKY101 -> EVIL99" in flag_identity_drift(obs)
+
+GROUND_VEHICLE = "a8ff02"  # N12OPS, FORD F-550: max_speed_kt 0, ceiling 0
+
+
+def test_a_ground_vehicle_does_not_fire(registry, blocks):
+    """The registry carries 0 kt for it, and anything beats a ratio of zero.
+
+    `neg_ground_vehicle` is an airport truck doing 12 kt at field elevation.
+    Without a guard on a zero book speed, the ratio check flags it.
+    """
+    assert flag_registry_mismatch(obs(GROUND_VEHICLE, 12, 940), registry, blocks) is None
