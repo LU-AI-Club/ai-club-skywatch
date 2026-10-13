@@ -23,8 +23,10 @@ python -m venv .venv
 # macOS/Linux: 
 source .venv/bin/activate
 
-# Install libraries
-pip install ".[dev]"
+# Install libraries. The -e matters: without it pip copies the code into
+# site-packages, and that frozen copy shadows your edits from any directory
+# other than the repo root.
+pip install -e ".[dev]"
 
 
 pytest -q

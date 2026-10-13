@@ -1,0 +1,55 @@
+# NoFlyZoneDetector configuration.
+# Every tunable number lives here. If you are typing a constant into a
+# module, it belongs in this file instead.
+
+detector:
+  id: skywatch.no_fly_zone
+  version: 0.1.0
+  detection_type: restricted_airspace_incursion
+  feature_schema_version: air-features-v1
+  rules_version: nfz-rules-0.1.0
+
+scope:
+  center_name: KLYH
+  center_lat: 37.3267
+  center_lon: -79.2004
+  radius_nm: 150
+
+sampling:
+  target_hz: 1.0
+  max_gap_sec: 5          # longer gaps break a track for dwell purposes
+
+airspace:
+  fixture_path: fixtures/airspace/klyh-150nm.geojson
+  source_asof: "2026-08-07"   # SUA publication cycle; update with the file
+  include_types: [PROHIBITED, RESTRICTED, TFR, WARNING, ALERT, MOA]
+
+geometry:
+  h3_resolution: 7        # ~5 km cells, matches SENTINEL
+  default_uncertainty_m: 185   # used when NIC/NACp are missing
+
+filters:
+  drop_on_ground: true
+
+scoring:
+  base_by_zone_type:
+    PROHIBITED: 0.9
+    RESTRICTED: 0.7
+    TFR: 0.7
+    WARNING: 0.3
+    ALERT: 0.3
+    MOA: 0.2
+  depth_bump_per_nm: 0.01
+  depth_bump_max: 0.1
+  context_weights:        # subtracted from the score
+    atc_discrete_squawk: 0.4
+    military_hex: 0.3
+    lifeguard_callsign: 0.3
+    emergency_squawk: 0.2
+
+severity:
+  unknown_activation_cap: LOW
+  buffered_only: INFO
+
+dedup:
+  clear_observations_to_close: 2

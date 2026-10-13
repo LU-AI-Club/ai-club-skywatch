@@ -13,8 +13,11 @@ python -m venv .venv
 # macOS/Linux:
 source .venv/bin/activate
 
-pip install ".[dev]"      # installs pytest
-pip install ".[eda]"      # optional: pandas/matplotlib for notebooks
+pip install -e ".[dev]"   # pytest, ruff, mypy. Keep the -e: a non-editable
+                          # install freezes a copy in site-packages that
+                          # shadows your edits outside the repo root.
+pip install -e ".[eda]"   # optional: pandas/matplotlib for notebooks
+pip install -e ".[nfz]"   # optional: shapely/h3, no-fly-zone streams B and C
 ```
 
 ## Run the tests (do this constantly)
