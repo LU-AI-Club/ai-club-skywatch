@@ -38,7 +38,51 @@ assuming a perfect 1 Hz cadence.
 """
 from __future__ import annotations
 
+import os
+from datetime import datetime
 from pathlib import Path
+from typing import Any
+
+import pyarrow as pa
+import pyarrow.parquet as pq
+
+SCHEMA = pa.schema([
+    ("icao24", pa.string()),
+    ("timestamp", pa.timestamp("us", tz="UTC")),
+    ("lat", pa.float64()),
+    ("lon", pa.float64()),
+    ("alt_baro_ft", pa.float64()),
+    ("alt_geom_ft", pa.float64()),
+    ("ground_speed_kt", pa.float64()),
+    ("track_deg", pa.float64()),
+    ("callsign", pa.string()),
+    ("squawk", pa.string()),
+    ("emitter_category", pa.string()),
+    ("nic", pa.int32()),
+    ("nac_p", pa.int32()),
+    ("on_ground", pa.bool_()),
+    ("source_row_id", pa.string()),
+])
+
+
+def hour_filename(hour: datetime) -> str:
+    """Name that sorts chronologically, e.g. states-2026-09-22T14.parquet."""
+    return f"states-{hour:%Y-%m-%dT%H}.parquet"
+
+
+def write_hour(rows: list[dict[str, Any]], out_dir: str | Path, hour: datetime) -> Path:
+    """Write ``rows`` to the file for ``hour`` and return its path.
+
+    Writes to a temp name first, then renames, so a reader never sees a
+    half-written file. Keys missing from a row are stored as null.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    final = out_dir / hour_filename(hour)
+    temp = out_dir / (final.name + ".tmp")
+    pq.write_table(pa.Table.from_pylist(rows, schema=SCHEMA), temp)
+    os.replace(temp, final)
+    return final
 
 
 def collect(url: str, out_dir: str | Path) -> None:
