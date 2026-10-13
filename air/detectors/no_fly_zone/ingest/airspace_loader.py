@@ -21,12 +21,17 @@ Failure causes
 FileNotFoundError
     ``path`` does not exist.
 ValueError
-    Not a FeatureCollection, a feature carries a non-polygon geometry, or a
-    datum is not a member of :class:`Datum`.
+    Not a FeatureCollection, a feature carries a geometry that is neither a
+    Polygon nor a MultiPolygon, or a datum is not a member of :class:`Datum`.
 
-A zone with no parseable altitude band defaults to surface-to-unlimited. That
-over-includes rather than silently dropping a restricted volume, which is the
-safe direction for a detector.
+A missing altitude limit defaults outward, each side on its own: no floor means
+the surface, no ceiling means unlimited. That over-includes rather than
+silently dropping a restricted volume, which is the safe direction for a
+detector, while keeping whichever limit the source did publish. A limit given
+without a datum is read as MSL.
+
+Window times without a timezone are read as UTC, matching the ADS-B loader, so
+:func:`logic.activation.is_active` never compares naive and aware datetimes.
 
 Notes
 -----
@@ -37,12 +42,31 @@ silently mislabels every result.
 from __future__ import annotations
 
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 from shapely.geometry import shape
 
 from ..types import Activation, AirspaceZone, Datum, TimeWindow, ZoneType
+
+_POLYGON_TYPES = ("Polygon", "MultiPolygon")
+
+
+def _utc(raw: str) -> datetime:
+    """Parse an ISO time; no timezone means UTC. Always returns aware UTC."""
+    value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _limit(value: Any, datum_raw: Any, missing: tuple[float, Datum]) -> tuple[float, Datum]:
+    """One altitude limit. A missing value takes ``missing``; a value given
+    without a datum is read as MSL."""
+    if value is None:
+        return missing
+    return float(value), Datum(datum_raw) if datum_raw is not None else Datum.MSL
 
 
 def load_zones(path: str | Path) -> list[AirspaceZone]:
@@ -60,31 +84,21 @@ def load_zones(path: str | Path) -> list[AirspaceZone]:
     zones: list[AirspaceZone] = []
     for feature in data.get("features", []):
         geom_json = feature.get("geometry", {})
-        if geom_json.get("type") != "Polygon":
+        if geom_json.get("type") not in _POLYGON_TYPES:
             raise ValueError(f"unsupported geometry type: {geom_json.get('type')!r}")
         geometry = shape(geom_json)
 
         props = feature.get("properties", {})
 
-        floor_ft = props.get("floor_ft")
-        ceiling_ft = props.get("ceiling_ft")
-        floor_datum_raw = props.get("floor_datum")
-        ceiling_datum_raw = props.get("ceiling_datum")
-
-        if None in (floor_ft, ceiling_ft, floor_datum_raw, ceiling_datum_raw):
-            floor_ft = 0.0
-            floor_datum = Datum.SFC
-            ceiling_ft = float("inf")
-            ceiling_datum = Datum.MSL
-        else:
-            floor_datum = Datum(floor_datum_raw)
-            ceiling_datum = Datum(ceiling_datum_raw)
+        floor_ft, floor_datum = _limit(
+            props.get("floor_ft"), props.get("floor_datum"), (0.0, Datum.SFC)
+        )
+        ceiling_ft, ceiling_datum = _limit(
+            props.get("ceiling_ft"), props.get("ceiling_datum"), (float("inf"), Datum.MSL)
+        )
 
         active_windows = tuple(
-            TimeWindow(
-                start=datetime.fromisoformat(w["start"]),
-                end=datetime.fromisoformat(w["end"]),
-            )
+            TimeWindow(start=_utc(w["start"]), end=_utc(w["end"]))
             for w in props.get("active_windows", [])
         )
 
@@ -96,9 +110,9 @@ def load_zones(path: str | Path) -> list[AirspaceZone]:
             name=props.get("name", ""),
             zone_type=ZoneType(props["zone_type"]),
             geometry=geometry,
-            floor_ft=float(floor_ft),
+            floor_ft=floor_ft,
             floor_datum=floor_datum,
-            ceiling_ft=float(ceiling_ft),
+            ceiling_ft=ceiling_ft,
             ceiling_datum=ceiling_datum,
             activation=Activation(props["activation"]),
             active_windows=active_windows,

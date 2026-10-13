@@ -5,9 +5,13 @@ are what tells every stream owner whether the harness still works.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+import pytest
+
 from ..cli import build_parser, main
+from ..geo import zone_index
 from .conftest import AIRSPACE_FILE, TRACKS_FILE
 
 
@@ -20,16 +24,42 @@ def test_parser_accepts_the_documented_invocation() -> None:
     assert args.config.name == "config.yaml"
 
 
-def test_run_reports_unimplemented_stages_and_exits_1(tmp_path: Path) -> None:
-    """Every stage still raises NotImplementedError, so the harness reports them
-    and returns 1 - it must not crash, and must not claim success."""
-    code = main([
+def _run_fixture(out: Path) -> int:
+    return main([
         "run",
         "--input", str(TRACKS_FILE),
-        "--out", str(tmp_path),
+        "--out", str(out),
         "--airspace", str(AIRSPACE_FILE),
     ])
-    assert code == 1
+
+
+def test_full_run_on_the_fixture_exits_0(tmp_path: Path) -> None:
+    """Every stage is implemented: the fixture produces its two detections and
+    an exit summary for the other three states."""
+    assert _run_fixture(tmp_path) == 0
+
+    lines = (tmp_path / "detections.jsonl").read_text().splitlines()
+    zones = sorted(json.loads(line)["metadata"]["extras"]["zone_id"] for line in lines)
+    assert zones == ["P-901", "TFR-6/1234"]
+
+    summary = json.loads((tmp_path / "exit_reasons.json").read_text())
+    assert summary["pipeline_ran"] is True
+    assert summary["exits"] == {"no_candidate": 1, "vertical_clear": 1, "zone_inactive": 1}
+
+
+def test_unimplemented_stage_is_reported_and_exits_1(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stage still raising NotImplementedError is reported as TODO and the run
+    returns 1 - it must not crash, and must not claim success."""
+    def todo(*_: object) -> None:
+        raise NotImplementedError("stream C: zone_index")
+
+    monkeypatch.setattr(zone_index, "candidate_zone_ids", todo)
+
+    assert _run_fixture(tmp_path) == 1
+    summary = json.loads((tmp_path / "exit_reasons.json").read_text())
+    assert summary["pipeline_ran"] is False
 
 
 def test_run_returns_2_on_a_bad_config(tmp_path: Path) -> None:
