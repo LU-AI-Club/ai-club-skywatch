@@ -40,6 +40,13 @@ nfz = [
     "h3>=4.0",
     "pyarrow>=14.0",
 ]
+# No-fly-zone dashboard (stream J). Only for viewing results; the detector and
+# its tests run without it. pydeck ships with streamlit.
+nfz-dashboard = [
+    "streamlit>=1.50",
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+]
 
 # Only air/ and contracts/ are importable packages; configs/, notebooks/,
 # docs/ and scripts/ are not, so tell setuptools exactly what to install

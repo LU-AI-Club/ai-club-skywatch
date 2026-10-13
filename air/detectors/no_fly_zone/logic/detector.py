@@ -41,14 +41,98 @@ This module may import from every stage. The stages may not import each other
 """
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Iterable, Iterator
 
+# Stages are referenced through their modules (not ``from x import fn``) so a
+# test can monkeypatch one stage without touching the others.
 from ..config import Config
-from ..types import AircraftState, AirspaceZone, Detection
+from ..geo import altitude, containment, zone_index
+from ..types import (
+    ActivationState,
+    AircraftState,
+    AirspaceZone,
+    ContextSignal,
+    Detection,
+    ExitReason,
+)
+from . import activation, context, scoring
+
+# When one state is tested against several zones and none fires, the state is
+# counted once, under the stage it got furthest through. This is bookkeeping
+# for the exit histogram, not a detection decision.
+_EXIT_DEPTH: dict[ExitReason, int] = {
+    ExitReason.ON_GROUND: 0,
+    ExitReason.NO_CANDIDATE: 1,
+    ExitReason.OUTSIDE_POLYGON: 2,
+    ExitReason.BAD_INPUT: 3,
+    ExitReason.VERTICAL_CLEAR: 3,
+    ExitReason.ZONE_INACTIVE: 4,
+}
 
 
 def run(
-    states: Iterable[AircraftState], zones: list[AirspaceZone], cfg: Config
+    states: Iterable[AircraftState],
+    zones: list[AirspaceZone],
+    cfg: Config,
+    *,
+    exit_counts: Counter[ExitReason] | None = None,
 ) -> Iterator[Detection]:
-    """Run the full pipeline over ``states``, yielding detections."""
-    raise NotImplementedError("lead: detector wiring")
+    """Run the full pipeline over ``states``, yielding detections.
+
+    Pass a :class:`collections.Counter` as ``exit_counts`` to have every state
+    that produced no detection counted under its :class:`ExitReason`. The
+    counter fills as the iterator is consumed.
+    """
+    counts: Counter[ExitReason] = exit_counts if exit_counts is not None else Counter()
+    zones_by_id = {zone.zone_id: zone for zone in zones}
+    drop_on_ground = bool(cfg.raw.get("filters", {}).get("drop_on_ground", True))
+
+    for state in states:
+        if drop_on_ground and state.on_ground:
+            counts[ExitReason.ON_GROUND] += 1
+            continue
+
+        candidate_ids = zone_index.candidate_zone_ids(state, zones, cfg)
+        candidates = [zones_by_id[zid] for zid in candidate_ids if zid in zones_by_id]
+        if not candidates:
+            counts[ExitReason.NO_CANDIDATE] += 1
+            continue
+
+        fired = False
+        deepest = ExitReason.NO_CANDIDATE
+        signals: list[ContextSignal] | None = None  # gathered once, only if needed
+
+        # One zone at a time, so penetration_nm and the activation result in
+        # each Detection refer to that zone and nothing else.
+        for zone in candidates:
+            horizontal = containment.check_containment(state, [zone], cfg)
+            if not (horizontal.contained or horizontal.buffered_contained):
+                deepest = _deeper(deepest, horizontal.reason or ExitReason.OUTSIDE_POLYGON)
+                continue
+
+            vertical = altitude.vertical_check(state, zone)
+            if not vertical.within:
+                deepest = _deeper(deepest, vertical.reason or ExitReason.VERTICAL_CLEAR)
+                continue
+
+            live = activation.is_active(zone, state.timestamp)
+            if live.state is ActivationState.INACTIVE:
+                deepest = _deeper(deepest, ExitReason.ZONE_INACTIVE)
+                continue
+            # UNKNOWN continues on purpose: scoring caps its severity.
+
+            if signals is None:
+                signals = context.gather_signals(state, cfg)
+            fired = True
+            yield scoring.build_detection(
+                state, zone, horizontal, vertical, live, signals, cfg
+            )
+
+        if not fired:
+            counts[deepest] += 1
+
+
+def _deeper(current: ExitReason, candidate: ExitReason) -> ExitReason:
+    """Keep whichever exit reason got further down the pipeline."""
+    return candidate if _EXIT_DEPTH[candidate] > _EXIT_DEPTH[current] else current

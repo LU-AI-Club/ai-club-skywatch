@@ -17,6 +17,8 @@ Inputs
     line. Lines are the **platform** contract (``contracts.Detection``),
     converted by :func:`emit.to_platform_detection` - that is what makes
     Week-11 TCE/CAATS integration wiring rather than a rewrite.
+    ``exit_reasons.json`` is written alongside, counting why every other
+    state dropped out (read by the dashboard's exit histogram).
 --airspace
     Zone GeoJSON. Defaults to ``airspace.fixture_path`` from config.
 --config
@@ -42,6 +44,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -111,10 +114,13 @@ def run(
 
     # Stages C-G, wired by the lead.
     detections: list[Any] = []
+    exit_counts: Counter[Any] = Counter()
+    pipeline_ran = False
     try:
         from .logic.detector import run as run_pipeline
 
-        detections = list(run_pipeline(states, zones, cfg))
+        detections = list(run_pipeline(states, zones, cfg, exit_counts=exit_counts))
+        pipeline_ran = True
         _report("C-G pipeline", _STAGE_OK, f"{len(detections)} detections")
     except NotImplementedError as exc:
         todo += 1
@@ -140,6 +146,16 @@ def run(
     with open(out_file, "w", encoding="utf-8") as fh:
         fh.writelines(lines)
     _report("output", _STAGE_OK, f"{out_file} ({len(lines)} detections)")
+
+    # Why the other states dropped out, for the dashboard's exit histogram.
+    exits_file = out_dir / "exit_reasons.json"
+    summary = {
+        "pipeline_ran": pipeline_ran,
+        "states": len(states),
+        "detections": len(detections),
+        "exits": {reason.value: n for reason, n in sorted(exit_counts.items())},
+    }
+    exits_file.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 
     if todo:
         print(f"\n{todo} stage(s) not implemented yet - see the table in CLAUDE.md")
