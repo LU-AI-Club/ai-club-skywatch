@@ -1,0 +1,46 @@
+# skywatch.proximity — versioned rule set (the "baseline" for a rule-based detector)
+#
+# Every number the detector uses lives HERE, not in code. Bump config_version
+# whenever a value changes so an old detection can be explained by the config
+# that produced it.
+#
+# Sources for the thresholds:
+#   - En route standard separation: 5 nm horizontal / 1000 ft vertical
+#   - Terminal separation:          3 nm horizontal / 1000 ft vertical
+#   - FAA near-midair-collision:    < 500 ft total separation
+
+detector_id: skywatch.proximity
+detector_version: 0.1.0
+config_version: 2026-09-20.1
+
+# --- Time alignment (tracks.py) ----------------------------------------------
+grid_step_s: 1.0        # interpolate every track onto this common clock
+max_gap_s: 30.0         # never interpolate across a silence longer than this
+
+# --- Candidate pairs + cheap filters (pairs.py) ------------------------------
+cell_size_deg: 0.5      # lat/lon grid cell for spatial binning (~30 nm)
+max_vertical_prefilter_ft: 2000   # drop pairs stacked further apart than this
+ground_altitude_ft: 3000  # backup ground check: below this (MSL!) AND ...
+ground_speed_kt: 50       # ... slower than this => treat as on the ground
+# NOTE: altitude is barometric MSL, and Lynchburg sits at 938 ft, Roanoke at
+# 1175 ft. The speed check does the real work; replacing the altitude number
+# with per-airport field elevation (FAA NASR) is Week-9 context work.
+
+# --- Closest approach gates (detector.py) ------------------------------------
+max_tcpa_s: 120.0       # beyond this, straight-line prediction is unreliable
+
+# --- Severity tiers, evaluated top to bottom; BOTH limits must hold ----------
+# predicted separation at closest approach, not current separation
+tiers:
+  - severity: HIGH
+    max_horizontal_nm: 0.5
+    max_vertical_ft: 400
+  - severity: MEDIUM
+    max_horizontal_nm: 1.5
+    max_vertical_ft: 700
+  - severity: LOW
+    max_horizontal_nm: 3.0
+    max_vertical_ft: 1000
+  - severity: INFO
+    max_horizontal_nm: 5.0
+    max_vertical_ft: 1000

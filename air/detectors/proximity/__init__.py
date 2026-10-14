@@ -1,6 +1,27 @@
-"""Dangerous / unusual proximity detector (Team-owned).
+"""skywatch.proximity — dangerous / unusual proximity detector (team-owned)."""
 
-Empty on purpose. This is your team's detector to design and build. See
-README.md in this folder and docs/DETECTOR_PLAYBOOK.md, and copy the SHAPE of
-air/detectors/_example_altitude.
-"""
+from air.detectors.proximity.config import ProximityConfig, SeverityTier, load_config
+from air.detectors.proximity.detector import (
+    PairGeometry,
+    ProximityDetector,
+    confidence_for,
+    explanation_facts,
+    flag_pair,
+    pair_geometry,
+    severity_for,
+    to_detection,
+)
+
+__all__ = [
+    "PairGeometry",
+    "ProximityConfig",
+    "ProximityDetector",
+    "SeverityTier",
+    "confidence_for",
+    "explanation_facts",
+    "flag_pair",
+    "load_config",
+    "pair_geometry",
+    "severity_for",
+    "to_detection",
+]

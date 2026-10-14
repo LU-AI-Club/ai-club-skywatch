@@ -24,3 +24,6 @@ data/generated/
 .DS_Store
 .idea/
 .vscode/
+
+# SkyWatch: local answer key, never commit
+proximity_solutions/
