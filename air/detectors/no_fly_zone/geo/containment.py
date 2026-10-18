@@ -43,9 +43,9 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
+import shapely
 from shapely.geometry import Point
 from shapely.geometry.base import BaseGeometry
-from shapely.ops import transform
 
 from ..config import Config
 from ..types import AircraftState, AirspaceZone, ContainmentResult, ExitReason
@@ -80,11 +80,11 @@ def _to_local_nm(geometry: BaseGeometry, lat0: float, lon0: float) -> BaseGeomet
     the few nautical miles that matter here.
     """
     x_scale = math.cos(math.radians(lat0)) * _NM_PER_DEG_LAT
-
-    def _project(x: float, y: float, z: float | None = None) -> tuple[float, float]:
-        return ((x - lon0) * x_scale, (y - lat0) * _NM_PER_DEG_LAT)
-
-    return transform(_project, geometry)
+    # shapely.transform hands over every (lon, lat) pair as one N x 2 array.
+    return shapely.transform(
+        geometry,
+        lambda coords: (coords - (lon0, lat0)) * (x_scale, _NM_PER_DEG_LAT),
+    )
 
 
 def check_containment(

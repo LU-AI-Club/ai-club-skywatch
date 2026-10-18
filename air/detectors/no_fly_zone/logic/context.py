@@ -51,7 +51,8 @@ _EMERGENCY_SQUAWKS: frozenset[str] = frozenset({"7500", "7600", "7700"})
 # 7500 is unlawful interference, 7600 is lost comms, 7700 is emergency.
 # 0000 is not a valid discrete beacon code; 1200 is the default VFR code.
 _NON_DISCRETE_SQUAWKS: frozenset[str] = frozenset({"0000", "1200"})
-# can be replaced with non_discrete_squawks = cfg["squawks"]["non_discrete"] if the YAML is updated to include a list of regional non-disscrete codes.
+# Could become cfg["squawks"]["non_discrete"] if the YAML gains a list of
+# regional non-discrete codes.
 _LIFEGUARD_PREFIXES: tuple[str, ...] = ("LIFEGUARD", "MEDEVAC", "AIREVAC", "HOSP")
 
 
@@ -106,7 +107,7 @@ def gather_signals(state: AircraftState, cfg: Config) -> list[ContextSignal]:
         digit in "0123456789ABCDEF" for digit in icao24
     ):
         address = int(icao24, 16)
-        for first_hex, last_hex in cfg["airspace"]["military_icao24_ranges"]: # needs to be provided by the YAML file
+        for first_hex, last_hex in cfg["airspace"]["military_icao24_ranges"]:
             first_address = int(first_hex, 16)
             last_address = int(last_hex, 16)
             if first_address <= address <= last_address:
