@@ -123,3 +123,26 @@ def test_page_renders_headless_with_and_without_output(tmp_path: Path) -> None:
     assert not full.exception
     assert not full.info  # no empty-state banners once output exists
     assert full.metric[1].value == "1"
+
+
+def test_readsb_csv_loads_for_the_map(tmp_path: Path) -> None:
+    csv_path = tmp_path / "adsb.csv"
+    csv_path.write_text(
+        "h,la,lo,ab,ag,f,timestamp\n"
+        "ace81d,37.4,-79.2,4850,5200,AAL1715 ,2026-09-01 00:25:40+00:00\n"
+        "a8d6bd,37.5,-79.1,,1875,,2026-09-01 00:25:41+00:00\n"
+        ",,,,,,\n",
+        encoding="utf-8",
+    )
+    points = app.load_state_points(csv_path)
+
+    assert points is not None and [p["icao24"] for p in points] == ["ace81d", "a8d6bd"]
+    assert points[0]["altitude_ft"] == 5200.0 and points[0]["callsign"] == "AAL1715"
+
+
+def test_thin_points_caps_what_reaches_the_map() -> None:
+    points = [{"i": i} for i in range(100)]
+
+    assert app.thin_points(points, limit=200) is points
+    thinned = app.thin_points(points, limit=30)
+    assert len(thinned) <= 30 and thinned[0] == {"i": 0}
