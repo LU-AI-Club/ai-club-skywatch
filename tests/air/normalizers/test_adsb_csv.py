@@ -116,3 +116,73 @@ def test_iter_observations_streams_and_counts() -> None:
     assert len(obs) == 6
     # order preserved; first emitted is the normal row
     assert obs[0].icao24 == "ace81d"
+
+
+# --- ag / og / c / source_row_id (added for detectors that need them) --------
+def _raw(**overrides: str) -> dict:
+    """One inline readsb row with the extra columns the fixture file lacks."""
+    row = {
+        "h": "ace81d",
+        "timestamp": "2026-09-01 00:00:00+00:00",
+        "la": "37.3",
+        "lo": "-79.2",
+        "ab": "4850",
+        "ag": "5200",
+        "og": "False",
+        "c": "A3",
+    }
+    row.update(overrides)
+    return row
+
+
+def test_geometric_altitude_and_emitter_category_are_mapped() -> None:
+    obs = normalize_row(_raw())
+    assert obs is not None
+    assert obs.altitude_ft == 4850.0  # barometric stays in altitude_ft
+    assert obs.alt_geom_ft == 5200.0
+    assert obs.emitter_category == "A3"
+
+
+def test_geometric_altitude_survives_blank_baro() -> None:
+    obs = normalize_row(_raw(ab=""))
+    assert obs is not None
+    assert obs.altitude_ft is None
+    assert obs.alt_geom_ft == 5200.0
+
+
+def test_on_ground_parses_readsb_capitalized_strings() -> None:
+    on = normalize_row(_raw(og="True"))
+    off = normalize_row(_raw(og="False"))
+    assert on is not None and on.on_ground is True
+    assert off is not None and off.on_ground is False
+    lower = normalize_row(_raw(og="true"))
+    assert lower is not None and lower.on_ground is True
+
+
+def test_on_ground_blank_or_junk_is_unknown_not_airborne() -> None:
+    for value in ("", "maybe"):
+        obs = normalize_row(_raw(og=value))
+        assert obs is not None
+        assert obs.on_ground is None
+
+
+def test_rows_without_the_new_columns_still_normalize() -> None:
+    """The fixture file has no ag/og/c columns: the new fields just stay None."""
+    obs = normalize_row(_rows()[0])
+    assert obs is not None
+    assert obs.alt_geom_ft is None
+    assert obs.on_ground is None
+    assert obs.emitter_category is None
+
+
+def test_iter_observations_stamps_source_row_ids() -> None:
+    observations = list(iter_observations(FIXTURE))
+    assert observations[0].source_row_id == f"{FIXTURE}:1"
+    # Row 3 (missing position) is skipped, so the third observation is row 4:
+    # ids track the file's rows, not the output position.
+    assert observations[2].source_row_id == f"{FIXTURE}:4"
+
+
+def test_normalize_row_passes_source_row_id_through() -> None:
+    obs = normalize_row(_raw(), source_row_id="live:abc")
+    assert obs is not None and obs.source_row_id == "live:abc"

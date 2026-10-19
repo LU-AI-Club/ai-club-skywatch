@@ -9,11 +9,19 @@ on:
     branches: [main, No_Fly_Zone_Detector]
     paths:
       - "air/detectors/no_fly_zone/**"
+      # NFZ consumes these through adapter.py, so a change there can break it.
+      - "air/models/**"
+      - "air/normalizers/**"
+      - "scripts/replay_csv.py"
       - "pyproject.toml"
       - ".github/workflows/no-fly-zone.yml"
   pull_request:
     paths:
       - "air/detectors/no_fly_zone/**"
+      # NFZ consumes these through adapter.py, so a change there can break it.
+      - "air/models/**"
+      - "air/normalizers/**"
+      - "scripts/replay_csv.py"
       - "pyproject.toml"
       - ".github/workflows/no-fly-zone.yml"
 
@@ -52,3 +60,25 @@ jobs:
           python -m air.detectors.no_fly_zone run \
             --input data/lynchburg_adsb.csv \
             --out /tmp/nfz-ci/lynchburg
+
+      - name: Shared runner runs NFZ on data/lynchburg_adsb.csv
+        # replay_csv.py exits 1 when every requested detector is skipped, so this
+        # fails if build_detector() ever stops being found. Then the shared route
+        # and the CLI route must give the same detections.
+        run: |
+          python scripts/replay_csv.py --detector no_fly_zone --out /tmp/nfz-ci/replay.jsonl
+          python - <<'PY'
+          import json, re
+          uuid = re.compile(r'"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"')
+          row = re.compile(r'"[^"]*lynchburg_adsb\.csv:(\d+)"')
+          def load(path):
+              out = []
+              for line in open(path):
+                  text = json.dumps(json.loads(line), sort_keys=True, default=str)
+                  out.append(row.sub(r'"lynchburg_adsb.csv:\1"', uuid.sub('"<id>"', text)))
+              return sorted(out)
+          shared = load("/tmp/nfz-ci/replay.jsonl")
+          cli = load("/tmp/nfz-ci/lynchburg/detections.jsonl")
+          print(f"shared runner: {len(shared)}  CLI: {len(cli)}")
+          assert shared == cli, "shared runner and CLI disagree"
+          PY
