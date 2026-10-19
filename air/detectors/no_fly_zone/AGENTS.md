@@ -13,9 +13,10 @@ Full design: NoFlyZoneDetector_Design_and_Build_Plan.docx (ask the user for it i
   explicitly asks. If a module seems to need a contract change, stop and say so.
 - Every module imports only from `no_fly_zone.types` and `no_fly_zone.config`, never from
   another module. Duplicate small helpers rather than cross-import.
-  Two documented exceptions, both LEAD-OWNED wiring, not logic: `logic/detector.py`
-  imports the stages, and `emit.py` imports `contracts`. Keeping `contracts` out of
-  every other module is exactly why `emit.py` exists.
+  Three documented exceptions, all LEAD-OWNED wiring, not logic: `logic/detector.py`
+  imports the stages, `emit.py` imports `contracts`, and `adapter.py` imports both
+  (it is the input-side boundary, as `emit.py` is the output side). Keeping
+  `contracts` out of every other module is exactly why those two files exist.
 - Pure functions: no file reads or network at import time, no globals. Config is passed
   in as `cfg`, never loaded inside a module.
 - No constants inline. Tunable numbers go in `config/config.yaml`.
@@ -57,8 +58,21 @@ Each stage records an ExitReason when a state leaves without a detection.
 | J | dashboard/app.py | streamlit run air/detectors/no_fly_zone/dashboard/app.py |
 | Lead | logic/detector.py | wires stages only |
 | Lead | emit.py | to_platform_detection(detection) -> contracts.Detection |
+| Lead | adapter.py | NoFlyZoneDetector.detect_observations(list[AdsbObservation]) -> list[contracts.Detection] |
+| Lead | `__init__.py` | build_detector(config_path=None, airspace_path=None) -> NoFlyZoneDetector |
 
 ## Input data
+Two routes in, one pipeline. They must give identical detections (test_adapter.py
+checks this):
+- **Shared runner** (`scripts/replay_csv.py`, later the live loop): the shared
+  normalizer `air/normalizers/adsb_csv.py` yields `AdsbObservation`; `adapter.py`
+  converts each to `AircraftState`. This is the route the other detectors use.
+- **Our CLI**: `ingest/adsb_loader.py` builds `AircraftState` directly.
+
+If NFZ needs a new input field, add it to `AdsbObservation` and the shared normalizer
+(see `air/normalizers/COLUMN_MAP.md`), then map it in `adapter.py`. Don't only add it
+to our loader, or the two routes drift apart.
+
 `ingest/adsb_loader.py` reads JSON (AircraftState field names) or readsb/tar1090 CSV
 such as `data/lynchburg_adsb.csv`. CSV columns used: h=icao hex, timestamp=UTC,
 la/lo=lat/lon, ab=alt_baro ft, ag=alt_geom ft, gs=ground speed, tr=track, f=callsign,

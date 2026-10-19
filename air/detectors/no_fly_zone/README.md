@@ -48,6 +48,15 @@ no_fly_zone: air/detectors/no_fly_zone/fixtures/tracks/klyh_mixed.json
   output                 ok    out/detections.jsonl (2 detections)
 ```
 
+It also runs in the club's shared runner, next to the Spoofing and Proximity
+detectors, through `build_detector()` and `adapter.py`:
+
+```bash
+python scripts/replay_csv.py --detector no_fly_zone --out out/replay.jsonl
+```
+
+Both routes give identical detections on the full recorded hour.
+
 Exit codes: `0` everything ran, `1` some stage is still a stub, `2` a real
 error (bad file, bad config). Alongside `detections.jsonl` the CLI writes
 `exit_reasons.json`, counting why every other state dropped out.
@@ -71,6 +80,7 @@ three **fake** zones, so expect detections only in P-901 (just north of KLYH).
 ```
 no_fly_zone/
 ├── types.py              LEAD-OWNED contracts. Do not edit without the lead.
+├── adapter.py            LEAD-OWNED. Shared-runner entry: AdsbObservation -> pipeline
 ├── config.py             loads config/config.yaml into a frozen Config
 ├── config/config.yaml    LEAD-OWNED. Every tunable number lives here.
 ├── ingest/
