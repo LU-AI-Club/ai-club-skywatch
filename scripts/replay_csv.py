@@ -3,10 +3,10 @@
 A **no-database** way to see detectors work on real data: read the CSV, stream
 it through the shared normalizer, slice it into epoch-anchored time windows, feed
 each window to the selected detector(s), and print each emitted ``Detection`` as
-JSON. This is the one-shot form of how detection runs on a live feed — there, the
+JSON. This is the one-shot form of how detection runs on a live feed - there, the
 same windowing logic runs on a timer over a rolling "last N minutes" slice.
 
-Thin by design (the repo rule — streaming/feeds are enabling infra that *calls*
+Thin by design (the repo rule - streaming/feeds are enabling infra that *calls*
 detectors, never baked inside them): all real logic lives in
 ``air/normalizers/adsb_csv.py`` and ``air/windowing.py``; this file only parses
 args, wires them together, and emits output + a summary.
@@ -18,7 +18,7 @@ Run it (from the repo root)::
     python scripts/replay_csv.py --detector proximity --window 30 --step 10
     python scripts/replay_csv.py --out detections.jsonl --quiet
 
-A detector that a team has not built yet is skipped with a note — the moment its
+A detector that a team has not built yet is skipped with a note - the moment its
 package exposes ``build_detector()`` (or a ``*Detector`` class), it lights up here
 with no change to this script.
 """
@@ -60,15 +60,24 @@ def load_detector(name: str):
     module_path, attr = DETECTORS[name]
     try:
         module = importlib.import_module(module_path)
-        factory = getattr(module, attr)
-    except (ImportError, AttributeError):
-        return None, f"{name}: not built yet (no {module_path}:{attr}) — skipped"
+    except ImportError as exc:
+        # The package exists but fails to import - a missing dependency or a
+        # typo in the detector, NOT an unbuilt detector. Show the real cause.
+        return None, (
+            f"{name}: import failed - {exc.__class__.__name__}: {exc}. "
+            f'If a dependency is missing, run: pip install -e ".[dev]" - skipped'
+        )
+    factory = getattr(module, attr, None)
+    if factory is None:
+        # Package imported fine but the entry point isn't there yet: this is
+        # the genuine "team hasn't shipped it" case.
+        return None, f"{name}: not built yet (no {module_path}:{attr}) - skipped"
     try:
         detector = factory()  # class() instantiates; build_detector() constructs
     except Exception as exc:  # noqa: BLE001 - report, don't crash the whole run
-        return None, f"{name}: failed to construct ({exc!r}) — skipped"
+        return None, f"{name}: failed to construct ({exc!r}) - skipped"
     if not hasattr(detector, "detect_observations"):
-        return None, f"{name}: has no detect_observations() — skipped"
+        return None, f"{name}: has no detect_observations() - skipped"
     return detector, None
 
 
