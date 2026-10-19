@@ -49,6 +49,10 @@ DEFAULT_STATES = PACKAGE_DIR / "fixtures" / "tracks" / "klyh_mixed.json"
 
 SEVERITY_ORDER = ("HIGH", "MEDIUM", "LOW", "INFO")
 
+# Most aircraft positions sent to the map. A full hour of the Lynchburg CSV is
+# ~284k rows, which would make the page crawl; every n-th one is drawn instead.
+MAP_POINT_LIMIT = 25_000
+
 # RGBA, for pydeck. Detections by severity; zones by airspace type.
 SEVERITY_COLOR: dict[str, list[int]] = {
     "HIGH": [214, 39, 40, 230],
@@ -182,10 +186,14 @@ def load_zone_shapes(path: str | Path) -> list[dict[str, Any]] | None:
 
 
 def load_state_points(path: str | Path) -> list[dict[str, Any]] | None:
-    """Aircraft positions from a JSON array, a Parquet file, or a folder of
-    Parquet files (the collector's hourly layout). ``None`` if nothing usable."""
+    """Aircraft positions from a JSON array, a readsb CSV (``data/lynchburg_adsb.csv``),
+    a Parquet file, or a folder of Parquet files (the collector's hourly layout).
+    ``None`` if nothing usable. Returns every position; thin it with
+    :func:`thin_points` before drawing."""
     path = Path(path)
-    if path.is_dir():
+    if path.suffix.lower() == ".csv" and path.is_file():
+        rows = _read_readsb_csv(path)
+    elif path.is_dir():
         files = sorted(path.glob("*.parquet"))
         if not files:
             return None
@@ -221,6 +229,44 @@ def load_state_points(path: str | Path) -> list[dict[str, Any]] | None:
         except (KeyError, TypeError, ValueError, AttributeError):
             continue
     return points
+
+
+def thin_points(
+    points: list[dict[str, Any]], limit: int = MAP_POINT_LIMIT
+) -> list[dict[str, Any]]:
+    """Every n-th point, so at most ``limit`` reach the browser. Order kept."""
+    if len(points) <= limit:
+        return points
+    step = -(-len(points) // limit)  # ceiling division
+    return points[::step]
+
+
+# readsb CSV column -> the field names the map reads. Same columns the
+# detector's ADS-B loader uses; read here directly because this file imports
+# nothing from the detector package.
+_READSB_MAP_COLUMNS = {
+    "h": "icao24", "la": "lat", "lo": "lon", "ag": "alt_geom_ft",
+    "ab": "alt_baro_ft", "f": "callsign", "timestamp": "timestamp",
+}
+
+
+def _read_readsb_csv(path: Path) -> list[dict[str, Any]]:
+    import csv
+
+    rows: list[dict[str, Any]] = []
+    with path.open(encoding="utf-8-sig", newline="") as fh:
+        for raw in csv.DictReader(fh):
+            row: dict[str, Any] = {}
+            for column, name in _READSB_MAP_COLUMNS.items():
+                value = (raw.get(column) or "").strip()
+                row[name] = value or None
+            for name in ("alt_geom_ft", "alt_baro_ft"):
+                try:
+                    row[name] = float(row[name]) if row[name] is not None else None
+                except ValueError:
+                    row[name] = None
+            rows.append(row)
+    return rows
 
 
 def _read_parquet(path: Path) -> list[dict[str, Any]]:
@@ -269,7 +315,7 @@ def main() -> None:
         out_dir = Path(st.text_input("CLI output folder (--out)", str(DEFAULT_OUT_DIR)))
         airspace_path = Path(st.text_input("Airspace GeoJSON", str(DEFAULT_AIRSPACE)))
         states_path = Path(st.text_input(
-            "Aircraft states (JSON, Parquet, or Parquet folder)", str(DEFAULT_STATES)
+            "Aircraft states (JSON, CSV, Parquet, or Parquet folder)", str(DEFAULT_STATES)
         ))
         st.caption("Produce the output folder with:")
         st.code(
@@ -281,7 +327,17 @@ def main() -> None:
     detections = load_detections(out_dir / "detections.jsonl")
     exit_summary = load_exit_summary(out_dir / "exit_reasons.json")
     zones = load_zone_shapes(airspace_path)
-    states = load_state_points(states_path)
+    @st.cache_data(show_spinner="Loading aircraft positions...")
+    def cached_points(path: str, mtime: float) -> list[dict[str, Any]] | None:
+        # mtime is part of the cache key, so an updated file is re-read.
+        return load_state_points(path)
+
+    try:
+        states_mtime = states_path.stat().st_mtime
+    except OSError:
+        states_mtime = 0.0
+    all_states = cached_points(str(states_path), states_mtime)
+    states = thin_points(all_states) if all_states else all_states
 
     if detections.missing:
         st.info(
@@ -351,6 +407,11 @@ def main() -> None:
             "Shaded areas: zones (red prohibited, orange restricted, purple TFR, blue MOA). "
             "Grey dots: aircraft positions. Large dots: detections, colored by severity."
         )
+        if all_states and states is not None and len(states) < len(all_states):
+            st.caption(
+                f"Showing every {-(-len(all_states) // len(states))}th position "
+                f"({len(states):,} of {len(all_states):,}) to keep the map responsive."
+            )
     else:
         st.info(
             f"Nothing to draw: no zones at `{airspace_path}` and no states at `{states_path}`."

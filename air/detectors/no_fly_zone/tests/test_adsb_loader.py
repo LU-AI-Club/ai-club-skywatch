@@ -137,3 +137,93 @@ def test_invalid_document_raises(tmp_path: Path, contents: str) -> None:
 
 def test_empty_array(tmp_path: Path) -> None:
     assert list(load_states(write_rows(tmp_path, []))) == []
+
+
+# ---------------------------------------------------------------- readsb CSV
+
+# The real header of data/lynchburg_adsb.csv, so the tests track the file.
+_READSB_HEADER = (
+    "ab,ag,c,d,f,gr,gs,gv,h,la,lo,n,nb,np,nv,ra,rc,rs,s,sq,st,th,timestamp,tr,v,m,i,mh,"
+    "trr,ro,br,em,nq,nam,naf,nh,nm,sp,a,spi,wd,ws,oat,tat,rds,rdi,sda,ct,gpb,sn,og,t,link"
+)
+
+
+def write_csv(tmp_path: Path, rows: list[dict[str, str]], header: str = _READSB_HEADER) -> Path:
+    columns = header.split(",")
+    lines = [header] + [",".join(row.get(c, "") for c in columns) for row in rows]
+    path = tmp_path / "adsb.csv"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _csv_row(**overrides: str) -> dict[str, str]:
+    row = {
+        "h": "ace81d", "timestamp": "2026-09-01 00:25:40.236000+00:00",
+        "la": "37.425", "lo": "-79.215", "ab": "4850", "ag": "5200", "c": "A3",
+        "f": "AAL1715 ", "gs": "186.7", "tr": "4.92", "n": "8", "np": "9",
+        "sq": "", "og": "False",
+    }
+    row.update(overrides)
+    return row
+
+
+def test_csv_maps_readsb_columns(tmp_path: Path) -> None:
+    (state,) = load_states(write_csv(tmp_path, [_csv_row(sq="7700")]))
+
+    assert state.icao24 == "ace81d"
+    assert state.timestamp == datetime(2026, 9, 1, 0, 25, 40, 236000, tzinfo=UTC)
+    assert (state.lat, state.lon) == (37.425, -79.215)
+    assert (state.alt_baro_ft, state.alt_geom_ft) == (4850.0, 5200.0)
+    assert (state.ground_speed_kt, state.track_deg) == (186.7, 4.92)
+    assert (state.callsign, state.squawk, state.emitter_category) == ("AAL1715", "7700", "A3")
+    assert (state.nic, state.nac_p, state.on_ground) == (8, 9, False)
+    assert state.source_row_id.endswith("adsb.csv:1")
+
+
+def test_csv_blank_cells_become_none_and_og_sets_on_ground(tmp_path: Path) -> None:
+    """A taxiing aircraft: no baro altitude, og True. Blank optional cells are
+    None, not a reason to drop the row."""
+    rows = [_csv_row(ab="", ag="925", og="True", f="", sq="", c="", np="")]
+    (state,) = load_states(write_csv(tmp_path, rows))
+
+    assert state.on_ground is True
+    assert (state.alt_baro_ft, state.alt_geom_ft) == (None, 925.0)
+    assert (state.callsign, state.squawk, state.emitter_category, state.nac_p) == (
+        None, None, None, None,
+    )
+
+
+def test_csv_skips_unusable_rows_and_keeps_going(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    rows = [
+        _csv_row(la=""),                      # no position: warned
+        _csv_row(og="maybe"),                 # unreadable flag: warned
+        _csv_row(h=""),                       # no identity: silent
+        _csv_row(h="a1b2c3"),                 # good
+    ]
+    states = list(load_states(write_csv(tmp_path, rows)))
+
+    assert [s.icao24 for s in states] == ["a1b2c3"]
+    assert "row 1" in caplog.text and "lat" in caplog.text
+    assert "row 2" in caplog.text and "on_ground" in caplog.text
+    assert "row 3" not in caplog.text
+
+
+def test_csv_missing_required_column_raises(tmp_path: Path) -> None:
+    path = write_csv(tmp_path, [_csv_row()], header="h,timestamp,la,ab")
+
+    with pytest.raises(ValueError, match="lo"):
+        list(load_states(path))
+
+
+def test_many_bad_rows_log_a_summary_not_a_flood(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    rows = [_csv_row(la="") for _ in range(30)] + [_csv_row()]
+    states = list(load_states(write_csv(tmp_path, rows)))
+
+    assert len(states) == 1
+    per_row = [r for r in caplog.records if r.getMessage().startswith("Skipping ")]
+    assert len(per_row) == 20
+    assert "Skipped 30 unusable rows" in caplog.text
