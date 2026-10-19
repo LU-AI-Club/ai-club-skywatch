@@ -158,7 +158,7 @@ def run(
     exits_file.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 
     if todo:
-        print(f"\n{todo} stage(s) not implemented yet - see the table in CLAUDE.md")
+        print(f"\n{todo} stage(s) not implemented yet - see the table in AGENTS.md")
         return 1
     return 0
 

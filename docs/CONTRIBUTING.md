@@ -17,7 +17,8 @@ pip install -e ".[dev]"   # pytest, ruff, mypy. Keep the -e: a non-editable
                           # install freezes a copy in site-packages that
                           # shadows your edits outside the repo root.
 pip install -e ".[eda]"   # optional: pandas/matplotlib for notebooks
-pip install -e ".[nfz]"   # optional: shapely/h3, no-fly-zone streams B and C
+pip install -e ".[dev,nfz,nfz-dashboard]"   # no-fly-zone team: use this instead
+                                            # of plain [dev]; see the README
 ```
 
 ## Run the tests (do this constantly)

@@ -33,10 +33,9 @@ Nothing hit is not an exception: the result carries
 
 Notes
 -----
-DEVIATION from the CLAUDE.md signature table, which lists
-``check_containment(state, zones)``. ``cfg`` is a required third argument
-because ``default_uncertainty_m`` has to be passed in, never read inside a
-module. Those two hard rules conflict; the lead should settle it.
+``cfg`` is a required third argument because ``default_uncertainty_m`` has to
+be passed in, never read inside a module. The AGENTS.md signature table
+includes it.
 """
 from __future__ import annotations
 

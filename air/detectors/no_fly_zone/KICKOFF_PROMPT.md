@@ -1,3 +1,7 @@
+> Historical record: the prompt that scaffolded this folder. Paths and stub
+> instructions describe the original layout, not the current code; see
+> AGENTS.md and README.md for that.
+
 Paste this into Claude Code from the repo root after copying the no_fly_zone folder in:
 
 ---

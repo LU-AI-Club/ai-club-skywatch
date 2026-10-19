@@ -6,7 +6,7 @@ name: no-fly-zone
 
 on:
   push:
-    branches: [main]
+    branches: [main, No_Fly_Zone_Detector]
     paths:
       - "air/detectors/no_fly_zone/**"
       - "pyproject.toml"
@@ -26,7 +26,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: pip install -e ".[dev,nfz]"
+        # The same line the README gives the NFZ team. nfz-dashboard lets the
+        # dashboard's full-page render test run instead of skipping.
+        run: pip install -e ".[dev,nfz,nfz-dashboard]"
 
       - name: ruff
         run: ruff check air/detectors/no_fly_zone/
@@ -37,10 +39,16 @@ jobs:
       - name: pytest
         run: pytest air/detectors/no_fly_zone/tests -q
 
-      - name: CLI runs end to end
-        # Exit 1 is expected while stages are stubs: it means the harness ran
-        # and reported them. Exit 2 (a real error) or a crash fails the build.
+      - name: CLI runs end to end on the fixture
+        # Every stage is implemented, so anything but exit 0 is a failure.
         run: |
           python -m air.detectors.no_fly_zone run \
             --input air/detectors/no_fly_zone/fixtures/tracks/klyh_mixed.json \
-            --out /tmp/nfz-ci || [ $? -eq 1 ]
+            --out /tmp/nfz-ci/fixture
+
+      - name: CLI runs end to end on data/lynchburg_adsb.csv
+        # The real recorded hour (~284k rows, ~15 s). Guards the ADS-B CSV path.
+        run: |
+          python -m air.detectors.no_fly_zone run \
+            --input data/lynchburg_adsb.csv \
+            --out /tmp/nfz-ci/lynchburg
