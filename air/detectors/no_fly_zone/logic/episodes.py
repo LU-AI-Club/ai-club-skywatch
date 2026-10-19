@@ -61,6 +61,22 @@ Outputs
 An iterator of merged :class:`Detection`, each yielded when its episode
 closes.
 
+Two ways to call it
+-------------------
+:func:`group_episodes`
+    One call over a complete, finite set of reports (the CLI). Episodes still
+    open when the reports run out are emitted at the end.
+:class:`EpisodeTracker`
+    The same rules, with the open episodes kept between calls. The shared
+    runner and the live loop hand the detector one window at a time; an
+    incursion that spans a window edge must stay one episode, so the adapter
+    feeds every window to one tracker. ``close_silent(now)`` applies the
+    silence rule against the stream's clock, and ``flush()`` emits whatever is
+    still open at the end of the stream.
+
+Both produce identical Detections for the same reports: ``group_episodes`` is
+a tracker fed everything, then flushed.
+
 Failure causes
 --------------
 ValueError
@@ -69,7 +85,8 @@ ValueError
 
 Notes
 -----
-Pure: no I/O, and the only state lives inside one call. Aircraft are matched
+No I/O. :func:`group_episodes` keeps its state inside one call; an
+:class:`EpisodeTracker` keeps it until flushed. Aircraft are matched
 case-insensitively on ``icao24``.
 """
 from __future__ import annotations
@@ -87,55 +104,109 @@ _SEVERITY_RANK = {Severity.INFO: 0, Severity.LOW: 1, Severity.MEDIUM: 2, Severit
 
 @dataclass
 class _OpenEpisode:
-    """Working state for one (aircraft, zone) episode inside a single call."""
+    """Working state for one open (aircraft, zone) episode."""
 
     hits: list[tuple[datetime, Detection]] = field(default_factory=list)
     clear_streak: int = 0
 
 
-def group_episodes(reports: Iterable[ReportResult], cfg: Config) -> Iterator[Detection]:
-    """Group time-ordered reports into one merged Detection per episode."""
-    clears_to_close = int(cfg["dedup"]["clear_observations_to_close"])
-    max_gap_sec = float(cfg["sampling"]["max_gap_sec"])
+class EpisodeTracker:
+    """Open episodes that survive between calls, for windowed and live input.
 
-    open_by_aircraft: dict[str, dict[str, _OpenEpisode]] = {}
-    last_seen: dict[str, datetime] = {}
+    ``feed`` takes reports that are time-ordered per aircraft, across calls as
+    well as within one, and returns the episodes those reports closed.
+    ``close_silent(now)`` closes episodes of aircraft that have sent nothing for
+    more than ``sampling.max_gap_sec`` before ``now`` (the stream's clock), and
+    forgets those aircraft so a long-running tracker does not grow without
+    bound. ``flush`` closes everything still open. Each method returns a list,
+    so state is never left half-updated by a partly consumed iterator.
+    """
 
-    for report in reports:
-        aircraft = report.icao24.strip().lower()
-        previous = last_seen.get(aircraft)
-        if previous is not None and report.timestamp < previous:
-            raise ValueError(
-                f"reports for {aircraft} are not time-ordered: "
-                f"{report.timestamp.isoformat()} came after {previous.isoformat()}"
-            )
-        last_seen[aircraft] = report.timestamp
-        episodes = open_by_aircraft.setdefault(aircraft, {})
+    def __init__(self, cfg: Config) -> None:
+        self._clears_to_close = int(cfg["dedup"]["clear_observations_to_close"])
+        self._max_gap_sec = float(cfg["sampling"]["max_gap_sec"])
+        self._open: dict[str, dict[str, _OpenEpisode]] = {}
+        self._last_seen: dict[str, datetime] = {}
 
-        # Silence long enough to break the track closes everything open.
-        if previous is not None and (report.timestamp - previous).total_seconds() > max_gap_sec:
+    @property
+    def open_count(self) -> int:
+        """How many (aircraft, zone) episodes are open right now."""
+        return sum(len(episodes) for episodes in self._open.values())
+
+    def feed(self, reports: Iterable[ReportResult]) -> list[Detection]:
+        """Apply the open / continue / close rules to ``reports``."""
+        closed: list[Detection] = []
+        for report in reports:
+            aircraft = report.icao24.strip().lower()
+            previous = self._last_seen.get(aircraft)
+            if previous is not None and report.timestamp < previous:
+                raise ValueError(
+                    f"reports for {aircraft} are not time-ordered: "
+                    f"{report.timestamp.isoformat()} came after {previous.isoformat()}"
+                )
+            self._last_seen[aircraft] = report.timestamp
+            episodes = self._open.setdefault(aircraft, {})
+
+            # Silence long enough to break the track closes everything open.
+            gap = (report.timestamp - previous).total_seconds() if previous is not None else 0.0
+            if gap > self._max_gap_sec:
+                for zone_id in list(episodes):
+                    closed.append(_merge(episodes.pop(zone_id).hits))
+
+            fired = {_zone_id(det): det for det in report.fired}
+
+            # Open episodes this report did not fire for count toward closing.
             for zone_id in list(episodes):
-                yield _merge(episodes.pop(zone_id).hits)
+                if zone_id in fired:
+                    continue
+                episode = episodes[zone_id]
+                episode.clear_streak += 1
+                if episode.clear_streak >= self._clears_to_close:
+                    closed.append(_merge(episodes.pop(zone_id).hits))
 
-        fired = {_zone_id(det): det for det in report.fired}
+            for zone_id, det in fired.items():
+                episode = episodes.setdefault(zone_id, _OpenEpisode())
+                episode.hits.append((report.timestamp, det))
+                episode.clear_streak = 0
+        return closed
 
-        # Open episodes this report did not fire for count toward closing.
-        for zone_id in list(episodes):
-            if zone_id in fired:
+    def close_silent(self, now: datetime) -> list[Detection]:
+        """Close episodes of aircraft silent for more than ``max_gap_sec`` before ``now``.
+
+        Safe to call at any time: an aircraft silent that long would have its
+        episodes closed by the gap rule on its next report anyway, so closing
+        them now changes when they are emitted, never what they contain.
+        """
+        closed: list[Detection] = []
+        for aircraft in list(self._last_seen):
+            if (now - self._last_seen[aircraft]).total_seconds() <= self._max_gap_sec:
                 continue
-            episode = episodes[zone_id]
-            episode.clear_streak += 1
-            if episode.clear_streak >= clears_to_close:
-                yield _merge(episodes.pop(zone_id).hits)
+            for episode in self._open.pop(aircraft, {}).values():
+                closed.append(_merge(episode.hits))
+            del self._last_seen[aircraft]
+        return closed
 
-        for zone_id, det in fired.items():
-            episode = episodes.setdefault(zone_id, _OpenEpisode())
-            episode.hits.append((report.timestamp, det))
-            episode.clear_streak = 0
+    def flush(self) -> list[Detection]:
+        """Close and return every open episode (end of stream)."""
+        closed = [
+            _merge(episode.hits)
+            for episodes in self._open.values()
+            for episode in episodes.values()
+        ]
+        self._open.clear()
+        return closed
 
-    for episodes in open_by_aircraft.values():
-        for episode in episodes.values():
-            yield _merge(episode.hits)
+
+def group_episodes(reports: Iterable[ReportResult], cfg: Config) -> Iterator[Detection]:
+    """Group time-ordered reports into one merged Detection per episode.
+
+    A tracker fed one report at a time (so each episode is yielded as soon as
+    it closes), then flushed at the end of the reports.
+    """
+    tracker = EpisodeTracker(cfg)
+    for report in reports:
+        yield from tracker.feed((report,))
+    yield from tracker.flush()
 
 
 def _zone_id(det: Detection) -> str:

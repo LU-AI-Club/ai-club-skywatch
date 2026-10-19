@@ -55,13 +55,13 @@ Each stage records an ExitReason when a state leaves without a detection.
 | E | logic/activation.py | is_active(zone, ts) -> ActivationResult |
 | F | logic/context.py | gather_signals(state, cfg) -> list[ContextSignal] |
 | G | logic/scoring.py | build_detection(...) -> Detection |
-| Lead | logic/episodes.py | group_episodes(reports, cfg) -> Iterator[Detection] |
+| Lead | logic/episodes.py | group_episodes(reports, cfg) -> Iterator[Detection]; EpisodeTracker(cfg) for windowed input |
 | H | cli.py, fixtures/ | python -m air.detectors.no_fly_zone run --input x --out y |
 | I | collect/collector.py | collect(url, out_dir) -> None |
 | J | dashboard/app.py | streamlit run air/detectors/no_fly_zone/dashboard/app.py |
 | Lead | logic/detector.py | run(states, zones, cfg, *, exit_counts, per_report) — wiring only |
 | Lead | emit.py | to_platform_detection(detection) -> contracts.Detection |
-| Lead | adapter.py | NoFlyZoneDetector.detect_observations(list[AdsbObservation]) -> list[contracts.Detection] |
+| Lead | adapter.py | NoFlyZoneDetector.detect_observations(list[AdsbObservation]) -> list[contracts.Detection]; flush() at end of stream |
 | Lead | `__init__.py` | build_detector(config_path=None, airspace_path=None) -> NoFlyZoneDetector |
 
 ## Input data
@@ -71,6 +71,14 @@ checks this):
   normalizer `air/normalizers/adsb_csv.py` yields `AdsbObservation`; `adapter.py`
   converts each to `AircraftState`. This is the route the other detectors use.
 - **Our CLI**: `air/normalizers/no_fly_zone_adsb.py` builds `AircraftState` directly.
+
+The shared runner hands NFZ one time window per call, and an incursion can span
+a window edge. `NoFlyZoneDetector` keeps open episodes between calls (one
+`EpisodeTracker` for its whole life), returns only episodes that closed, skips
+reports it has already passed (sliding-window overlap), and emits what is still
+open on `flush()`. The runner and `air.windowing.run_detectors` call `flush()`
+after the last window. Never build a fresh tracker per window: that splits one
+crossing into two detections.
 
 If NFZ needs a new input field, add it to `AdsbObservation` and the shared normalizer
 (see `air/normalizers/COLUMN_MAP.md`), then map it in `adapter.py`. Don't only add it

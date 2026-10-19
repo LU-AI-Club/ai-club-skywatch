@@ -55,7 +55,9 @@ detectors, through `build_detector()` and `adapter.py`:
 python scripts/replay_csv.py --detector no_fly_zone --out out/replay.jsonl
 ```
 
-Both routes give identical detections on the full recorded hour.
+Both routes give identical detections on the full recorded hour, at any
+window size: open incursion episodes carry over from one window to the next,
+and the runner flushes the detector after the last window.
 
 Exit codes: `0` everything ran, `1` some stage is still a stub, `2` a real
 error (bad file, bad config). Alongside `detections.jsonl` the CLI writes
