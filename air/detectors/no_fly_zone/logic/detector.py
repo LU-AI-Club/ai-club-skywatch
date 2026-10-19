@@ -106,9 +106,31 @@ def run(
             yield from evaluate(state)
         return
 
-    ordered = sorted(states, key=lambda s: (s.icao24.strip().lower(), s.timestamp))
-    reports = (ReportResult(s.icao24, s.timestamp, evaluate(s)) for s in ordered)
+    reports = evaluate_reports(states, zones, cfg, exit_counts=counts)
     yield from episodes.group_episodes(reports, cfg)
+
+
+def evaluate_reports(
+    states: Iterable[AircraftState],
+    zones: list[AirspaceZone],
+    cfg: Config,
+    *,
+    exit_counts: Counter[ExitReason] | None = None,
+) -> Iterator[ReportResult]:
+    """Every stage except episode grouping, as the input episodes need.
+
+    Sorts ``states`` by aircraft and time, then yields one :class:`ReportResult`
+    per state. :func:`run` passes these to ``episodes.group_episodes``; the
+    adapter passes each runner window's results to one long-lived
+    ``episodes.EpisodeTracker`` so episodes survive window edges.
+    """
+    counts: Counter[ExitReason] = exit_counts if exit_counts is not None else Counter()
+    zones_by_id = {zone.zone_id: zone for zone in zones}
+    drop_on_ground = bool(cfg.raw.get("filters", {}).get("drop_on_ground", True))
+    ordered = sorted(states, key=lambda s: (s.icao24.strip().lower(), s.timestamp))
+    for state in ordered:
+        fired = _evaluate(state, zones, zones_by_id, cfg, counts, drop_on_ground)
+        yield ReportResult(state.icao24, state.timestamp, fired)
 
 
 def _evaluate(

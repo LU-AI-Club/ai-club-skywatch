@@ -18,7 +18,7 @@ from nfz_support import AIRSPACE_FILE, FIXTURES
 from air.detectors.no_fly_zone.config import Config
 from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
 from air.detectors.no_fly_zone.logic.detector import run
-from air.detectors.no_fly_zone.logic.episodes import group_episodes
+from air.detectors.no_fly_zone.logic.episodes import EpisodeTracker, group_episodes
 from air.detectors.no_fly_zone.types import Detection, ReportResult, Severity
 from air.normalizers.no_fly_zone_adsb import load_states
 
@@ -184,6 +184,56 @@ def test_out_of_order_reports_are_refused(cfg: Config) -> None:
 
 def test_no_reports_no_episodes(cfg: Config) -> None:
     assert list(group_episodes([], cfg)) == []
+
+
+# ------------------------------------------------- EpisodeTracker (windowed)
+
+def test_tracker_fed_in_pieces_matches_one_call(cfg: Config) -> None:
+    """Splitting the reports anywhere must not change the episodes."""
+    reports = [_hit(0), _hit(5), _clear(10), _hit(15), _clear(20), _clear(25), _hit(70)]
+    whole = list(group_episodes(reports, cfg))
+    for cut in range(len(reports) + 1):
+        tracker = EpisodeTracker(cfg)
+        pieces = tracker.feed(reports[:cut]) + tracker.feed(reports[cut:]) + tracker.flush()
+        for key in ("report_count", "episode_start", "episode_end"):
+            assert [e.extras[key] for e in pieces] == [e.extras[key] for e in whole]
+
+
+def test_tracker_holds_an_open_episode_between_calls(cfg: Config) -> None:
+    tracker = EpisodeTracker(cfg)
+    assert tracker.feed([_hit(0)]) == []
+    assert tracker.feed([_hit(5)]) == []
+    assert tracker.open_count == 1
+    [episode] = tracker.flush()
+    assert episode.extras["report_count"] == 2
+    assert tracker.open_count == 0
+
+
+def test_tracker_close_silent_uses_the_stream_clock(cfg: Config) -> None:
+    gap = float(cfg["sampling"]["max_gap_sec"])
+    tracker = EpisodeTracker(cfg)
+    tracker.feed([_hit(0)])
+    assert tracker.close_silent(T0 + timedelta(seconds=gap)) == []  # exactly the gap: still open
+    [episode] = tracker.close_silent(T0 + timedelta(seconds=gap + 1))
+    assert episode.extras["report_count"] == 1
+    assert tracker.open_count == 0
+
+
+def test_tracker_close_silent_forgets_quiet_aircraft(cfg: Config) -> None:
+    """A tracker that runs for days must not keep every aircraft it ever saw."""
+    gap = float(cfg["sampling"]["max_gap_sec"])
+    tracker = EpisodeTracker(cfg)
+    tracker.feed([_clear(0, icao="aaaaaa"), _clear(0, icao="bbbbbb")])
+    tracker.close_silent(T0 + timedelta(seconds=gap + 1))
+    # Forgotten, so an older report for that aircraft is no longer "out of order".
+    assert tracker.feed([_clear(-5, icao="aaaaaa")]) == []
+
+
+def test_tracker_still_refuses_out_of_order_reports_across_calls(cfg: Config) -> None:
+    tracker = EpisodeTracker(cfg)
+    tracker.feed([_hit(10)])
+    with pytest.raises(ValueError, match="not time-ordered"):
+        tracker.feed([_hit(5)])
 
 
 # ------------------------------------------------- real data: two crossings

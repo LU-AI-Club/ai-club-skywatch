@@ -13,7 +13,7 @@ import json
 import subprocess
 import sys
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
@@ -26,7 +26,7 @@ from air.detectors.no_fly_zone.adapter import NoFlyZoneDetector, observation_to_
 from air.detectors.no_fly_zone.emit import to_platform_detection
 from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
 from air.detectors.no_fly_zone.logic.detector import run
-from air.detectors.no_fly_zone.types import ExitReason
+from air.detectors.no_fly_zone.types import AircraftState, ExitReason
 from air.models.observation import AdsbObservation
 from air.normalizers.no_fly_zone_adsb import load_states
 from contracts import DetectionContext
@@ -139,7 +139,11 @@ def test_package_import_stays_light() -> None:
 # ------------------------------------------------------------- behaviour
 
 def test_fires_inside_zone_and_emits_platform_detection(detector: NoFlyZoneDetector) -> None:
-    [detection] = detector.detect_observations([make_obs()])
+    # The incursion is still open when the window ends, so it comes out on flush.
+    assert detector.detect_observations([make_obs()]) == []
+    assert detector.open_episodes == 1
+    [detection] = detector.flush()
+    assert detector.open_episodes == 0
     assert detection.geospatial_context.risk_zone_ids == ["P-901"]
     assert detection.provenance.raw_source_ref == "test.csv:7"
     assert [e.entity_id for e in detection.entities_involved] == ["aircraft:a1b2c3"]
@@ -158,7 +162,8 @@ def test_outside_every_zone_does_not_fire(detector: NoFlyZoneDetector) -> None:
 
 def test_geometric_altitude_is_used_when_baro_is_blank(detector: NoFlyZoneDetector) -> None:
     """The case the old shared contract could not express: ab blank, ag present."""
-    assert len(detector.detect_observations([make_obs(altitude_ft=None)])) == 1
+    detector.detect_observations([make_obs(altitude_ft=None)])
+    assert len(detector.flush()) == 1
 
 
 def test_no_altitude_at_all_abstains(detector: NoFlyZoneDetector) -> None:
@@ -168,7 +173,17 @@ def test_no_altitude_at_all_abstains(detector: NoFlyZoneDetector) -> None:
 
 def test_detect_reads_observations_from_auxiliary_data(detector: NoFlyZoneDetector) -> None:
     context = DetectionContext(auxiliary_data={"observations": [make_obs()]})
+    assert detector.detect(context) == []
+    assert detector.open_episodes == 1
+
+
+def test_detect_flushes_when_the_caller_asks(detector: NoFlyZoneDetector) -> None:
+    """A one-shot SENTINEL call sets parameters['flush'] to get open episodes too."""
+    context = DetectionContext(
+        auxiliary_data={"observations": [make_obs()]}, parameters={"flush": True}
+    )
     assert len(detector.detect(context)) == 1
+    assert detector.open_episodes == 0
 
 
 # ------------------------------------------------------------- shared runner
@@ -213,7 +228,8 @@ def test_shared_path_matches_cli_path_on_fixture_track(detector: NoFlyZoneDetect
         )
         for row, state in zip(rows, cli_states, strict=True)
     ]
-    shared_side = [d.to_dict() for d in detector.detect_observations(observations)]
+    shared = detector.detect_observations(observations) + detector.flush()
+    shared_side = [d.to_dict() for d in shared]
 
     def comparable(payloads: list[dict[str, Any]]) -> list[str]:
         out = []
@@ -227,3 +243,129 @@ def test_shared_path_matches_cli_path_on_fixture_track(detector: NoFlyZoneDetect
 
     assert cli_side, "fixture track should produce detections"
     assert comparable(shared_side) == comparable(cli_side)
+
+
+# ------------------------------------------------- episodes across windows
+
+CROSSINGS_FILE = TRACKS_FILE.parent / "lynchburg_crossings.csv"
+
+
+def _comparable(detections: list[Any]) -> list[str]:
+    """Platform detections minus their random ids, sorted, for equality checks."""
+    out = []
+    for detection in detections:
+        payload = json.loads(json.dumps(detection.to_dict(), default=str))
+        payload.pop("detection_id")
+        for evidence in payload["evidence"]:
+            evidence.pop("evidence_id")
+        out.append(json.dumps(payload, sort_keys=True))
+    return sorted(out)
+
+
+def _as_observation(state: AircraftState) -> AdsbObservation:
+    """The shared-runner record for one row, built from NFZ's own loader."""
+    return AdsbObservation(
+        icao24=state.icao24, observed_at=state.timestamp,
+        latitude=state.lat, longitude=state.lon,
+        altitude_ft=state.alt_baro_ft, alt_geom_ft=state.alt_geom_ft,
+        ground_speed_kt=state.ground_speed_kt, track_deg=state.track_deg,
+        callsign=state.callsign, squawk=state.squawk,
+        emitter_category=state.emitter_category, nic=state.nic, nacp=state.nac_p,
+        on_ground=state.on_ground, source_row_id=state.source_row_id,
+    )
+
+
+def _cli_crossings(detector: NoFlyZoneDetector) -> list[str]:
+    cli = run(load_states(CROSSINGS_FILE), detector.zones, detector.cfg, exit_counts=Counter())
+    return _comparable([to_platform_detection(d) for d in cli])
+
+
+@pytest.mark.parametrize(("window_s", "step_s"), [(60, 60), (10, 10), (60, 20), (3600, 3600)])
+def test_windowed_route_matches_cli_at_any_window_size(window_s: int, step_s: int) -> None:
+    """The CI parity bug: PDT5877's 41 s crossing spans the 00:55:00 window edge.
+
+    Before episodes survived window edges, 60 s windows turned that one
+    crossing into two detections. Tumbling and sliding windows must now give
+    exactly what the CLI gives.
+    """
+    from air.windowing import iter_windows, run_detectors
+
+    detector = build_detector()
+    observations = [_as_observation(state) for state in load_states(CROSSINGS_FILE)]
+    windows = iter_windows(observations, window_s, step_s)
+    shared = list(run_detectors(windows, [detector], dedup=step_s < window_s))
+
+    expected = _cli_crossings(detector)
+    assert len(expected) == 2
+    assert _comparable(shared) == expected
+    assert detector.open_episodes == 0
+
+
+def test_episode_open_at_a_window_edge_is_held_not_emitted(detector: NoFlyZoneDetector) -> None:
+    first = make_obs(observed_at=_TS)
+    second = make_obs(observed_at=_TS + timedelta(seconds=5), source_row_id="test.csv:8")
+    assert detector.detect_observations([first]) == []
+    assert detector.detect_observations([second]) == []
+    [episode] = detector.flush()
+    assert episode.metadata["extras"]["report_count"] == 2
+    assert episode.temporal_bounds.end_time == _TS + timedelta(seconds=5)
+
+
+def test_silence_closes_an_episode_in_a_later_window(detector: NoFlyZoneDetector) -> None:
+    """The aircraft stops reporting; another aircraft moves the stream clock on."""
+    max_gap = float(detector.cfg["sampling"]["max_gap_sec"])
+    assert detector.detect_observations([make_obs()]) == []
+    later = make_obs(
+        icao24="ffffff", latitude=36.0, longitude=-81.0, source_row_id="test.csv:9",
+        observed_at=_TS + timedelta(seconds=max_gap + 1),
+    )
+    [closed] = detector.detect_observations([later])
+    assert [e.entity_id for e in closed.entities_involved] == ["aircraft:a1b2c3"]
+    assert detector.open_episodes == 0
+
+
+def test_two_clear_reports_close_an_episode_in_a_later_window(detector: NoFlyZoneDetector) -> None:
+    assert detector.detect_observations([make_obs()]) == []
+    clear = [
+        make_obs(latitude=36.0, longitude=-81.0, observed_at=_TS + timedelta(seconds=s),
+                 source_row_id=f"test.csv:{10 + s}")
+        for s in (1, 2)
+    ]
+    assert len(detector.detect_observations(clear)) == 1
+    assert detector.open_episodes == 0
+
+
+def test_overlapping_windows_never_feed_a_report_twice(detector: NoFlyZoneDetector) -> None:
+    obs = make_obs()
+    detector.detect_observations([obs])
+    detector.detect_observations([obs])
+    assert detector.skipped_reports == 1
+    [episode] = detector.flush()
+    assert episode.metadata["extras"]["report_count"] == 1
+
+
+def test_replay_runner_flushes_nfz_after_the_last_window(tmp_path: Path) -> None:
+    """scripts/replay_csv.py emits episodes still open when the data ends."""
+    rows = CROSSINGS_FILE.read_text().splitlines()
+    header, body = rows[0], rows[1:]
+    # Cut the file right after PDT5877's last firing report, so its episode is
+    # still open when the stream ends and only flush() can emit it.
+    cut = next(i for i, line in enumerate(body) if "00:55:27" in line) + 1
+    truncated = tmp_path / "cut.csv"
+    truncated.write_text("\n".join([header, *body[:cut]]) + "\n")
+
+    out = tmp_path / "replay.jsonl"
+    replay = _load_replay_script()
+    args = [str(truncated), "--detector", "no_fly_zone", "--out", str(out), "--quiet"]
+    assert replay.main(args) == 0
+    lines = out.read_text().splitlines()
+    entities = sorted(json.loads(line)["entities_involved"][0]["entity_id"] for line in lines)
+    assert entities == ["aircraft:a89076", "aircraft:ac8438"]
+
+
+def test_run_detectors_flushes_after_the_last_window(detector: NoFlyZoneDetector) -> None:
+    """air.windowing.run_detectors, the live-loop helper, flushes like the runner."""
+    from air.windowing import run_detectors
+
+    [episode] = list(run_detectors([[make_obs()]], [detector]))
+    assert [e.entity_id for e in episode.entities_involved] == ["aircraft:a1b2c3"]
