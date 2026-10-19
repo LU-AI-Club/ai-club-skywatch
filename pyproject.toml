@@ -11,11 +11,8 @@ dependencies = [
     # Deliberately tiny. Detector logic runs on plain Python + dataclasses so
     # students can work with no database and no services. Add libraries only
     # when a lane genuinely needs one (e.g. pandas/pyarrow for EDA).
-    #
-    # pyyaml is a real runtime dependency: no_fly_zone/config.py imports it at
-    # module level, so without it that package cannot even be imported and the
-    # whole test suite aborts during collection. It is pure Python and ~170 KB.
-    "pyyaml>=6.0",
+    "pyyaml>=6.0",  # configs/detectors/*.yaml -> frozen config dataclasses
+    "pandas>=2.0",  # air/normalizers reads recorded ADS-B CSVs
 ]
 
 [project.optional-dependencies]

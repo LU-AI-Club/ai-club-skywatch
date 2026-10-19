@@ -1,0 +1,7 @@
+start_hex,end_hex,country
+A00000,AFFFFF,United States
+C00000,C3FFFF,Canada
+400000,43FFFF,United Kingdom
+3C0000,3FFFFF,Germany
+490000,497FFF,Portugal
+E00000,E3FFFF,Argentina
