@@ -47,6 +47,12 @@ COL_NIC = "n"                # Navigation Integrity Category
 COL_NACP = "np"             # Navigation Accuracy Category - Position
 COL_SQUAWK = "sq"            # 4-digit transponder code
 COL_CALLSIGN = "f"           # flight id / callsign (padded with spaces in ADS-B)
+COL_ALT_GEOM = "ag"          # geometric (GNSS) altitude, feet
+COL_ON_GROUND = "og"         # on-ground flag; readsb writes "True"/"False"
+COL_EMITTER_CATEGORY = "c"   # ADS-B emitter category, e.g. "A3"
+
+_TRUE_TEXT = frozenset({"true", "1"})
+_FALSE_TEXT = frozenset({"false", "0"})
 
 
 # --- Small, forgiving field parsers ------------------------------------------
@@ -84,8 +90,31 @@ def _opt_str(value: Any) -> str | None:
     return text or None
 
 
+def _opt_bool(value: Any) -> bool | None:
+    """Parse an optional flag, case-insensitively. Empty/junk -> None.
+
+    readsb writes ``True``/``False`` (capitalized); ``1``/``0`` are accepted
+    too. Anything else abstains as ``None`` ("not reported") rather than
+    guessing, so a detector can tell "airborne" from "unknown".
+    """
+    if isinstance(value, bool):
+        return value
+    text = _opt_str(value)
+    if text is None:
+        return None
+    lowered = text.lower()
+    if lowered in _TRUE_TEXT:
+        return True
+    if lowered in _FALSE_TEXT:
+        return False
+    return None
+
+
 def normalize_row(
-    row: Mapping[str, Any], *, receiver_id: str | None = None
+    row: Mapping[str, Any],
+    *,
+    receiver_id: str | None = None,
+    source_row_id: str | None = None,
 ) -> AdsbObservation | None:
     """Map one raw CSV row to an ``AdsbObservation``, or ``None`` to skip it.
 
@@ -123,6 +152,10 @@ def normalize_row(
             squawk=_opt_str(row.get(COL_SQUAWK)),
             callsign=_opt_str(row.get(COL_CALLSIGN)),
             receiver_id=receiver_id,
+            alt_geom_ft=_opt_float(row.get(COL_ALT_GEOM)),
+            on_ground=_opt_bool(row.get(COL_ON_GROUND)),
+            emitter_category=_opt_str(row.get(COL_EMITTER_CATEGORY)),
+            source_row_id=source_row_id,
         )
     except (ValueError, TypeError):
         # Bad timestamp, out-of-range coordinate, etc. Messy external data:
@@ -151,12 +184,19 @@ def iter_observations(
     collect ``total_rows`` / ``normalized`` / ``skipped`` for a one-line summary
     (e.g. ``normalized 279207, skipped 5269``). Ordering/windowing is the
     runner's responsibility — this yields rows as they appear in the file.
+
+    Each observation's ``source_row_id`` is ``"<path>:<n>"``, where ``n`` is the
+    1-based data-row number (header excluded), so a detection can be traced
+    back to the exact line it came from.
     """
-    with open(path, newline="", encoding="utf-8") as fh:
-        for row in csv.DictReader(fh):
+    source = Path(path)
+    with open(source, newline="", encoding="utf-8") as fh:
+        for row_number, row in enumerate(csv.DictReader(fh), start=1):
             if stats is not None:
                 stats.total_rows += 1
-            obs = normalize_row(row, receiver_id=receiver_id)
+            obs = normalize_row(
+                row, receiver_id=receiver_id, source_row_id=f"{source}:{row_number}"
+            )
             if obs is None:
                 if stats is not None:
                     stats.skipped += 1

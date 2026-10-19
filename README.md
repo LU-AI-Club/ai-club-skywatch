@@ -23,12 +23,41 @@ python -m venv .venv
 # macOS/Linux: 
 source .venv/bin/activate
 
-# Install libraries
-pip install ".[dev]"
+# Install libraries. The -e matters: without it pip copies the code into
+# site-packages, and that frozen copy shadows your edits from any directory
+# other than the repo root.
+pip install -e ".[dev]"
 
 
 pytest -q
 ```
+
+Requires **Python 3.11 or newer** (`python3 --version`). Activate the venv again
+in every new terminal; your prompt shows `(.venv)` when it is active.
+
+### Dependencies by team
+
+`.[dev]` is the baseline for everyone. Some detectors need more; install your
+team's line instead of the plain one above:
+
+| Team | Install command |
+| --- | --- |
+| Spoofing, Proximity | `pip install -e ".[dev]"` |
+| No-fly-zone | `pip install -e ".[dev,nfz,nfz-dashboard]"` |
+| Notebooks / EDA | add `eda`, e.g. `pip install -e ".[dev,eda]"` |
+
+What each group installs (defined in `pyproject.toml`):
+
+| Group | Packages | Used for |
+| --- | --- | --- |
+| *(always)* | pyyaml | reading detector YAML config |
+| `dev` | pytest, ruff, mypy, types-PyYAML | tests, lint, type checks |
+| `nfz` | shapely, h3, pyarrow | zone polygons, the H3 coarse filter, Parquet files |
+| `nfz-dashboard` | streamlit, pandas, pyarrow | the no-fly-zone Streamlit dashboard |
+| `eda` | pandas, pyarrow, matplotlib | notebooks |
+
+No-fly-zone: `.[dev]` alone is **not** enough. The detector imports shapely and
+h3, so without `nfz` its tests and CLI fail on import.
 
 Everything green? You're set. Now read, in order:
 
