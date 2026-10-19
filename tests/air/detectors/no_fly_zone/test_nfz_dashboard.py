@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from nfz_support import AIRSPACE_FILE, TRACKS_FILE
 
-from ..dashboard import app
-from .conftest import AIRSPACE_FILE, TRACKS_FILE
+from air.detectors.no_fly_zone.dashboard import app
 
 APP_FILE = Path(app.__file__)
 

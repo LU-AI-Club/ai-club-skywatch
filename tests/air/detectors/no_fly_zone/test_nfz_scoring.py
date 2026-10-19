@@ -3,9 +3,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from ..config import Config
-from ..logic.scoring import build_detection
-from ..types import (
+from nfz_support import make_state
+
+from air.detectors.no_fly_zone.config import Config
+from air.detectors.no_fly_zone.logic.scoring import build_detection
+from air.detectors.no_fly_zone.types import (
     Activation,
     ActivationResult,
     ActivationState,
@@ -17,7 +19,6 @@ from ..types import (
     VerticalResult,
     ZoneType,
 )
-from .conftest import make_state
 
 if TYPE_CHECKING:
     from shapely.geometry.base import BaseGeometry

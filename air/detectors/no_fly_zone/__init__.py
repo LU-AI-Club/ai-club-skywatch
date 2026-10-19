@@ -5,15 +5,15 @@ Air-domain adaptation of SENTINEL maritime detector M-005 (Risk Zone Entry).
 Layout (see AGENTS.md for the owner of each stream):
 
     types.py      LEAD-OWNED contracts. Do not edit without the lead.
-    config.py     loads config/config.yaml into a frozen Config.
-    ingest/       A adsb_loader     B airspace_loader
+    config.py     loads configs/detectors/no_fly_zone.yaml into a frozen Config.
+    ingest/       B airspace_loader  (A, the ADS-B loader, is air/normalizers/no_fly_zone_adsb.py)
     geo/          C zone_index + containment      D altitude
     logic/        E activation  F context  G scoring  + episodes.py, detector.py (lead)
     collect/      I collector - separate process, the only networked module
     dashboard/    J Streamlit read-only view
     cli.py        H harness: python -m air.detectors.no_fly_zone run ...
     adapter.py    LEAD-OWNED: the pipeline behind the shared BaseDetector API
-    fixtures/     hand-built tracks and airspace for tests
+    fixtures/     hand-built tracks and airspace (tests: tests/air/detectors/no_fly_zone/)
 
 Nothing is imported at module level on purpose. Importing a stage must never
 drag in shapely, h3 or streamlit for someone who only needs the types, so
@@ -34,7 +34,7 @@ def build_detector(
 ) -> NoFlyZoneDetector:
     """Build the detector the shared runner (``scripts/replay_csv.py``) calls.
 
-    Zero arguments is the runner's call: the packaged ``config/config.yaml``
+    Zero arguments is the runner's call: ``configs/detectors/no_fly_zone.yaml``
     and the airspace file it names. Pass either path to override, exactly like
     the CLI's ``--config`` and ``--airspace``. Config and zones are loaded once
     here, not per window.

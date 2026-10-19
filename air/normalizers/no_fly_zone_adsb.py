@@ -1,4 +1,4 @@
-"""Stream A - ADS-B state loader.
+"""Stream A - ADS-B state loader for the no-fly-zone detector.
 
 Reads aircraft observations into :class:`AircraftState`, choosing the format by
 file extension:
@@ -12,8 +12,8 @@ file extension:
     so a large file is never held in memory. The shared
     ``air.normalizers.adsb_csv`` reads the same file but drops ``ag``, ``og``
     and ``c``, which this detector needs (geometric altitude for MSL bands,
-    the on-ground filter), so the mapping lives here; ``COLUMN_MAP.md`` beside
-    that normalizer documents each column.
+    the on-ground filter), so this detector keeps its own mapping;
+    ``COLUMN_MAP.md`` in this folder documents each column.
 anything else
     A JSON array using AircraftState field names. Unknown keys are ignored.
 
@@ -60,7 +60,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ..types import AircraftState
+from air.detectors.no_fly_zone.types import AircraftState
 
 logger = logging.getLogger(__name__)
 

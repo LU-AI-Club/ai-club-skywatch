@@ -21,6 +21,7 @@ sampling:
                           # (logic/episodes.py); small planes may report every 5-10 s
 
 airspace:
+  # Relative to air/detectors/no_fly_zone/ (the CLI resolves it there), not to this file.
   fixture_path: fixtures/airspace/klyh-150nm.geojson
   source_asof: "2026-08-07"   # SUA publication cycle; update with the file
   include_types: [PROHIBITED, RESTRICTED, TFR, WARNING, ALERT, MOA]

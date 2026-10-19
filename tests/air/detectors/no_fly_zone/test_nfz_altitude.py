@@ -7,10 +7,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from nfz_support import make_state
 from shapely.geometry import Polygon
 
-from ..geo.altitude import vertical_check
-from ..types import (
+from air.detectors.no_fly_zone.geo.altitude import vertical_check
+from air.detectors.no_fly_zone.types import (
     Activation,
     AirspaceZone,
     AltitudeSource,
@@ -18,7 +19,6 @@ from ..types import (
     ExitReason,
     ZoneType,
 )
-from .conftest import make_state
 
 
 def make_zone(**overrides: Any) -> AirspaceZone:

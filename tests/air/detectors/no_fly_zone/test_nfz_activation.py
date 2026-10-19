@@ -11,8 +11,15 @@ from typing import Any
 import pytest
 from shapely.geometry import box
 
-from ..logic.activation import is_active
-from ..types import Activation, ActivationState, AirspaceZone, Datum, TimeWindow, ZoneType
+from air.detectors.no_fly_zone.logic.activation import is_active
+from air.detectors.no_fly_zone.types import (
+    Activation,
+    ActivationState,
+    AirspaceZone,
+    Datum,
+    TimeWindow,
+    ZoneType,
+)
 
 
 def make_tfr(**overrides: Any) -> AirspaceZone:

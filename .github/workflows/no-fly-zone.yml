@@ -1,6 +1,7 @@
 name: no-fly-zone
 
-# Scoped to air/detectors/no_fly_zone on purpose. Running ruff and mypy across
+# Scoped to the no-fly-zone files on purpose (the detector package, its ADS-B
+# loader in air/normalizers, its config and its tests). Running ruff and mypy across
 # the whole repo would fail on pre-existing findings in files this team does
 # not own, and a permanently red build is one nobody reads.
 
@@ -13,6 +14,9 @@ on:
       - "air/models/**"
       - "air/normalizers/**"
       - "scripts/replay_csv.py"
+      - "configs/detectors/no_fly_zone.yaml"
+      - "tests/air/detectors/no_fly_zone/**"
+      - "tests/air/normalizers/test_nfz_adsb.py"
       - "pyproject.toml"
       - ".github/workflows/no-fly-zone.yml"
   pull_request:
@@ -22,6 +26,9 @@ on:
       - "air/models/**"
       - "air/normalizers/**"
       - "scripts/replay_csv.py"
+      - "configs/detectors/no_fly_zone.yaml"
+      - "tests/air/detectors/no_fly_zone/**"
+      - "tests/air/normalizers/test_nfz_adsb.py"
       - "pyproject.toml"
       - ".github/workflows/no-fly-zone.yml"
 
@@ -39,13 +46,13 @@ jobs:
         run: pip install -e ".[dev,nfz,nfz-dashboard]"
 
       - name: ruff
-        run: ruff check air/detectors/no_fly_zone/
+        run: ruff check air/detectors/no_fly_zone/ air/normalizers/no_fly_zone_adsb.py tests/air/detectors/no_fly_zone/
 
       - name: mypy
-        run: mypy air/detectors/no_fly_zone/
+        run: mypy air/detectors/no_fly_zone/ air/normalizers/no_fly_zone_adsb.py tests/air/detectors/no_fly_zone/
 
       - name: pytest
-        run: pytest air/detectors/no_fly_zone/tests -q
+        run: pytest tests/air/detectors/no_fly_zone tests/air/normalizers/test_nfz_adsb.py -q
 
       - name: CLI runs end to end on the fixture
         # Every stage is implemented, so anything but exit 0 is a failure.

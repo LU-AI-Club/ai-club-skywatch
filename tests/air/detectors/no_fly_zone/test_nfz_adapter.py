@@ -19,18 +19,17 @@ from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
+from nfz_support import AIRSPACE_FILE, TRACKS_FILE
 
+from air.detectors.no_fly_zone import build_detector
+from air.detectors.no_fly_zone.adapter import NoFlyZoneDetector, observation_to_state
+from air.detectors.no_fly_zone.emit import to_platform_detection
+from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
+from air.detectors.no_fly_zone.logic.detector import run
+from air.detectors.no_fly_zone.types import ExitReason
 from air.models.observation import AdsbObservation
+from air.normalizers.no_fly_zone_adsb import load_states
 from contracts import DetectionContext
-
-from .. import build_detector
-from ..adapter import NoFlyZoneDetector, observation_to_state
-from ..emit import to_platform_detection
-from ..ingest.adsb_loader import load_states
-from ..ingest.airspace_loader import load_zones
-from ..logic.detector import run
-from ..types import ExitReason
-from .conftest import AIRSPACE_FILE, TRACKS_FILE
 
 pytest.importorskip("shapely")
 pytest.importorskip("h3")

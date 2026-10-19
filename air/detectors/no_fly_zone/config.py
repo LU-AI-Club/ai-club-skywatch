@@ -1,4 +1,4 @@
-"""Loads config/config.yaml once and hands out a frozen, validated object.
+"""Loads configs/detectors/no_fly_zone.yaml once and hands out a frozen, validated object.
 
 Modules receive `cfg` as a function argument; they never read the file
 themselves. That keeps every function pure and every test able to pass
@@ -14,7 +14,8 @@ import yaml
 
 from .types import Severity, ZoneType
 
-DEFAULT_PATH = Path(__file__).parent / "config" / "config.yaml"
+# Repo-root configs/, like every other detector (configs/detectors/README.md).
+DEFAULT_PATH = Path(__file__).resolve().parents[3] / "configs" / "detectors" / "no_fly_zone.yaml"
 
 
 @dataclass(frozen=True)

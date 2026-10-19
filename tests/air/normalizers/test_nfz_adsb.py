@@ -8,8 +8,21 @@ from typing import Any
 
 import pytest  # type: ignore[import-not-found]
 
-from ..ingest.adsb_loader import load_states
-from .conftest import TRACKS_FILE
+from air.detectors import no_fly_zone
+from air.normalizers.no_fly_zone_adsb import load_states
+
+# Self-contained on purpose: this file sits beside the shared normalizer tests,
+# outside tests/air/detectors/no_fly_zone/, so that folder's conftest does not
+# reach it.
+FIXTURES = Path(no_fly_zone.__file__).resolve().parent / "fixtures"
+TRACKS_FILE = FIXTURES / "tracks" / "klyh_mixed.json"
+
+
+@pytest.fixture
+def raw_tracks() -> list[dict[str, Any]]:
+    """The five fixture rows as plain dicts, annotations included."""
+    rows: list[dict[str, Any]] = json.loads(TRACKS_FILE.read_text())
+    return rows
 
 
 def write_rows(tmp_path: Path, rows: list[Any]) -> Path:

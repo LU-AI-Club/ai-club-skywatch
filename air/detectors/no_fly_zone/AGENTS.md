@@ -9,7 +9,7 @@ Air-domain adaptation of SENTINEL maritime detector M-005 Risk Zone Entry.
 Full design: NoFlyZoneDetector_Design_and_Build_Plan.docx (ask the user for it if needed).
 
 ## Hard rules
-- `types.py` and `config/` are LEAD-OWNED contracts. Do not change them unless the user
+- `types.py` and `configs/detectors/no_fly_zone.yaml` are LEAD-OWNED contracts. Do not change them unless the user
   explicitly asks. If a module seems to need a contract change, stop and say so.
 - Every module imports only from `no_fly_zone.types` and `no_fly_zone.config`, never from
   another module. Duplicate small helpers rather than cross-import.
@@ -19,7 +19,7 @@ Full design: NoFlyZoneDetector_Design_and_Build_Plan.docx (ask the user for it i
   `contracts` out of every other module is exactly why those two files exist.
 - Pure functions: no file reads or network at import time, no globals. Config is passed
   in as `cfg`, never loaded inside a module.
-- No constants inline. Tunable numbers go in `config/config.yaml`.
+- No constants inline. Tunable numbers go in `configs/detectors/no_fly_zone.yaml`.
 - Functions that can fail return a result object with a reason, never bare None.
 - Type hints on every public signature. Must pass `mypy` and `ruff`.
 - Use relative imports (`from ..types import ...`). A local `types.py` shadows the stdlib
@@ -47,7 +47,7 @@ Each stage records an ExitReason when a state leaves without a detection.
 ## Module map and signatures
 | Stream | File | Signature |
 |---|---|---|
-| A | ingest/adsb_loader.py | load_states(path) -> Iterator[AircraftState] |
+| A | air/normalizers/no_fly_zone_adsb.py | load_states(path) -> Iterator[AircraftState] |
 | B | ingest/airspace_loader.py | load_zones(path) -> list[AirspaceZone] |
 | C | geo/zone_index.py | candidate_zone_ids(state, zones, cfg) -> tuple[str, ...] |
 | C | geo/containment.py | check_containment(state, zones, cfg) -> ContainmentResult |
@@ -65,18 +65,18 @@ Each stage records an ExitReason when a state leaves without a detection.
 | Lead | `__init__.py` | build_detector(config_path=None, airspace_path=None) -> NoFlyZoneDetector |
 
 ## Input data
-Two routes in, one pipeline. They must give identical detections (test_adapter.py
+Two routes in, one pipeline. They must give identical detections (test_nfz_adapter.py
 checks this):
 - **Shared runner** (`scripts/replay_csv.py`, later the live loop): the shared
   normalizer `air/normalizers/adsb_csv.py` yields `AdsbObservation`; `adapter.py`
   converts each to `AircraftState`. This is the route the other detectors use.
-- **Our CLI**: `ingest/adsb_loader.py` builds `AircraftState` directly.
+- **Our CLI**: `air/normalizers/no_fly_zone_adsb.py` builds `AircraftState` directly.
 
 If NFZ needs a new input field, add it to `AdsbObservation` and the shared normalizer
 (see `air/normalizers/COLUMN_MAP.md`), then map it in `adapter.py`. Don't only add it
 to our loader, or the two routes drift apart.
 
-`ingest/adsb_loader.py` reads JSON (AircraftState field names) or readsb/tar1090 CSV
+`air/normalizers/no_fly_zone_adsb.py` reads JSON (AircraftState field names) or readsb/tar1090 CSV
 such as `data/lynchburg_adsb.csv`. CSV columns used: h=icao hex, timestamp=UTC,
 la/lo=lat/lon, ab=alt_baro ft, ag=alt_geom ft, gs=ground speed, tr=track, f=callsign,
 sq=squawk, c=emitter category, n=NIC, np=NACp, og=on_ground. The loader's docstring is

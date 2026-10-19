@@ -17,7 +17,7 @@ repo root:
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[dev,nfz,nfz-dashboard]"
-pytest air/detectors/no_fly_zone/tests -q
+pytest tests/air/detectors/no_fly_zone tests/air/normalizers/test_nfz_adsb.py -q
 ```
 
 | Group | Packages | Used by |
@@ -90,10 +90,8 @@ N90508 clipping the edge at ~3,100 ft.
 no_fly_zone/
 ├── types.py              LEAD-OWNED contracts. Do not edit without the lead.
 ├── adapter.py            LEAD-OWNED. Shared-runner entry: AdsbObservation -> pipeline
-├── config.py             loads config/config.yaml into a frozen Config
-├── config/config.yaml    LEAD-OWNED. Every tunable number lives here.
+├── config.py             loads the config below into a frozen Config
 ├── ingest/
-│   ├── adsb_loader.py        A  load_states(path) -> Iterator[AircraftState]
 │   └── airspace_loader.py    B  load_zones(path) -> list[AirspaceZone]
 ├── geo/
 │   ├── zone_index.py         C  candidate_zone_ids(state, zones, cfg)
@@ -109,8 +107,16 @@ no_fly_zone/
 ├── dashboard/app.py          J  Streamlit view (see Status for the command)
 ├── cli.py                    H  the harness (implemented)
 ├── emit.py                LEAD  types.Detection -> contracts.Detection (implemented)
-├── fixtures/                    hand-built zones and tracks — see its README
-└── tests/                       one file per stream, two tests each
+└── fixtures/                    hand-built zones and tracks — see its README
+```
+
+Outside this folder, following the repo-wide layout in `docs/CONTRIBUTING.md`:
+
+```
+configs/detectors/no_fly_zone.yaml        LEAD-OWNED. Every tunable number lives here.
+air/normalizers/no_fly_zone_adsb.py    A  load_states(path) -> Iterator[AircraftState]
+tests/air/detectors/no_fly_zone/          one test_nfz_*.py file per stream
+tests/air/normalizers/test_nfz_adsb.py    tests for stream A
 ```
 
 ## Pipeline
@@ -135,9 +141,11 @@ Three rules from AGENTS.md that catch people out:
    no tunable number is typed inline.
 3. **Failures return a result object with a reason, never a bare `None`.**
 
-Use relative imports (`from ..types import ...`). A local `types.py` shadows
-the stdlib module, and relative imports sidestep that regardless of where the
-package is rooted.
+Inside this package, use relative imports (`from ..types import ...`). A local
+`types.py` shadows the stdlib module, and relative imports sidestep that
+regardless of where the package is rooted. Code outside the package (the tests,
+the ADS-B loader in `air/normalizers/`) uses the full path instead:
+`from air.detectors.no_fly_zone.types import ...`.
 
 ## Definition of done, per stream
 
@@ -149,9 +157,9 @@ no I/O at import time.
 # one-time setup: see Setup above
 pip install -e ".[dev,nfz,nfz-dashboard]"
 
-pytest air/detectors/no_fly_zone/tests -q
-ruff check air/detectors/no_fly_zone/
-mypy air/detectors/no_fly_zone/
+pytest tests/air/detectors/no_fly_zone tests/air/normalizers/test_nfz_adsb.py -q
+ruff check air/detectors/no_fly_zone/ air/normalizers/no_fly_zone_adsb.py tests/air/detectors/no_fly_zone/
+mypy air/detectors/no_fly_zone/ air/normalizers/no_fly_zone_adsb.py tests/air/detectors/no_fly_zone/
 ```
 
 Delete the `@SKIP` mark on your two tests as you implement.
@@ -182,7 +190,7 @@ Two things to know:
   naming the key — emitting a detection with a fabricated timestamp would be
   worse than emitting none.
 
-`tests/test_emit.py` runs today and is the proof the shape is accepted by the
+`tests/air/detectors/no_fly_zone/test_nfz_emit.py` runs today and is the proof the shape is accepted by the
 contract's own validation. Keep it green.
 
 ## Still open for the lead

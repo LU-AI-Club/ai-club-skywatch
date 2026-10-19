@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import pytest
+from nfz_support import Config, make_state
 
-from ..logic.context import gather_signals
-from .conftest import Config, make_state
+from air.detectors.no_fly_zone.logic.context import gather_signals
 
 
 @pytest.mark.parametrize("squawk", ["7500", "7600", "7700", 7700])

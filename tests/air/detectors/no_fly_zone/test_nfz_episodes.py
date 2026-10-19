@@ -13,14 +13,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from nfz_support import AIRSPACE_FILE, FIXTURES
 
-from ..config import Config
-from ..ingest.adsb_loader import load_states
-from ..ingest.airspace_loader import load_zones
-from ..logic.detector import run
-from ..logic.episodes import group_episodes
-from ..types import Detection, ReportResult, Severity
-from .conftest import AIRSPACE_FILE, FIXTURES
+from air.detectors.no_fly_zone.config import Config
+from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
+from air.detectors.no_fly_zone.logic.detector import run
+from air.detectors.no_fly_zone.logic.episodes import group_episodes
+from air.detectors.no_fly_zone.types import Detection, ReportResult, Severity
+from air.normalizers.no_fly_zone_adsb import load_states
 
 CROSSINGS_FILE = FIXTURES / "tracks" / "lynchburg_crossings.csv"
 T0 = datetime(2026, 9, 1, 0, 54, 46, tzinfo=UTC)
@@ -213,7 +213,7 @@ def test_lynchburg_crossings_per_report_vs_episodes(cfg: Config) -> None:
 
 
 def test_episode_time_bounds_reach_the_platform_record(cfg: Config) -> None:
-    from ..emit import to_platform_detection
+    from air.detectors.no_fly_zone.emit import to_platform_detection
 
     zones = load_zones(AIRSPACE_FILE)
     jet = next(e for e in run(load_states(CROSSINGS_FILE), zones, cfg)
