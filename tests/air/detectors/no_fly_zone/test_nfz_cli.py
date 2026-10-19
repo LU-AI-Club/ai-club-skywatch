@@ -9,10 +9,10 @@ import json
 from pathlib import Path
 
 import pytest
+from nfz_support import AIRSPACE_FILE, TRACKS_FILE
 
-from ..cli import build_parser, main
-from ..geo import zone_index
-from .conftest import AIRSPACE_FILE, TRACKS_FILE
+from air.detectors.no_fly_zone.cli import build_parser, main
+from air.detectors.no_fly_zone.geo import zone_index
 
 
 def test_parser_accepts_the_documented_invocation() -> None:
