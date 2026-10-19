@@ -5,7 +5,7 @@ SENTINEL. Air-domain adaptation of maritime detector **M-005 Risk Zone Entry**:
 it flags aircraft inside a restricted *volume* — a horizontal polygon plus an
 altitude band — while that volume is live.
 
-The full rules live in [CLAUDE.md](CLAUDE.md). This file is the map.
+The full rules live in [AGENTS.md](AGENTS.md) (read by AI coding agents too). This file is the map.
 
 ## Setup
 
@@ -86,7 +86,7 @@ no_fly_zone/
 │   ├── scoring.py            G  build_detection(...)
 │   └── detector.py        LEAD  run(states, zones, cfg) — wiring only
 ├── collect/collector.py      I  collect(url, out_dir) — separate process
-├── dashboard/app.py          J  streamlit run dashboard/app.py
+├── dashboard/app.py          J  Streamlit view (see Status for the command)
 ├── cli.py                    H  the harness (implemented)
 ├── emit.py                LEAD  types.Detection -> contracts.Detection (implemented)
 ├── fixtures/                    hand-built zones and tracks — see its README
@@ -105,7 +105,7 @@ a quiet run can be explained instead of assumed broken.
 
 ## Working here
 
-Three rules from CLAUDE.md that catch people out:
+Three rules from AGENTS.md that catch people out:
 
 1. **Stages never import each other.** Every module imports only from
    `..types` and `..config`. Duplicate a small helper rather than cross-import.
@@ -166,7 +166,7 @@ contract's own validation. Keep it green.
 
 ## Still open for the lead
 
-CLAUDE.md's signature table now matches the code, including `cfg` on
+AGENTS.md's signature table now matches the code, including `cfg` on
 `check_containment` and `candidate_zone_ids`. Remaining: `types.py` uses
 `class X(str, Enum)`, which ruff flags as `UP042` (suggesting `StrEnum`). It is
 suppressed rather than changed — `str, Enum` keeps `ZoneType.TFR == "TFR"` true

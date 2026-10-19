@@ -20,6 +20,9 @@ data/generated/
 *.parquet
 *.csv.gz
 
+# Detector run output (python -m air.detectors.no_fly_zone run --out out/...)
+out/
+
 # OS / editor
 .DS_Store
 .idea/

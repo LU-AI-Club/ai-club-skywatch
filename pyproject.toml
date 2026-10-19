@@ -32,16 +32,17 @@ eda = [
     "pyarrow>=14.0",
     "matplotlib>=3.7",
 ]
-# No-fly-zone detector geometry. NOT needed to run the tests today: shapely is
-# imported only under TYPE_CHECKING and h3 is not imported yet. Streams B and C
-# need these once they start implementing; everyone else can skip them.
+# No-fly-zone detector geometry: shapely (zone polygons, containment), h3 (the
+# coarse filter) and pyarrow (Parquet). Required for every NFZ team member; the
+# pipeline imports them, so the NFZ tests and CLI fail without this extra.
 nfz = [
     "shapely>=2.0",
     "h3>=4.0",
     "pyarrow>=14.0",
 ]
 # No-fly-zone dashboard (stream J). Only for viewing results; the detector and
-# its tests run without it. pydeck ships with streamlit.
+# its tests run without it (the full-page render test skips). pydeck ships with
+# streamlit.
 nfz-dashboard = [
     "streamlit>=1.50",
     "pandas>=2.0",
@@ -78,7 +79,7 @@ select = ["E", "F", "I", "UP", "B", "C4", "SIM", "BLE"]
 # point: if the module or name disappears, the test file fails to collect and
 # the owner finds out immediately instead of at merge time.
 "air/detectors/no_fly_zone/tests/test_*.py" = ["F401"]
-# LEAD-OWNED files (CLAUDE.md: "do not change them unless the user explicitly
+# LEAD-OWNED files (AGENTS.md: "do not change them unless the user explicitly
 # asks"). These are suppressed, not fixed - raise them with the lead.
 #   UP042: `class X(str, Enum)` is deliberate. It keeps `ZoneType.TFR == "TFR"`
 #          true for JSON round-tripping; StrEnum would change `str()` output.
@@ -92,8 +93,8 @@ select = ["E", "F", "I", "UP", "B", "C4", "SIM", "BLE"]
 # with. Pinning 3.11 makes it reject numpy's 3.12+ stubs (numpy arrives via
 # shapely). Ruff's `target-version = "py311"` is what actually guards against
 # using syntax the floor version cannot parse.
-# false on purpose: the overrides below name modules (h3, shapely, streamlit)
-# that no stream imports yet. They are anticipatory, not stale.
+# false on purpose: some override modules (folium) are not imported anywhere,
+# and an unused override should not fail the check.
 warn_unused_configs = false
 disallow_untyped_defs = true
 warn_return_any = true
@@ -101,7 +102,9 @@ warn_return_any = true
 exclude = "^(contracts|build|\\.venv)/"
 
 [[tool.mypy.overrides]]
-module = ["h3.*", "shapely.*", "pyarrow.*", "streamlit.*", "folium.*", "pydeck.*"]
+# Third-party libraries without type stubs. pandas is here because no extra
+# installs pandas-stubs; without it mypy fails on the dashboard in CI.
+module = ["h3.*", "shapely.*", "pyarrow.*", "streamlit.*", "folium.*", "pydeck.*", "pandas.*"]
 ignore_missing_imports = true
 
 # numpy arrives via shapely. Its bundled stubs use 3.12+ `type` statements,

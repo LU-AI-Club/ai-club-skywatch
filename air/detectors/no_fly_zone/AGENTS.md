@@ -1,4 +1,8 @@
-# NoFlyZoneDetector — instructions for Claude Code
+# NoFlyZoneDetector — instructions for AI coding agents
+
+Read by any coding agent working in this folder (Codex, Cursor, Copilot, Gemini CLI,
+Claude Code via the CLAUDE.md beside this file). People: README.md is your map;
+these are the same rules, stated for an agent.
 
 SkyWatch (LU AI Club, Fall 2026, with Xenith Solutions) air-domain detector for SENTINEL.
 Air-domain adaptation of SENTINEL maritime detector M-005 Risk Zone Entry.
@@ -17,7 +21,8 @@ Full design: NoFlyZoneDetector_Design_and_Build_Plan.docx (ask the user for it i
 - No constants inline. Tunable numbers go in `config/config.yaml`.
 - Functions that can fail return a result object with a reason, never bare None.
 - Type hints on every public signature. Must pass `mypy` and `ruff`.
-- Always import as `from no_fly_zone.types import ...` (a local `types.py` shadows stdlib).
+- Use relative imports (`from ..types import ...`). A local `types.py` shadows the stdlib
+  module; relative imports sidestep that wherever the package is rooted.
 
 ## Scope decisions (settled)
 - Sampling: 1 Hz per aircraft from our own ADS-B receiver (dump1090/AirNav).
@@ -47,17 +52,18 @@ Each stage records an ExitReason when a state leaves without a detection.
 | E | logic/activation.py | is_active(zone, ts) -> ActivationResult |
 | F | logic/context.py | gather_signals(state, cfg) -> list[ContextSignal] |
 | G | logic/scoring.py | build_detection(...) -> Detection |
-| H | cli.py, fixtures/ | python -m no_fly_zone run --input x --out y |
+| H | cli.py, fixtures/ | python -m air.detectors.no_fly_zone run --input x --out y |
 | I | collect/collector.py | collect(url, out_dir) -> None |
-| J | dashboard/app.py | streamlit run dashboard/app.py |
+| J | dashboard/app.py | streamlit run air/detectors/no_fly_zone/dashboard/app.py |
 | Lead | logic/detector.py | wires stages only |
 | Lead | emit.py | to_platform_detection(detection) -> contracts.Detection |
 
 ## Input data
-Sample CSV uses abbreviated ADS-B Exchange-style columns: h=icao hex, la/lo=lat/lon,
-ab=alt_baro ft, ag=alt_geom ft, f=callsign, c=emitter category, sq=squawk,
-gs=ground speed, tr=track, nb/np/nv≈NIC/NACp/NACv, og=on_ground, timestamp=UTC.
-Mapping is provisional; stream A confirms it.
+`ingest/adsb_loader.py` reads JSON (AircraftState field names) or readsb/tar1090 CSV
+such as `data/lynchburg_adsb.csv`. CSV columns used: h=icao hex, timestamp=UTC,
+la/lo=lat/lon, ab=alt_baro ft, ag=alt_geom ft, gs=ground speed, tr=track, f=callsign,
+sq=squawk, c=emitter category, n=NIC, np=NACp, og=on_ground. The loader's docstring is
+the authority; `air/normalizers/COLUMN_MAP.md` documents every column in the file.
 
 ## Definition of done per module
 Signature matches the table; docstring states inputs, outputs, and failure causes;

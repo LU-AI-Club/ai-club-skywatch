@@ -2,7 +2,7 @@
 
 Air-domain adaptation of SENTINEL maritime detector M-005 (Risk Zone Entry).
 
-Layout (see CLAUDE.md for the owner of each stream):
+Layout (see AGENTS.md for the owner of each stream):
 
     types.py      LEAD-OWNED contracts. Do not edit without the lead.
     config.py     loads config/config.yaml into a frozen Config.
