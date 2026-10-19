@@ -7,28 +7,64 @@ altitude band — while that volume is live.
 
 The full rules live in [CLAUDE.md](CLAUDE.md). This file is the map.
 
+## Setup
+
+Every NFZ team member needs all three extras: the pipeline imports shapely and
+h3 from any stage, and the dashboard needs streamlit. Python 3.11+, from the
+repo root:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev,nfz,nfz-dashboard]"
+pytest air/detectors/no_fly_zone/tests -q
+```
+
+| Group | Packages | Used by |
+| --- | --- | --- |
+| *(always)* | pyyaml | `config.py` |
+| `dev` | pytest, ruff, mypy, types-PyYAML | the definition of done below |
+| `nfz` | shapely, h3, pyarrow | streams B and C (polygons, H3 filter), Parquet |
+| `nfz-dashboard` | streamlit, pandas, pyarrow | stream J |
+
+`-e` installs the repo in editable mode, so your code changes take effect
+without reinstalling. Re-activate the venv in every new terminal.
+
 ## Status
 
-Scaffolded. Every stage is a stub raising `NotImplementedError` with a
-docstring stating its inputs, outputs and failure causes. The harness, the
-config loader, the contracts and the fixtures are real and working, so you can
-run the whole pipeline today and watch your stage light up as you fill it in.
+Every stage is built except the collector's `collect()` loop (stream I). The
+pipeline runs end to end:
 
 ```
 $ python -m air.detectors.no_fly_zone run \
     --input air/detectors/no_fly_zone/fixtures/tracks/klyh_mixed.json \
     --out out/
 
-no_fly_zone: .../klyh_mixed.json
+no_fly_zone: air/detectors/no_fly_zone/fixtures/tracks/klyh_mixed.json
   config                 ok    baseline=nfz-rules-0.1.0+sua-2026-08-07
-  B airspace_loader      TODO  stream B: airspace_loader
-  A adsb_loader          TODO  stream A: adsb_loader
-  C-G pipeline           TODO  lead: detector wiring
-  output                 ok    out/detections.jsonl
+  B airspace_loader      ok    3 zones
+  A adsb_loader          ok    5 states
+  C-G pipeline           ok    2 detections
+  output                 ok    out/detections.jsonl (2 detections)
 ```
 
 Exit codes: `0` everything ran, `1` some stage is still a stub, `2` a real
-error (bad file, bad config).
+error (bad file, bad config). Alongside `detections.jsonl` the CLI writes
+`exit_reasons.json`, counting why every other state dropped out.
+
+### On real data: `data/lynchburg_adsb.csv`
+
+`--input` takes the club's readsb CSV directly (one hour, ~284k rows, 915
+aircraft; runs in about 15 s):
+
+```bash
+python -m air.detectors.no_fly_zone run --input data/lynchburg_adsb.csv --out out/lynchburg
+streamlit run air/detectors/no_fly_zone/dashboard/app.py
+```
+
+In the dashboard sidebar set the output folder to `out/lynchburg` and the
+states file to `data/lynchburg_adsb.csv`. The airspace is still the fixture's
+three **fake** zones, so expect detections only in P-901 (just north of KLYH).
 
 ## Layout
 
@@ -89,11 +125,8 @@ causes; at least one firing and one non-firing test; `ruff` and `mypy` clean;
 no I/O at import time.
 
 ```bash
-# one-time setup - this is all most people need
-pip install -e ".[dev]"
-
-# streams B and C only, once you start using shapely/h3
-pip install -e ".[nfz]"
+# one-time setup: see Setup above
+pip install -e ".[dev,nfz,nfz-dashboard]"
 
 pytest air/detectors/no_fly_zone/tests -q
 ruff check air/detectors/no_fly_zone/
