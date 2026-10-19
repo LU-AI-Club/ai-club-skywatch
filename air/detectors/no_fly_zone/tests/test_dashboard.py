@@ -146,3 +146,17 @@ def test_thin_points_caps_what_reaches_the_map() -> None:
     assert app.thin_points(points, limit=200) is points
     thinned = app.thin_points(points, limit=30)
     assert len(thinned) <= 30 and thinned[0] == {"i": 0}
+
+
+
+def test_episode_fields_reach_the_table(tmp_path: Path) -> None:
+    """Episode detections carry duration and report count; per-report ones
+    leave those cells empty rather than breaking."""
+    episode = _platform_record()
+    episode["metadata"]["extras"].update(dwell_sec=41.332, report_count=19)
+    path = tmp_path / "detections.jsonl"
+    path.write_text(json.dumps(episode) + "\n" + json.dumps(_platform_record()) + "\n")
+
+    rows = app.load_detections(path).rows
+    assert (rows[0]["duration_s"], rows[0]["reports"]) == (41.3, 19)
+    assert (rows[1]["duration_s"], rows[1]["reports"]) == (None, None)

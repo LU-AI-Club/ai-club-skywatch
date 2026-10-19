@@ -31,6 +31,19 @@ so tests can assert against it.
 | `fixture-4` | same spot, window shut | exit `zone_inactive` |
 | `fixture-5` | clear of everything | exit `no_candidate` |
 
+## tracks/lynchburg_crossings.csv
+
+The **real** raw rows (35, with the file's full readsb header) of two aircraft
+crossing fixture zone P-901, cut from `data/lynchburg_adsb.csv`. The aircraft
+and positions are real; the zone is not.
+
+| aircraft | what it is | per-report | episodes |
+|---|---|---|---|
+| `a89076` (PDT5877) | 41 s inside at ~16,500 ft; squawk 2240 appears 14 s in | 19 | 1, HIGH, peak 0.909 |
+| `ac8438` (N90508) | buffer-only, then inside, reporting every ~6 s | 2 | 1, HIGH |
+
+`tests/test_episodes.py` pins those numbers.
+
 ## What is still missing
 
 No fixture yet covers `on_ground`, `bad_input` (both altitudes null) or

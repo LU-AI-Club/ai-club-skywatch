@@ -17,7 +17,8 @@ scope:
 
 sampling:
   target_hz: 1.0
-  max_gap_sec: 5          # longer gaps break a track for dwell purposes
+  max_gap_sec: 30         # silence longer than this closes an incursion episode
+                          # (logic/episodes.py); small planes may report every 5-10 s
 
 airspace:
   fixture_path: fixtures/airspace/klyh-150nm.geojson
@@ -55,4 +56,7 @@ severity:
   buffered_only: INFO
 
 dedup:
+  # One Detection per incursion episode (logic/episodes.py). An episode closes
+  # after this many consecutive reports from the aircraft that do not fire for
+  # the zone, or after sampling.max_gap_sec of silence.
   clear_observations_to_close: 2

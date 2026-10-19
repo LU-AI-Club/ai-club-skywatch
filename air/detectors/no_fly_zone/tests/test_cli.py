@@ -45,6 +45,21 @@ def test_full_run_on_the_fixture_exits_0(tmp_path: Path) -> None:
     summary = json.loads((tmp_path / "exit_reasons.json").read_text())
     assert summary["pipeline_ran"] is True
     assert summary["exits"] == {"no_candidate": 1, "vertical_clear": 1, "zone_inactive": 1}
+    assert summary["mode"] == "episodes"
+    assert summary["firing_reports"] == 2
+
+
+def test_per_report_flag_writes_one_line_per_firing_report(tmp_path: Path) -> None:
+    """--per-report bypasses episode grouping (for debugging the stages)."""
+    crossings = TRACKS_FILE.parent / "lynchburg_crossings.csv"
+    for flag, expected in (([], 2), (["--per-report"], 21)):
+        out = tmp_path / ("per_report" if flag else "episodes")
+        code = main(["run", "--input", str(crossings), "--out", str(out),
+                     "--airspace", str(AIRSPACE_FILE), *flag])
+        assert code == 0
+        assert len((out / "detections.jsonl").read_text().splitlines()) == expected
+        summary = json.loads((out / "exit_reasons.json").read_text())
+        assert summary["firing_reports"] == 21
 
 
 def test_unimplemented_stage_is_reported_and_exits_1(

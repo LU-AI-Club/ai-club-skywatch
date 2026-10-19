@@ -44,7 +44,7 @@ no_fly_zone: air/detectors/no_fly_zone/fixtures/tracks/klyh_mixed.json
   config                 ok    baseline=nfz-rules-0.1.0+sua-2026-08-07
   B airspace_loader      ok    3 zones
   A adsb_loader          ok    5 states
-  C-G pipeline           ok    2 detections
+  C-G pipeline           ok    2 episodes
   output                 ok    out/detections.jsonl (2 detections)
 ```
 
@@ -61,6 +61,13 @@ Exit codes: `0` everything ran, `1` some stage is still a stub, `2` a real
 error (bad file, bad config). Alongside `detections.jsonl` the CLI writes
 `exit_reasons.json`, counting why every other state dropped out.
 
+**One detection per incursion, not per report.** An aircraft that sends 19
+reports while inside a zone produces one *episode* detection carrying its start
+and end time, duration, report count and peak score (`logic/episodes.py`). An
+episode closes after 2 consecutive clear reports or 30 s of silence (both in
+`config.yaml`). Add `--per-report` to get the raw per-report detections the
+episodes are built from.
+
 ### On real data: `data/lynchburg_adsb.csv`
 
 `--input` takes the club's readsb CSV directly (one hour, ~284k rows, 915
@@ -73,7 +80,9 @@ streamlit run air/detectors/no_fly_zone/dashboard/app.py
 
 In the dashboard sidebar set the output folder to `out/lynchburg` and the
 states file to `data/lynchburg_adsb.csv`. The airspace is still the fixture's
-three **fake** zones, so expect detections only in P-901 (just north of KLYH).
+three **fake** zones, so expect detections only in P-901 (just north of KLYH):
+2 episodes from 21 firing reports - PDT5877 crossing for 41 s at ~16,500 ft and
+N90508 clipping the edge at ~3,100 ft.
 
 ## Layout
 
@@ -94,6 +103,7 @@ no_fly_zone/
 │   ├── activation.py         E  is_active(zone, ts)
 │   ├── context.py            F  gather_signals(state, cfg)
 │   ├── scoring.py            G  build_detection(...)
+│   ├── episodes.py        LEAD  group_episodes(reports, cfg) — one detection per incursion
 │   └── detector.py        LEAD  run(states, zones, cfg) — wiring only
 ├── collect/collector.py      I  collect(url, out_dir) — separate process
 ├── dashboard/app.py          J  Streamlit view (see Status for the command)
@@ -107,7 +117,8 @@ no_fly_zone/
 
 ```
 H3 coarse filter -> exact containment -> vertical check
-                 -> activation -> context signals -> score/emit
+                 -> activation -> context signals -> score
+                 -> episode grouping -> emit
 ```
 
 Each stage records an `ExitReason` when a state leaves without a detection, so

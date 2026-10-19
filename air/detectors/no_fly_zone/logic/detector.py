@@ -8,7 +8,8 @@ leaves without a detection:
     vertical check        -> VERTICAL_CLEAR
     activation            -> ZONE_INACTIVE
     context signals       -> (never exits; only lowers the score)
-    score / emit          -> a Detection
+    score                 -> a per-report Detection
+    episode grouping      -> one Detection per incursion (logic/episodes.py)
 
 ``filters.drop_on_ground`` short-circuits to :attr:`ExitReason.ON_GROUND`
 before any geometry runs, because a taxiing aircraft inside an airport-adjacent
@@ -25,9 +26,15 @@ cfg:
 
 Outputs
 -------
-An iterator of :class:`Detection`. Exit reasons are counted, not returned, so
-the CLI can report why states dropped out - a detector that emits nothing and
-cannot say why is untestable.
+An iterator of :class:`Detection`, one per incursion episode (an aircraft in a
+zone from entry to exit). Pass ``per_report=True`` for the raw per-report
+detections instead, which is what episodes are built from. Exit reasons are
+counted per report, not returned, so the CLI can report why states dropped
+out - a detector that emits nothing and cannot say why is untestable.
+
+Episode mode sorts the states by aircraft and time first (the recorded CSV is
+not perfectly time-ordered), so it holds them all in memory; per-report mode
+streams.
 
 Failure causes
 --------------
@@ -55,8 +62,9 @@ from ..types import (
     ContextSignal,
     Detection,
     ExitReason,
+    ReportResult,
 )
-from . import activation, context, scoring
+from . import activation, context, episodes, scoring
 
 # When one state is tested against several zones and none fires, the state is
 # counted once, under the stage it got furthest through. This is bookkeeping
@@ -77,60 +85,83 @@ def run(
     cfg: Config,
     *,
     exit_counts: Counter[ExitReason] | None = None,
+    per_report: bool = False,
 ) -> Iterator[Detection]:
-    """Run the full pipeline over ``states``, yielding detections.
+    """Run the full pipeline over ``states``, yielding one Detection per episode.
 
     Pass a :class:`collections.Counter` as ``exit_counts`` to have every state
     that produced no detection counted under its :class:`ExitReason`. The
-    counter fills as the iterator is consumed.
+    counter fills as the iterator is consumed. ``per_report=True`` skips
+    episode grouping and yields every per-report detection.
     """
     counts: Counter[ExitReason] = exit_counts if exit_counts is not None else Counter()
     zones_by_id = {zone.zone_id: zone for zone in zones}
     drop_on_ground = bool(cfg.raw.get("filters", {}).get("drop_on_ground", True))
 
-    for state in states:
-        if drop_on_ground and state.on_ground:
-            counts[ExitReason.ON_GROUND] += 1
+    def evaluate(state: AircraftState) -> tuple[Detection, ...]:
+        return _evaluate(state, zones, zones_by_id, cfg, counts, drop_on_ground)
+
+    if per_report:
+        for state in states:
+            yield from evaluate(state)
+        return
+
+    ordered = sorted(states, key=lambda s: (s.icao24.strip().lower(), s.timestamp))
+    reports = (ReportResult(s.icao24, s.timestamp, evaluate(s)) for s in ordered)
+    yield from episodes.group_episodes(reports, cfg)
+
+
+def _evaluate(
+    state: AircraftState,
+    zones: list[AirspaceZone],
+    zones_by_id: dict[str, AirspaceZone],
+    cfg: Config,
+    counts: Counter[ExitReason],
+    drop_on_ground: bool,
+) -> tuple[Detection, ...]:
+    """Every per-report Detection for one state; counts its exit if none fire."""
+    if drop_on_ground and state.on_ground:
+        counts[ExitReason.ON_GROUND] += 1
+        return ()
+
+    candidate_ids = zone_index.candidate_zone_ids(state, zones, cfg)
+    candidates = [zones_by_id[zid] for zid in candidate_ids if zid in zones_by_id]
+    if not candidates:
+        counts[ExitReason.NO_CANDIDATE] += 1
+        return ()
+
+    fired: list[Detection] = []
+    deepest = ExitReason.NO_CANDIDATE
+    signals: list[ContextSignal] | None = None  # gathered once, only if needed
+
+    # One zone at a time, so penetration_nm and the activation result in
+    # each Detection refer to that zone and nothing else.
+    for zone in candidates:
+        horizontal = containment.check_containment(state, [zone], cfg)
+        if not (horizontal.contained or horizontal.buffered_contained):
+            deepest = _deeper(deepest, horizontal.reason or ExitReason.OUTSIDE_POLYGON)
             continue
 
-        candidate_ids = zone_index.candidate_zone_ids(state, zones, cfg)
-        candidates = [zones_by_id[zid] for zid in candidate_ids if zid in zones_by_id]
-        if not candidates:
-            counts[ExitReason.NO_CANDIDATE] += 1
+        vertical = altitude.vertical_check(state, zone)
+        if not vertical.within:
+            deepest = _deeper(deepest, vertical.reason or ExitReason.VERTICAL_CLEAR)
             continue
 
-        fired = False
-        deepest = ExitReason.NO_CANDIDATE
-        signals: list[ContextSignal] | None = None  # gathered once, only if needed
+        live = activation.is_active(zone, state.timestamp)
+        if live.state is ActivationState.INACTIVE:
+            deepest = _deeper(deepest, ExitReason.ZONE_INACTIVE)
+            continue
+        # UNKNOWN continues on purpose: scoring caps its severity.
 
-        # One zone at a time, so penetration_nm and the activation result in
-        # each Detection refer to that zone and nothing else.
-        for zone in candidates:
-            horizontal = containment.check_containment(state, [zone], cfg)
-            if not (horizontal.contained or horizontal.buffered_contained):
-                deepest = _deeper(deepest, horizontal.reason or ExitReason.OUTSIDE_POLYGON)
-                continue
+        if signals is None:
+            signals = context.gather_signals(state, cfg)
+        fired.append(
+            scoring.build_detection(state, zone, horizontal, vertical, live, signals, cfg)
+        )
 
-            vertical = altitude.vertical_check(state, zone)
-            if not vertical.within:
-                deepest = _deeper(deepest, vertical.reason or ExitReason.VERTICAL_CLEAR)
-                continue
-
-            live = activation.is_active(zone, state.timestamp)
-            if live.state is ActivationState.INACTIVE:
-                deepest = _deeper(deepest, ExitReason.ZONE_INACTIVE)
-                continue
-            # UNKNOWN continues on purpose: scoring caps its severity.
-
-            if signals is None:
-                signals = context.gather_signals(state, cfg)
-            fired = True
-            yield scoring.build_detection(
-                state, zone, horizontal, vertical, live, signals, cfg
-            )
-
-        if not fired:
-            counts[deepest] += 1
+    if not fired:
+        counts[deepest] += 1
+    return tuple(fired)
 
 
 def _deeper(current: ExitReason, candidate: ExitReason) -> ExitReason:

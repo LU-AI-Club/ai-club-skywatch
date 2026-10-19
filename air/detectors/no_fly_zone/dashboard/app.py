@@ -97,6 +97,7 @@ def flatten_detection(record: dict[str, Any]) -> dict[str, Any]:
     entity_id = entities[0]["entity_id"] if entities else ""
     return {
         "observed_at": record["temporal_bounds"]["start_time"],
+        "observed_end": record["temporal_bounds"].get("end_time"),
         "aircraft": entity_id.split(":", 1)[-1],
         "zone_id": extras.get("zone_id", ""),
         "severity": record["severity"],
@@ -106,10 +107,20 @@ def flatten_detection(record: dict[str, Any]) -> dict[str, Any]:
         "lon": _first_float(centroid.get("longitude"), extras.get("lon")),
         "altitude_ft": centroid.get("altitude"),
         "penetration_nm": extras.get("penetration_nm"),
+        # Present on episode detections (the CLI default); None per-report.
+        "duration_s": _opt_round(extras.get("dwell_sec")),
+        "reports": extras.get("report_count"),
         "source_row_id": extras.get("source_row_id", ""),
         "explanation_facts": list(meta.get("explanation_facts") or []),
         "limitations": list(meta.get("limitations") or []),
     }
+
+
+def _opt_round(value: Any) -> float | None:
+    try:
+        return round(float(value), 1) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _first_float(*values: Any) -> float:
@@ -424,7 +435,7 @@ def main() -> None:
         if shown:
             table = pd.DataFrame(shown)[[
                 "anomaly_score", "severity", "aircraft", "zone_id", "observed_at",
-                "altitude_ft", "penetration_nm", "confidence",
+                "duration_s", "reports", "altitude_ft", "penetration_nm", "confidence",
             ]]
             st.dataframe(table, hide_index=True, width="stretch")
         elif detections.rows:
@@ -450,7 +461,13 @@ def main() -> None:
                     st.markdown(f"- {limit}")
             else:
                 st.markdown("- None reported.")
-            st.caption(f"Source record: `{row['source_row_id']}` at {row['observed_at']}")
+            if row["reports"]:
+                st.caption(
+                    f"Episode {row['observed_at']} to {row['observed_end']}. "
+                    f"Peak-report record: `{row['source_row_id']}`."
+                )
+            else:
+                st.caption(f"Source record: `{row['source_row_id']}` at {row['observed_at']}")
         else:
             st.caption("Select a detection to see its explanation.")
 
