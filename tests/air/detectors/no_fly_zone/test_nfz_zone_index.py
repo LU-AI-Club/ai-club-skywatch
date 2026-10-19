@@ -4,12 +4,12 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from nfz_support import make_state
 from shapely.geometry import box
 
-from ..config import Config
-from ..geo.zone_index import candidate_zone_ids
-from ..types import Activation, AirspaceZone, Datum, ZoneType
-from .conftest import make_state
+from air.detectors.no_fly_zone.config import Config
+from air.detectors.no_fly_zone.geo.zone_index import candidate_zone_ids
+from air.detectors.no_fly_zone.types import Activation, AirspaceZone, Datum, ZoneType
 
 
 def make_zone(zone_id: str, west: float, south: float, east: float, north: float) -> AirspaceZone:

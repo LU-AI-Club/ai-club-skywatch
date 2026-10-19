@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest  # type: ignore[import-not-found]
+from nfz_support import TRACKS_FILE
 
-from ..ingest.adsb_loader import load_states
-from .conftest import TRACKS_FILE
+from air.detectors.no_fly_zone.ingest.adsb_loader import load_states
 
 
 def write_rows(tmp_path: Path, rows: list[Any]) -> Path:

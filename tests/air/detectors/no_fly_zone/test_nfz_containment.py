@@ -6,12 +6,12 @@ fence with poor position accuracy, and an empty zone list.
 from __future__ import annotations
 
 import pytest
+from nfz_support import make_state
 from shapely.geometry import box
 
-from ..config import load_config
-from ..geo.containment import check_containment
-from ..types import Activation, AirspaceZone, Datum, ExitReason, ZoneType
-from .conftest import make_state
+from air.detectors.no_fly_zone.config import load_config
+from air.detectors.no_fly_zone.geo.containment import check_containment
+from air.detectors.no_fly_zone.types import Activation, AirspaceZone, Datum, ExitReason, ZoneType
 
 
 def make_p901() -> AirspaceZone:

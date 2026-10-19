@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from nfz_support import AIRSPACE_FILE
 
-from ..ingest.airspace_loader import load_zones
-from ..logic.activation import is_active
-from ..types import Activation, ActivationState, Datum, ZoneType
-from .conftest import AIRSPACE_FILE
+from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
+from air.detectors.no_fly_zone.logic.activation import is_active
+from air.detectors.no_fly_zone.types import Activation, ActivationState, Datum, ZoneType
 
 SKIP = pytest.mark.skip(reason="stream B: not implemented")
 

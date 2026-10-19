@@ -1,6 +1,6 @@
 """Guards the shared contracts. If this fails, nobody else's tests matter."""
 from dataclasses import FrozenInstanceError
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -11,7 +11,7 @@ from air.detectors.no_fly_zone.types import AircraftState, Detection, Severity
 
 def _state(**kw: Any) -> AircraftState:
     base: dict[str, Any] = dict(
-                icao24="ace81d", timestamp=datetime(2026, 9, 1, 0, 25, 40, tzinfo=timezone.utc),
+                icao24="ace81d", timestamp=datetime(2026, 9, 1, 0, 25, 40, tzinfo=UTC),
                 lat=37.33, lon=-79.20, alt_baro_ft=4850.0, alt_geom_ft=5200.0,
                 ground_speed_kt=186.7, track_deg=4.9, callsign="AAL1715", squawk=None,
                 emitter_category="A3", nic=8, nac_p=9, on_ground=False, source_row_id="row-1")

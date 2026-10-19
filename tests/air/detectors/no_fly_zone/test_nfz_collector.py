@@ -11,7 +11,7 @@ from pathlib import Path
 import pyarrow.parquet as pq
 import pytest
 
-from ..collect.collector import collect, write_hour
+from air.detectors.no_fly_zone.collect.collector import write_hour
 
 SKIP = pytest.mark.skip(reason="stream I: not implemented")
 

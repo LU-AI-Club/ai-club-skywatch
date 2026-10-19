@@ -11,10 +11,11 @@ from typing import Any
 
 import pytest
 
-from ..config import Config, load_config
-from ..types import AircraftState
+from air.detectors import no_fly_zone
+from air.detectors.no_fly_zone.config import Config, load_config
+from air.detectors.no_fly_zone.types import AircraftState
 
-FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
+FIXTURES = Path(no_fly_zone.__file__).resolve().parent / "fixtures"
 AIRSPACE_FILE = FIXTURES / "airspace" / "klyh-150nm.geojson"
 TRACKS_FILE = FIXTURES / "tracks" / "klyh_mixed.json"
 

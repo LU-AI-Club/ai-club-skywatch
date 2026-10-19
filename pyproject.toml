@@ -59,7 +59,7 @@ include = ["air*", "contracts*"]
 # Put the repo root on sys.path so `import contracts` and `import air` work
 # without installing anything. Just run `pytest` from the repo root.
 pythonpath = ["."]
-testpaths = ["tests", "air/detectors/no_fly_zone/tests"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
