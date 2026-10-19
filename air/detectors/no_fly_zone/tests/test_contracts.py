@@ -40,3 +40,23 @@ def test_detection_serializes_to_contract_shape() -> None:
     out = d.to_dict()
     assert out["severity"] == "HIGH"
     assert isinstance(out["entity_ids"], list)
+
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "value"),
+    [("dedup", "clear_observations_to_close", 0),
+     ("dedup", "clear_observations_to_close", True),
+     ("sampling", "max_gap_sec", 0)],
+)
+def test_episode_settings_are_validated(tmp_path: Any, section: str, key: str, value: Any) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw[section][key] = value
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match=key):
+        load_config(bad)

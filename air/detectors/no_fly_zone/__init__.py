@@ -8,7 +8,7 @@ Layout (see AGENTS.md for the owner of each stream):
     config.py     loads config/config.yaml into a frozen Config.
     ingest/       A adsb_loader     B airspace_loader
     geo/          C zone_index + containment      D altitude
-    logic/        E activation  F context  G scoring  + detector.py (lead)
+    logic/        E activation  F context  G scoring  + episodes.py, detector.py (lead)
     collect/      I collector - separate process, the only networked module
     dashboard/    J Streamlit read-only view
     cli.py        H harness: python -m air.detectors.no_fly_zone run ...

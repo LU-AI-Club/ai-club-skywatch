@@ -44,7 +44,8 @@ SENTINEL contract, which requires a timestamp and provenance that
 ``lat`` / ``lon``   position, for the geospatial centroid
 
 Also populate ``altitude_ft``, ``zone_id`` and ``penetration_nm`` when known -
-they become the platform record's geospatial context.
+they become the platform record's geospatial context. ``zone_type`` and
+``signal_facts`` feed episode grouping (logic/episodes.py).
 
 Failure causes
 --------------
@@ -165,6 +166,10 @@ def build_detection(
         "lat": state.lat,
         "lon": state.lon,
         "zone_id": zone.zone_id,
+        "zone_type": zone.zone_type.value,
+        # The signal facts on their own, so episode grouping can say when a
+        # signal (e.g. a squawk) first appeared during a crossing.
+        "signal_facts": [signal.fact for signal in signals],
     }
     if altitude is not None:
         extras["altitude_ft"] = altitude

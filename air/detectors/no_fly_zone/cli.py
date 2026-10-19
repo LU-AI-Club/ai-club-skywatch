@@ -11,7 +11,8 @@ one, see their stage marked TODO, fill it in, and watch it flip to ok.
 Inputs
 ------
 --input
-    ADS-B file for stream A (CSV or Parquet).
+    ADS-B file for stream A: readsb CSV (e.g. data/lynchburg_adsb.csv) or a
+    JSON array of AircraftState rows.
 --out
     Output directory. ``detections.jsonl`` is written here, one detection per
     line. Lines are the **platform** contract (``contracts.Detection``),
@@ -23,6 +24,9 @@ Inputs
     Zone GeoJSON. Defaults to ``airspace.fixture_path`` from config.
 --config
     Config file. Defaults to the packaged ``config/config.yaml``.
+--per-report
+    Write one detection per firing report instead of one per incursion
+    episode. For debugging the stages; episodes are the default.
 
 Exit codes
 ----------
@@ -61,7 +65,12 @@ def _report(stage: str, status: str, detail: str = "") -> None:
 
 
 def run(
-    input_path: Path, out_dir: Path, airspace_path: Path | None, config_path: Path
+    input_path: Path,
+    out_dir: Path,
+    airspace_path: Path | None,
+    config_path: Path,
+    *,
+    per_report: bool = False,
 ) -> int:
     """Run the pipeline, reporting each stage. Returns a process exit code."""
     todo = 0
@@ -119,9 +128,12 @@ def run(
     try:
         from .logic.detector import run as run_pipeline
 
-        detections = list(run_pipeline(states, zones, cfg, exit_counts=exit_counts))
+        detections = list(
+            run_pipeline(states, zones, cfg, exit_counts=exit_counts, per_report=per_report)
+        )
         pipeline_ran = True
-        _report("C-G pipeline", _STAGE_OK, f"{len(detections)} detections")
+        unit = "per-report detections" if per_report else "episodes"
+        _report("C-G pipeline", _STAGE_OK, f"{len(detections)} {unit}")
     except NotImplementedError as exc:
         todo += 1
         _report("C-G pipeline", _STAGE_TODO, str(exc))
@@ -149,9 +161,13 @@ def run(
 
     # Why the other states dropped out, for the dashboard's exit histogram.
     exits_file = out_dir / "exit_reasons.json"
+    # Every state either exits (counted by reason) or fires at least once.
+    exited = sum(exit_counts.values())
     summary = {
         "pipeline_ran": pipeline_ran,
+        "mode": "per_report" if per_report else "episodes",
         "states": len(states),
+        "firing_reports": len(states) - exited if pipeline_ran else 0,
         "detections": len(detections),
         "exits": {reason.value: n for reason, n in sorted(exit_counts.items())},
     }
@@ -172,6 +188,11 @@ def build_parser() -> argparse.ArgumentParser:
     runner.add_argument("--out", required=True, type=Path)
     runner.add_argument("--airspace", type=Path, default=None)
     runner.add_argument("--config", type=Path, default=DEFAULT_PATH)
+    runner.add_argument(
+        "--per-report",
+        action="store_true",
+        help="one detection per firing report instead of one per incursion episode",
+    )
     return parser
 
 
@@ -179,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     """Entry point. Returns an exit code rather than calling sys.exit."""
     args = build_parser().parse_args(argv)
     if args.command == "run":
-        return run(args.input, args.out, args.airspace, args.config)
+        return run(args.input, args.out, args.airspace, args.config, per_report=args.per_report)
     return 2
 
 

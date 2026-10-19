@@ -32,7 +32,9 @@ Full design: NoFlyZoneDetector_Design_and_Build_Plan.docx (ask the user for it i
 - Dashboard: Streamlit + Folium/pydeck reading detections.jsonl + Parquet states.
 
 ## Pipeline (each stage is one stream/module)
-H3 coarse filter -> exact containment -> vertical check -> activation -> context signals -> score/emit.
+H3 coarse filter -> exact containment -> vertical check -> activation -> context signals -> score
+-> episode grouping -> emit. Scoring builds one Detection per firing report; logic/episodes.py
+merges an aircraft's reports in one zone into one Detection per incursion episode.
 
 Stream G builds the internal `types.Detection`. `emit.py` converts it to the vendored
 `contracts.Detection` on the way out, and that is what `detections.jsonl` contains.
@@ -52,10 +54,11 @@ Each stage records an ExitReason when a state leaves without a detection.
 | E | logic/activation.py | is_active(zone, ts) -> ActivationResult |
 | F | logic/context.py | gather_signals(state, cfg) -> list[ContextSignal] |
 | G | logic/scoring.py | build_detection(...) -> Detection |
+| Lead | logic/episodes.py | group_episodes(reports, cfg) -> Iterator[Detection] |
 | H | cli.py, fixtures/ | python -m air.detectors.no_fly_zone run --input x --out y |
 | I | collect/collector.py | collect(url, out_dir) -> None |
 | J | dashboard/app.py | streamlit run air/detectors/no_fly_zone/dashboard/app.py |
-| Lead | logic/detector.py | wires stages only |
+| Lead | logic/detector.py | run(states, zones, cfg, *, exit_counts, per_report) — wiring only |
 | Lead | emit.py | to_platform_detection(detection) -> contracts.Detection |
 
 ## Input data

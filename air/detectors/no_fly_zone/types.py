@@ -185,3 +185,19 @@ class Detection:
         for k in ("entity_ids", "evidence_refs", "explanation_facts", "limitations"):
             d[k] = list(d[k])
         return d
+
+
+# ---------------------------------------------------------------- episodes
+
+@dataclass(frozen=True, slots=True)
+class ReportResult:
+    """One aircraft report after every candidate zone was checked.
+
+    The input to episode grouping (logic/episodes.py). ``fired`` holds one
+    per-report Detection for each zone that fired on this report; an empty
+    tuple means the report was clear of every zone, which is what lets an
+    open episode count down to closing.
+    """
+    icao24: str
+    timestamp: datetime              # tz-aware UTC
+    fired: tuple[Detection, ...] = ()

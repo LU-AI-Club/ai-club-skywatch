@@ -54,6 +54,8 @@ of which ``types.Detection`` carries. Stream G must therefore put these into
     Position, for the geospatial centroid.
 
 Optional: ``altitude_ft``, ``zone_id``, ``penetration_nm``, ``dwell_sec``.
+``episode_start`` / ``episode_end`` (set by logic/episodes.py) become the time
+bounds; without them both bounds are ``observed_at``.
 
 Inputs / Outputs
 ----------------
@@ -128,6 +130,8 @@ def to_platform_detection(detection: Detection) -> PlatformDetection:
     lat = float(_require(extras, "lat"))
     lon = float(_require(extras, "lon"))
     altitude_ft = extras.get("altitude_ft")
+    start_time = _as_datetime(extras.get("episode_start") or observed_at, "episode_start")
+    end_time = _as_datetime(extras.get("episode_end") or observed_at, "episode_end")
     zone_id = extras.get("zone_id")
 
     provenance = ProvenanceRecord(
@@ -178,7 +182,7 @@ def to_platform_detection(detection: Detection) -> PlatformDetection:
         detection_type=detection.detection_type,
         severity=SeverityLevel(detection.severity.value),
         confidence=detection.raw_model_confidence,
-        temporal_bounds=TimeBounds(start_time=observed_at, end_time=observed_at),
+        temporal_bounds=TimeBounds(start_time=start_time, end_time=end_time),
         provenance=provenance,
         entities_involved=[
             EntityRef(entity_id=eid, entity_type="aircraft", domain=DOMAIN)

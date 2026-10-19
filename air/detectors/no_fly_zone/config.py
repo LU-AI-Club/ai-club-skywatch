@@ -52,3 +52,8 @@ def _validate(raw: Mapping[str, Any]) -> None:
         Severity(raw["severity"][key])  # raises if not a valid severity
     if raw["sampling"]["target_hz"] <= 0:
         raise ValueError("sampling.target_hz must be positive")
+    if float(raw["sampling"]["max_gap_sec"]) <= 0:
+        raise ValueError("sampling.max_gap_sec must be positive")
+    clears = raw["dedup"]["clear_observations_to_close"]
+    if isinstance(clears, bool) or not isinstance(clears, int) or clears < 1:
+        raise ValueError("dedup.clear_observations_to_close must be an integer >= 1")
