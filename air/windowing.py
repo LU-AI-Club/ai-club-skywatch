@@ -143,18 +143,29 @@ def run_detectors(
     Each detector gets the *whole* window and groups internally as it needs
     (per-aircraft for spoofing, co-temporal for proximity, per-point for
     no-fly-zone). With ``dedup=True`` a detection whose ``detection_dedup_key``
-    has already been seen is skipped — use it for sliding windows.
+    has already been seen is skipped — use it for sliding windows. After the
+    last window, any detector with a ``flush()`` method is flushed.
     """
     seen: set[tuple] = set()
+
+    def fresh(detections: Iterable[Any]) -> Iterator[Any]:
+        for detection in detections:
+            if dedup:
+                key = detection_dedup_key(detection)
+                if key in seen:
+                    continue
+                seen.add(key)
+            yield detection
+
     for window in windows:
         for detector in detectors:
-            for detection in detector.detect_observations(window):
-                if dedup:
-                    key = detection_dedup_key(detection)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                yield detection
+            yield from fresh(detector.detect_observations(window))
+    # End of stream: detectors that hold state across windows (NFZ keeps open
+    # incursion episodes) expose an optional flush() for whatever is still open.
+    for detector in detectors:
+        flush = getattr(detector, "flush", None)
+        if callable(flush):
+            yield from fresh(flush())
 
 
 __all__ = ["iter_windows", "run_detectors", "detection_dedup_key"]

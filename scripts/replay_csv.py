@@ -31,6 +31,7 @@ import json
 import sys
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 # Allow `python scripts/replay_csv.py` from the repo root without installing:
 # put the repo root (this file's parent's parent) on sys.path so `air`/`contracts`
@@ -122,25 +123,35 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.format == "json":
             out.write("[")
+        def emit(name: str, detections: Any) -> None:
+            nonlocal first_json, emitted
+            for detection in detections:
+                if dedup:
+                    key = detection_dedup_key(detection)
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                payload = json.dumps(detection.to_dict(), default=str)
+                if args.format == "json":
+                    out.write(("" if first_json else ",") + "\n  " + payload)
+                    first_json = False
+                else:
+                    out.write(payload + "\n")
+                per_detector[name] += 1
+                emitted += 1
+
         for window in iter_windows(observations, args.window, step):
             if args.max_windows is not None and windows_seen >= args.max_windows:
                 break
             windows_seen += 1
             for name, detector in detectors:
-                for detection in detector.detect_observations(window):
-                    if dedup:
-                        key = detection_dedup_key(detection)
-                        if key in seen_keys:
-                            continue
-                        seen_keys.add(key)
-                    payload = json.dumps(detection.to_dict(), default=str)
-                    if args.format == "json":
-                        out.write(("" if first_json else ",") + "\n  " + payload)
-                        first_json = False
-                    else:
-                        out.write(payload + "\n")
-                    per_detector[name] += 1
-                    emitted += 1
+                emit(name, detector.detect_observations(window))
+        # End of stream: a detector that holds state across windows (NFZ keeps
+        # open incursion episodes) exposes flush() to emit what is still open.
+        for name, detector in detectors:
+            flush = getattr(detector, "flush", None)
+            if callable(flush):
+                emit(name, flush())
         if args.format == "json":
             out.write("\n]\n")
     finally:
