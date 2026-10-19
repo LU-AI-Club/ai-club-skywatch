@@ -24,11 +24,11 @@ from nfz_support import AIRSPACE_FILE, TRACKS_FILE
 from air.detectors.no_fly_zone import build_detector
 from air.detectors.no_fly_zone.adapter import NoFlyZoneDetector, observation_to_state
 from air.detectors.no_fly_zone.emit import to_platform_detection
-from air.detectors.no_fly_zone.ingest.adsb_loader import load_states
 from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
 from air.detectors.no_fly_zone.logic.detector import run
 from air.detectors.no_fly_zone.types import ExitReason
 from air.models.observation import AdsbObservation
+from air.normalizers.no_fly_zone_adsb import load_states
 from contracts import DetectionContext
 
 pytest.importorskip("shapely")

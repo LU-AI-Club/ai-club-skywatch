@@ -84,7 +84,7 @@ from .logic import detector as pipeline
 from .types import AircraftState, AirspaceZone, ExitReason
 
 # Registry identity, checked by BaseDetector.validate_metadata() against the
-# class. The instance overrides both from config/config.yaml, which stays the
+# class. The instance overrides both from configs/detectors/no_fly_zone.yaml, which stays the
 # single source of truth for what ends up on each Detection.
 DETECTOR_ID = "skywatch.no_fly_zone"
 DETECTOR_VERSION = "0.1.0"

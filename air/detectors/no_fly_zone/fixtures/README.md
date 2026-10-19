@@ -42,7 +42,7 @@ and positions are real; the zone is not.
 | `a89076` (PDT5877) | 41 s inside at ~16,500 ft; squawk 2240 appears 14 s in | 19 | 1, HIGH, peak 0.909 |
 | `ac8438` (N90508) | buffer-only, then inside, reporting every ~6 s | 2 | 1, HIGH |
 
-`tests/test_episodes.py` pins those numbers.
+`tests/air/detectors/no_fly_zone/test_nfz_episodes.py` pins those numbers.
 
 ## What is still missing
 

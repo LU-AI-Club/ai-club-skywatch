@@ -78,7 +78,8 @@ select = ["E", "F", "I", "UP", "B", "C4", "SIM", "BLE"]
 # Stream tests import the symbol they are about to exercise. The import is the
 # point: if the module or name disappears, the test file fails to collect and
 # the owner finds out immediately instead of at merge time.
-"air/detectors/no_fly_zone/tests/test_*.py" = ["F401"]
+"tests/air/detectors/no_fly_zone/test_nfz_*.py" = ["F401"]
+"tests/air/normalizers/test_nfz_*.py" = ["F401"]
 # LEAD-OWNED files (AGENTS.md: "do not change them unless the user explicitly
 # asks"). These are suppressed, not fixed - raise them with the lead.
 #   UP042: `class X(str, Enum)` is deliberate. It keeps `ZoneType.TFR == "TFR"`
@@ -86,7 +87,7 @@ select = ["E", "F", "I", "UP", "B", "C4", "SIM", "BLE"]
 #   UP035/E501/C408/UP017: cosmetic only.
 "air/detectors/no_fly_zone/types.py" = ["UP042"]
 "air/detectors/no_fly_zone/config.py" = ["UP035", "E501"]
-"air/detectors/no_fly_zone/tests/test_contracts.py" = ["E501", "C408", "UP017", "F401"]
+"tests/air/detectors/no_fly_zone/test_nfz_contracts.py" = ["E501", "C408", "UP017", "F401"]
 
 [tool.mypy]
 # No python_version pin: mypy then targets whichever interpreter you run it

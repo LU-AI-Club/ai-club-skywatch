@@ -16,11 +16,11 @@ import pytest
 from nfz_support import AIRSPACE_FILE, FIXTURES
 
 from air.detectors.no_fly_zone.config import Config
-from air.detectors.no_fly_zone.ingest.adsb_loader import load_states
 from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
 from air.detectors.no_fly_zone.logic.detector import run
 from air.detectors.no_fly_zone.logic.episodes import group_episodes
 from air.detectors.no_fly_zone.types import Detection, ReportResult, Severity
+from air.normalizers.no_fly_zone_adsb import load_states
 
 CROSSINGS_FILE = FIXTURES / "tracks" / "lynchburg_crossings.csv"
 T0 = datetime(2026, 9, 1, 0, 54, 46, tzinfo=UTC)

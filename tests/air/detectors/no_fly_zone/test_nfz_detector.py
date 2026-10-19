@@ -19,10 +19,10 @@ from nfz_support import AIRSPACE_FILE, TRACKS_FILE, make_state
 
 from air.detectors.no_fly_zone.config import Config
 from air.detectors.no_fly_zone.geo import containment, zone_index
-from air.detectors.no_fly_zone.ingest.adsb_loader import load_states
 from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
 from air.detectors.no_fly_zone.logic.detector import run
 from air.detectors.no_fly_zone.types import Activation, ContainmentResult, ExitReason, Severity
+from air.normalizers.no_fly_zone_adsb import load_states
 
 shapely_geometry = pytest.importorskip("shapely.geometry")
 

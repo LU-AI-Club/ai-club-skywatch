@@ -23,7 +23,7 @@ Inputs
 --airspace
     Zone GeoJSON. Defaults to ``airspace.fixture_path`` from config.
 --config
-    Config file. Defaults to the packaged ``config/config.yaml``.
+    Config file. Defaults to ``configs/detectors/no_fly_zone.yaml``.
 --per-report
     Write one detection per firing report instead of one per incursion
     episode. For debugging the stages; episodes are the default.
@@ -110,7 +110,7 @@ def run(
     # Stage A - states.
     states: list[Any] = []
     try:
-        from .ingest.adsb_loader import load_states
+        from air.normalizers.no_fly_zone_adsb import load_states
 
         states = list(load_states(input_path))
         _report("A adsb_loader", _STAGE_OK, f"{len(states)} states")
