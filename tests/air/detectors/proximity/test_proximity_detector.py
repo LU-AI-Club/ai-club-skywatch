@@ -20,6 +20,7 @@ FIXTURES = [
     "proximity_stacked.json",
     "proximity_crossing_low.json",
     "proximity_ground.json",
+    "proximity_spans_window.json",
 ]
 
 
