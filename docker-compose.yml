@@ -1,0 +1,47 @@
+# SkyWatch local-dev database — minimal, single service.
+#
+# Brings up ONE container: Postgres with TimescaleDB + PostGIS, pre-loaded with
+# the canonical `observations` table and the three air detection tables. This is
+# all a student needs to populate observations locally, run the detectors against
+# a real database, and host a front end — WITHOUT the full SENTINEL platform
+# (no Kafka, NiFi, Neo4j, MinIO) and WITHOUT the company-confidential repo.
+#
+#   docker compose up -d db      # start it (first run also creates the schema)
+#   docker compose down          # stop it (keeps data)
+#   docker compose down -v        # stop AND wipe data (forces a fresh schema load)
+#
+# The schema in ./db/schema is mounted into the image's init directory, so every
+# .sql there runs automatically ON FIRST BOOT (i.e. on an empty data volume). If
+# you change the schema, run `docker compose down -v` to re-initialise.
+#
+# Connect from your host (detectors, psql, a dashboard):
+#   postgresql://skywatch:skywatch@localhost:5432/skywatch
+
+name: skywatch
+
+services:
+  db:
+    # Same family the SENTINEL platform runs; bundles TimescaleDB + PostGIS so
+    # 001_observations.sql's create_hypertable() and GEOGRAPHY columns just work.
+    image: ${TIMESCALE_IMAGE:-timescale/timescaledb-ha:pg14}
+    container_name: skywatch-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-skywatch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-skywatch}
+      POSTGRES_DB: ${POSTGRES_DB:-skywatch}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/home/postgres/pgdata
+      # Every *.sql here runs in alphabetical order on first init. 001 creates
+      # observations; 002 creates the air detection tables.
+      - ./db/schema:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      start_period: 20s
+      retries: 20
+
+volumes:
+  pgdata:
