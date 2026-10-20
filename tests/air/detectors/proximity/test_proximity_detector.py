@@ -22,6 +22,8 @@ FIXTURES = [
     "proximity_ground.json",
     "proximity_standard_vertical.json",
     "proximity_small_vertical_gap.json",
+    "proximity_far_converging.json",
+    "proximity_near_term.json",
 ]
 
 

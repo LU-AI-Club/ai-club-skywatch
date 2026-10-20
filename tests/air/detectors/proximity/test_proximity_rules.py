@@ -20,11 +20,11 @@ _A = AdsbObservation(icao24="aaa001", observed_at=T0, latitude=37.4, longitude=-
 _B = AdsbObservation(icao24="bbb002", observed_at=T0, latitude=37.4, longitude=-79.0, altitude_ft=10200.0)
 
 
-def _geom(t_cpa, pred_h, pred_v):
+def _geom(t_cpa, pred_h, pred_v, now_nm=5.0):
     """A PairGeometry with only the fields the rules care about filled in."""
     return PairGeometry(
         icao_a="aaa001", icao_b="bbb002", at=T0,
-        horizontal_now_nm=5.0, vertical_now_ft=200.0, closure_rate_kt=600.0,
+        horizontal_now_nm=now_nm, vertical_now_ft=200.0, closure_rate_kt=600.0,
         t_cpa_s=t_cpa, predicted_horizontal_nm=pred_h, predicted_vertical_ft=pred_v,
         obs_a=_A, obs_b=_B,
     )
@@ -87,3 +87,15 @@ def test_flag_no_relative_motion_is_suppressed():
 
 def test_flag_outside_all_tiers_is_none():
     assert flag_pair(_geom(60.0, 6.0, 200.0), CFG) is None
+
+
+# --- flag_pair: don't trust a prediction from a pair that is already far apart (PROX-1) ---
+def test_flag_far_apart_now_is_suppressed():
+    far = CFG.max_current_separation_nm + 0.1
+    assert flag_pair(_geom(60.0, 0.2, 200.0, now_nm=far), CFG) is None
+    assert flag_pair(_geom(60.0, 0.2, 200.0, now_nm=31.8), CFG) is None
+
+
+def test_flag_current_separation_boundary_is_inclusive():
+    on_limit = CFG.max_current_separation_nm
+    assert flag_pair(_geom(60.0, 0.2, 200.0, now_nm=on_limit), CFG) is SeverityLevel.HIGH

@@ -28,6 +28,11 @@ ground_speed_kt: 50       # ... slower than this => treat as on the ground
 
 # --- Closest approach gates (detector.py) ------------------------------------
 max_tcpa_s: 120.0       # beyond this, straight-line prediction is unreliable
+# Don't trust a prediction made from a pair that is already far apart. Fast
+# closers (~900 kt) cover 30 nm in 2 minutes, and on the Lynchburg hour the
+# median straight-line miss is 0.65 nm at 120 s (p90 5.2 nm) but only 0.13 nm at
+# 60 s (p90 1.6 nm). 10 nm keeps even the fastest closers to ~40 s lookahead.
+max_current_separation_nm: 10.0
 
 # --- Severity tiers, evaluated top to bottom; BOTH limits must hold ----------
 # predicted separation at closest approach, not current separation
