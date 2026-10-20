@@ -49,6 +49,8 @@ def flag_pair(geom: PairGeometry, cfg: ProximityConfig) -> SeverityLevel | None:
       3. ``geom.t_cpa_s <= cfg.max_tcpa_s`` (straight-line prediction is
          only trusted for the next couple of minutes)
       4. predicted separations are not None
+      5. ``geom.horizontal_now_nm <= cfg.max_current_separation_nm`` (a pair
+         already far apart has a long way to drift off the straight line)
 
     Then return ``severity_for(predicted_horizontal, predicted_vertical, cfg)``.
     """
@@ -59,6 +61,8 @@ def flag_pair(geom: PairGeometry, cfg: ProximityConfig) -> SeverityLevel | None:
     if geom.t_cpa_s > cfg.max_tcpa_s:
         return None
     if geom.predicted_horizontal_nm is None or geom.predicted_vertical_ft is None:
+        return None
+    if geom.horizontal_now_nm > cfg.max_current_separation_nm:
         return None
 
     return severity_for(geom.predicted_horizontal_nm, geom.predicted_vertical_ft, cfg)
