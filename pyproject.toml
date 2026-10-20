@@ -22,6 +22,14 @@ eda = [
     "pyarrow>=14.0",
     "matplotlib>=3.7",
 ]
+# Local observations database loader (scripts/load_observations_csv.py): the
+# Postgres driver and H3 for the two index columns the schema requires. Needed
+# only to populate the local db/ container; detectors and their tests do not
+# import these.
+db = [
+    "psycopg[binary]>=3.1",
+    "h3>=4.0",
+]
 
 # Only air/ and contracts/ are importable packages; configs/, notebooks/,
 # docs/ and scripts/ are not, so tell setuptools exactly what to install
