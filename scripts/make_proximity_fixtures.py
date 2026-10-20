@@ -27,6 +27,10 @@ KT = M_PER_NM / 3600.0
 # Two irregular report schedules (seconds after T0) that never coincide.
 TIMES_A = [0.0, 2.3, 4.9, 7.6, 9.8, 12.4, 15.1, 17.7, 20.0]
 TIMES_B = [1.1, 3.4, 6.2, 8.7, 11.3, 13.9, 16.5, 19.2]
+# Same schedules shifted to 40-80 s, so the reports straddle T0 + 60 s
+# (00:31:00), which is a boundary of the runner's epoch-anchored 60 s windows.
+TIMES_A_EDGE = [40.0 + t * 2 for t in TIMES_A]
+TIMES_B_EDGE = [40.0 + t * 2 for t in TIMES_B]
 
 
 def _xy_to_latlon(x_m: float, y_m: float) -> tuple[float, float]:
@@ -108,6 +112,15 @@ SCENARIOS = {
         + _aircraft(
             "bbb002", "TEST02", (2.0 / math.sqrt(2), 2.0 / math.sqrt(2)), 60, 300, 0, 30500, TIMES_B, "crossing_B"
         ),
+    },
+    # PROX-5: ONE head-on encounter whose 40 s of reports cross the 00:31:00
+    # window edge. Closest approach at t=110 s, so it is converging and inside
+    # max_tcpa_s in BOTH 60 s windows. One encounter -> one detection, however
+    # the runner slices time.
+    "proximity_spans_window.json": {
+        "_expect": {"detections": 1, "severity": "HIGH", "window_edge_s": 60},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 110, 300, 90, 10000, TIMES_A_EDGE, "edge_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 110, 300, 270, 10200, TIMES_B_EDGE, "edge_B"),
     },
     # Two aircraft taxiing toward each other at Lynchburg (field elevation
     # 938 ft MSL). Metres apart, but on the ground -> no detection.
