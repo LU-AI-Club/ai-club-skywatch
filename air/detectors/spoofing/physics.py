@@ -17,8 +17,48 @@ from __future__ import annotations
 from typing import Sequence
 
 from air.detectors.spoofing.config import SpoofingConfig
+from air.detectors.spoofing.features import MPS_TO_KT
 from air.detectors.spoofing.records import SpoofingFeatureRecord
 from air.models.observation import AdsbObservation
+
+# NACp -> 95% horizontal position error bound (EPU), in metres.
+# Source: DO-260B table of NACp values -- verify against the spec before citing.
+# NACp 0 means "unknown" and is deliberately absent, so it contributes no
+# allowance (behaviour is unchanged when the feed does not say how good the
+# fix was).
+NACP_EPU_M: dict[int, float] = {
+    11: 3.0,
+    10: 10.0,
+    9: 30.0,
+    8: 93.0,
+    7: 185.0,
+    6: 556.0,
+    5: 926.0,
+    4: 1852.0,
+    3: 3704.0,
+    2: 7408.0,
+    1: 18520.0,
+}
+
+
+def position_error_speed_kt(record: SpoofingFeatureRecord) -> float:
+    """Implied speed that position error alone can produce over this gap.
+
+    A jump is a claim about two positions, and either can be off by its own
+    error bound, so the two bounds add. Dividing by a short gap turns a small
+    position error into a large phantom speed, the same way altitude
+    quantisation does for climb rate.
+
+    Missing or zero NACp (unknown) contributes nothing. A self-reported low
+    NACp therefore only buys slack equal to the error radius it claims; it
+    does not make a gross teleport invisible.
+    """
+    err_m = sum(
+        NACP_EPU_M.get(nacp, 0.0)
+        for nacp in (record.prev_nacp, record.nacp)
+        if nacp
+    )
+    return err_m / record.dt_s * MPS_TO_KT
 
 
 def flag_teleport(
@@ -30,13 +70,16 @@ def flag_teleport(
     750-800 kt with a strong tailwind, so a limit near cruise speed would
     flag honest traffic all day; a fabricated position typically implies
     thousands of knots, so nothing real is lost by setting it at 1000.
+
+    The implied speed is first reduced by what the reports' own position
+    error could explain, so a poor fix is not mistaken for a fabricated one.
     """
     if record.implied_speed_kt is None:
         return None
     if record.dt_s < cfg.min_dt_s:
         # Timestamp error dominates at very short gaps.
         return None
-    if record.implied_speed_kt > cfg.teleport_kt:
+    if record.implied_speed_kt - position_error_speed_kt(record) > cfg.teleport_kt:
         return "TELEPORT"
     return None
 
@@ -48,6 +91,9 @@ def flag_turn_rate(
 
     Turn rate is signed in the record -- negative is a left turn -- so the
     comparison uses its magnitude. A standard rate turn is 3 deg/s.
+
+    Track comes from the velocity message, not the position fix, so NIC/NACp
+    deliberately play no part here.
     """
     if record.turn_rate_dps is None:
         return None
@@ -81,6 +127,10 @@ def flag_speed_delta(
     Aircraft broadcast velocity separately from position. When the two
     disagree by more than wind and sensor error explain, at least one of them
     is fabricated.
+
+    Implied speed comes from the two positions, so the disagreement is first
+    reduced by what position error alone could produce (see
+    ``position_error_speed_kt``). Only the remainder is compared to the limit.
     """
     if record.speed_delta_kt is None:
         return None
@@ -89,7 +139,8 @@ def flag_speed_delta(
     limit = speed_delta_limit_kt(record, cfg)
     if limit is None:
         return None
-    if abs(record.speed_delta_kt) > limit:
+    disagreement = abs(record.speed_delta_kt) - position_error_speed_kt(record)
+    if disagreement > limit:
         return "SPEED_DISAGREEMENT"
     return None
 
@@ -221,4 +272,6 @@ __all__ = [
     "flag_subterrain",
     "speed_delta_limit_kt",
     "subterrain_depth_ft",
+    "position_error_speed_kt",
+    "NACP_EPU_M",
 ]

@@ -62,6 +62,8 @@ class SpoofingFeatureRecord:
     altitude_ft: float | None = None
     nic: int | None = None
     nacp: int | None = None
+    prev_nic: int | None = None
+    prev_nacp: int | None = None
     callsign: str | None = None
 
     def __post_init__(self) -> None:
