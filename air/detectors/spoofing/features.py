@@ -173,6 +173,8 @@ def build_pair_features(
         altitude_ft=current.altitude_ft,
         nic=current.nic,
         nacp=current.nacp,
+        prev_nic=previous.nic,
+        prev_nacp=previous.nacp,
         callsign=current.callsign,
     )
 
