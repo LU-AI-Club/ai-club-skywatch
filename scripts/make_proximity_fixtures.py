@@ -109,6 +109,21 @@ SCENARIOS = {
             "bbb002", "TEST02", (2.0 / math.sqrt(2), 2.0 / math.sqrt(2)), 60, 300, 0, 30500, TIMES_B, "crossing_B"
         ),
     },
+    # PROX-2: head-on at FL360/FL370, 0.2 nm apart laterally. They hold the
+    # standard 1000 ft vertical separation, reported 975 ft because baro
+    # altitudes jitter ~25 ft -> exactly as separated as ATC intends, no detection.
+    "proximity_standard_vertical.json": {
+        "_expect": {"detections": 0},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 60, 450, 90, 36000, TIMES_A, "standard_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 60, 450, 270, 36975, TIMES_B, "standard_B"),
+    },
+    # PROX-2 counterpart: same geometry at FL360 but only 650 ft apart vertically
+    # (well under standard) -> still fires, MEDIUM (inside 1.5 nm / 700 ft).
+    "proximity_small_vertical_gap.json": {
+        "_expect": {"detections": 1, "severity": "MEDIUM", "t_cpa_at_start_s": 60},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 60, 450, 90, 36000, TIMES_A, "gap_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 60, 450, 270, 36650, TIMES_B, "gap_B"),
+    },
     # Two aircraft taxiing toward each other at Lynchburg (field elevation
     # 938 ft MSL). Metres apart, but on the ground -> no detection.
     "proximity_ground.json": {
