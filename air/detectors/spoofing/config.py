@@ -40,6 +40,17 @@ class SpoofingConfig:
     A fixed margin alone is wrong for both a 90 kt Cessna and a 500 kt jet.
     """
 
+    position_error_m: float = 30.0
+    """How far off a single reported position may be, in metres.
+
+    Implied speed is distance over time, so position error becomes phantom
+    speed, and the shorter the gap the larger it gets: 30 m of error at each
+    end over 0.55 s reads as 212 kt, on an aircraft flying perfectly
+    steadily. 30 m is the NACp 9 bound (95% containment), typical of
+    GPS-quality ADS-B. Without accounting for it, 80% of speed-delta alerts
+    on the real file were pairs under one second apart.
+    """
+
     vrate_delta_fpm: float = 2000.0
     """Above barometric noise and sensor lag; a normal climb is 1500-2500."""
 
@@ -96,6 +107,8 @@ class SpoofingConfig:
                 raise ValueError(f"{name} must be greater than 0")
         if not 0.0 < self.speed_delta_frac < 1.0:
             raise ValueError("speed_delta_frac must be between 0 and 1")
+        if self.position_error_m < 0:
+            raise ValueError("position_error_m must not be negative")
         if not 0.0 <= self.min_confidence <= 1.0:
             raise ValueError("min_confidence must be between 0.0 and 1.0")
         if self.max_gap_s <= self.min_dt_s:
