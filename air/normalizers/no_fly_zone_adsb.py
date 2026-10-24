@@ -14,6 +14,12 @@ file extension:
     and ``c``, which this detector needs (geometric altitude for MSL bands,
     the on-ground filter), so this detector keeps its own mapping;
     ``COLUMN_MAP.md`` in this folder documents each column.
+``.parquet``
+    The collector's hourly state file (``collect/collector.py``). Its columns
+    are already AircraftState field names, so there is no mapping table - but
+    the values arrive typed rather than as text: ``timestamp`` is a
+    ``datetime`` and an absent value is ``None``. Read a row group at a time,
+    so a long capture is never held in memory.
 anything else
     A JSON array using AircraftState field names. Unknown keys are ignored.
 
@@ -31,9 +37,12 @@ Failure causes
 FileNotFoundError
     ``path`` does not exist.
 ValueError
-    The JSON is malformed or the top-level value is not an array; or a CSV has
+    The JSON is malformed or the top-level value is not an array; a CSV has
     no header row or lacks a required column (``h``, ``timestamp``, ``la``,
-    ``lo``).
+    ``lo``); or a Parquet file lacks a required column (``icao24``,
+    ``timestamp``, ``lat``, ``lon``). Missing columns are reported rather
+    than tolerated: every row of a mis-named file would be skipped as having
+    no identity, so the loader would quietly yield nothing at all.
 
 Rows with no ID or timestamp are silently skipped. Other unusable rows are
 skipped with a warning naming the file and row number (the first
@@ -45,7 +54,6 @@ Naive ISO timestamps are assumed UTC; aware timestamps are converted to UTC.
 
 Notes
 -----
-Parquet (the collector's output) is not supported yet.
 No I/O at import time: the file is opened only when the returned iterator is
 first consumed.
 """
@@ -86,6 +94,9 @@ _CSV_COLUMNS: dict[str, str] = {
     "og": "on_ground",
 }
 _CSV_REQUIRED = ("h", "timestamp", "la", "lo")
+# The collector writes AircraftState field names directly, so these are the
+# field names rather than feed columns.
+_PARQUET_REQUIRED = ("icao24", "timestamp", "lat", "lon")
 _CSV_TRUE = frozenset({"true", "1"})
 _CSV_FALSE = frozenset({"false", "0"})
 
@@ -123,10 +134,40 @@ def _text(row: dict[str, Any], key: str) -> str | None:
     return value.strip() or None
 
 
+def _timestamp(row: dict[str, Any]) -> datetime | None:
+    """Read the observation time as tz-aware UTC, ``None`` when the row has none.
+
+    Parquet hands over a ``datetime`` (the column is ``timestamp("us",
+    tz="UTC")``); CSV and JSON hand over an ISO string. Both are accepted, as
+    ``AdsbObservation`` does, rather than stringifying one just to re-parse it.
+    """
+    value = row.get("timestamp")
+    if isinstance(value, datetime):
+        stamp = value
+    else:
+        raw = _text(row, "timestamp")
+        if raw is None:
+            return None
+        try:
+            stamp = datetime.fromisoformat(raw)
+        except (ValueError, OverflowError) as exc:
+            raise ValueError("timestamp is not a valid ISO datetime") from exc
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=UTC)
+    return stamp.astimezone(UTC)
+
+
 def load_states(path: str | Path) -> Iterator[AircraftState]:
     """Yield one :class:`AircraftState` per usable row of ``path``."""
     path = Path(path)
-    rows = _csv_rows(path) if path.suffix.lower() == ".csv" else _json_rows(path)
+    suffix = path.suffix.lower()
+    rows: Iterable[Any]
+    if suffix == ".csv":
+        rows = _csv_rows(path)
+    elif suffix == ".parquet":
+        rows = _parquet_rows(path)
+    else:
+        rows = _json_rows(path)
     skipped = 0
     for row_number, row in enumerate(rows, start=1):
         try:
@@ -179,21 +220,36 @@ def _csv_rows(path: Path) -> Iterator[dict[str, Any]]:
             yield row
 
 
+def _parquet_rows(path: Path) -> Iterator[dict[str, Any]]:
+    """Stream the collector's hourly Parquet as dicts keyed by AircraftState fields.
+
+    ``collect/collector.py`` already names its columns after the fields, so
+    unlike the CSV there is nothing to map. A null ``on_ground`` becomes False,
+    matching :func:`_csv_rows`: the feed not saying is not the same as the
+    aircraft being on the ground, and the row builder requires a real bool.
+    """
+    # Local import: the CSV and JSON paths must not start requiring pyarrow.
+    import pyarrow.parquet as pq
+
+    source = pq.ParquetFile(path)
+    missing = [c for c in _PARQUET_REQUIRED if c not in source.schema_arrow.names]
+    if missing:
+        raise ValueError(f"ADS-B Parquet {path} is missing required columns: {missing}")
+    for batch in source.iter_batches():
+        for row in batch.to_pylist():
+            if row.get("on_ground") is None:
+                row["on_ground"] = False
+            yield row
+
+
 def _state_from_row(row: Any, default_row_id: str) -> AircraftState | None:
     """Build one state, ``None`` to skip silently, or raise ValueError."""
     if not isinstance(row, dict):
         raise ValueError("row must be an object")
     icao24 = _text(row, "icao24")
-    raw_timestamp = _text(row, "timestamp")
-    if not icao24 or not raw_timestamp:
+    timestamp = _timestamp(row)
+    if not icao24 or timestamp is None:
         return None
-    try:
-        timestamp = datetime.fromisoformat(raw_timestamp)
-        if timestamp.tzinfo is None:
-            timestamp = timestamp.replace(tzinfo=UTC)
-        timestamp = timestamp.astimezone(UTC)
-    except (ValueError, OverflowError) as exc:
-        raise ValueError("timestamp is not a valid ISO datetime") from exc
 
     lat, lon = _number(row, "lat"), _number(row, "lon")
     if lat is None or not -90 <= lat <= 90:

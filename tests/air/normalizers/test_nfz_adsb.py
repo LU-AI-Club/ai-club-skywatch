@@ -16,6 +16,7 @@ from air.normalizers.no_fly_zone_adsb import load_states
 # reach it.
 FIXTURES = Path(no_fly_zone.__file__).resolve().parent / "fixtures"
 TRACKS_FILE = FIXTURES / "tracks" / "klyh_mixed.json"
+CROSSINGS_CSV = FIXTURES / "tracks" / "lynchburg_crossings.csv"
 
 
 @pytest.fixture
@@ -240,3 +241,88 @@ def test_many_bad_rows_log_a_summary_not_a_flood(
     per_row = [r for r in caplog.records if r.getMessage().startswith("Skipping ")]
     assert len(per_row) == 20
     assert "Skipped 30 unusable rows" in caplog.text
+
+
+# --- .parquet: the collector's output ----------------------------------------
+def _write_parquet(tmp_path: Path, rows: list[dict[str, Any]], schema: Any = None) -> Path:
+    """Write ``rows`` with the collector's schema, or a cut-down one."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    from air.detectors.no_fly_zone.collect.collector import SCHEMA
+
+    path = tmp_path / "states.parquet"
+    pq.write_table(pa.Table.from_pylist(rows, schema=schema or SCHEMA), path)
+    return path
+
+
+def test_parquet_round_trips_the_csv_exactly(tmp_path: Path) -> None:
+    """Written by the collector, read back identical: the two paths agree.
+
+    Deliberately routed through ``write_hour`` rather than a hand-built file,
+    so a change to the collector's SCHEMA cannot silently break this reader.
+    """
+    from dataclasses import asdict
+
+    from air.detectors.no_fly_zone.collect.collector import write_hour
+
+    original = list(load_states(CROSSINGS_CSV))
+    assert len(original) == 35  # guards the fixture, so an empty read cannot pass
+
+    path = write_hour(
+        [asdict(state) for state in original], tmp_path, datetime(2026, 9, 1, tzinfo=UTC)
+    )
+    assert [asdict(s) for s in load_states(path)] == [asdict(s) for s in original]
+
+
+def test_parquet_timestamp_arrives_as_aware_utc(tmp_path: Path) -> None:
+    """The column is a real datetime, not an ISO string; is_active needs it aware."""
+    path = _write_parquet(tmp_path, [{
+        "icao24": "a1b2c3",
+        "timestamp": datetime(2026, 9, 22, 20, 15, tzinfo=UTC),
+        "lat": 37.425,
+        "lon": -79.215,
+        "alt_baro_ft": 4850.0,
+        "on_ground": False,
+        "source_row_id": "parquet-1",
+    }])
+    (state,) = load_states(path)
+
+    assert state.timestamp == datetime(2026, 9, 22, 20, 15, tzinfo=UTC)
+    assert state.timestamp.utcoffset() is not None
+    assert state.source_row_id == "parquet-1"
+
+
+def test_parquet_null_on_ground_reads_as_airborne(tmp_path: Path) -> None:
+    """A feed that did not say is treated as flying, as the CSV reader does."""
+    path = _write_parquet(tmp_path, [{
+        "icao24": "a1b2c3",
+        "timestamp": datetime(2026, 9, 22, 20, 15, tzinfo=UTC),
+        "lat": 37.425,
+        "lon": -79.215,
+        "alt_geom_ft": 5200.0,
+        "on_ground": None,
+    }])
+    (state,) = load_states(path)
+
+    assert state.on_ground is False
+    assert (state.alt_baro_ft, state.alt_geom_ft) == (None, 5200.0)
+
+
+def test_parquet_missing_required_column_raises(tmp_path: Path) -> None:
+    """Named loudly: every row of a mis-named file would otherwise be skipped
+    as having no identity, and the loader would yield nothing without a word."""
+    import pyarrow as pa
+
+    from air.detectors.no_fly_zone.collect.collector import SCHEMA
+
+    trimmed = SCHEMA.remove(SCHEMA.get_field_index("lon"))
+    assert isinstance(trimmed, pa.Schema)
+    path = _write_parquet(tmp_path, [{
+        "icao24": "a1b2c3",
+        "timestamp": datetime(2026, 9, 22, 20, 15, tzinfo=UTC),
+        "lat": 37.425,
+    }], schema=trimmed)
+
+    with pytest.raises(ValueError, match="lon"):
+        list(load_states(path))
