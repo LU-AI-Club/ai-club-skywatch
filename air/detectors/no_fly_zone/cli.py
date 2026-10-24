@@ -179,6 +179,36 @@ def run(
     return 0
 
 
+def collect(url: str, out_dir: Path, config_path: Path, *, max_polls: int | None) -> int:
+    """Run the live collector. Returns a process exit code.
+
+    The collector is a separate process from the detector and the only part of
+    the package that touches a network. Config is loaded here, not inside the
+    collector, so that module stays as pure as every other one.
+    """
+    print(f"no_fly_zone collect: {url}")
+    try:
+        cfg = load_config(config_path)
+    except Exception as exc:  # noqa: BLE001 - a harness must survive any stage failure
+        _report("config", _STAGE_FAIL, f"{type(exc).__name__}: {exc}")
+        return 2
+    _report("config", _STAGE_OK, f"{cfg['sampling']['target_hz']} Hz -> {out_dir}")
+
+    from .collect.collector import collect as run_collector
+
+    try:
+        run_collector(url, out_dir, cfg=cfg, max_polls=max_polls)
+    except NotImplementedError as exc:
+        _report("I collector", _STAGE_TODO, str(exc))
+        return 1
+    except OSError as exc:
+        _report("I collector", _STAGE_FAIL, f"{type(exc).__name__}: {exc}")
+        return 2
+    written = sorted(p.name for p in out_dir.glob("states-*.parquet"))
+    _report("I collector", _STAGE_OK, f"{len(written)} file(s): {', '.join(written) or 'none'}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the argument parser (separate so tests can exercise it)."""
     parser = argparse.ArgumentParser(prog="no_fly_zone")
@@ -193,6 +223,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="one detection per firing report instead of one per incursion episode",
     )
+
+    collector = sub.add_parser("collect", help="poll a live receiver into hourly Parquet")
+    collector.add_argument("--url", required=True, help="receiver aircraft.json endpoint")
+    collector.add_argument("--out", required=True, type=Path)
+    collector.add_argument("--config", type=Path, default=DEFAULT_PATH)
+    collector.add_argument(
+        "--max-polls",
+        type=int,
+        default=None,
+        help="stop after this many polls (default: run forever)",
+    )
     return parser
 
 
@@ -201,6 +242,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "run":
         return run(args.input, args.out, args.airspace, args.config, per_report=args.per_report)
+    if args.command == "collect":
+        return collect(args.url, args.out, args.config, max_polls=args.max_polls)
     return 2
 
 
