@@ -11,7 +11,7 @@
 
 detector_id: skywatch.proximity
 detector_version: 0.1.0
-config_version: 2026-10-20.1
+config_version: 2026-10-20.2
 
 # --- Time alignment (tracks.py) ----------------------------------------------
 grid_step_s: 1.0        # interpolate every track onto this common clock
@@ -36,6 +36,12 @@ max_current_separation_nm: 10.0
 
 # --- Severity tiers, evaluated top to bottom; BOTH limits must hold ----------
 # predicted separation at closest approach, not current separation
+#
+# LOW/INFO vertical limit is 900 ft, not 1000: 1000 ft IS the standard vertical
+# separation (RVSM, FL290-FL410, and below), so a pair holding ~1000 ft apart is
+# exactly as separated as ATC intends. Reported altitudes jitter around 1000 by
+# ~25-30 ft (5th-95th pct 972-1025 ft on the Lynchburg hour), and a limit of
+# 1000 flagged every pair that jittered to 975-999 ft (256 of 1,128 detections).
 tiers:
   - severity: HIGH
     max_horizontal_nm: 0.5
@@ -45,7 +51,7 @@ tiers:
     max_vertical_ft: 700
   - severity: LOW
     max_horizontal_nm: 3.0
-    max_vertical_ft: 1000
+    max_vertical_ft: 900
   - severity: INFO
     max_horizontal_nm: 5.0
-    max_vertical_ft: 1000
+    max_vertical_ft: 900

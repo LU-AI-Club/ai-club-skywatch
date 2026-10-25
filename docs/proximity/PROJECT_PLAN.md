@@ -79,11 +79,13 @@ Severity tiers, based on **predicted** separation at closest approach:
 |----------|------------|----------|
 | HIGH     | < 0.5 nm   | < 400 ft |
 | MEDIUM   | < 1.5 nm   | < 700 ft |
-| LOW      | < 3 nm     | < 1000 ft |
-| INFO     | < 5 nm     | < 1000 ft |
+| LOW      | < 3 nm     | < 900 ft  |
+| INFO     | < 5 nm     | < 900 ft  |
 
 Both conditions must hold. Two aircraft 0.2 nm apart horizontally but 2000 ft apart
-vertically are legally and operationally fine.
+vertically are legally and operationally fine. The LOW/INFO vertical limit is
+900 ft rather than the 1000 ft standard, so pairs holding standard separation
+(reported altitudes jitter about 25-30 ft around it) are not flagged.
 
 Additional gates:
 - Time to closest approach under **120 seconds** (beyond that, constant-heading
