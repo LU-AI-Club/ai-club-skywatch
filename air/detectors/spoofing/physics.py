@@ -110,13 +110,35 @@ def speed_delta_limit_kt(
     """The effective speed-disagreement limit for this record.
 
     The larger of the fixed margin and a fraction of the reported speed, so
-    the rule works for a 90 kt trainer and a 500 kt jet alike. Exposed
+    the rule works for a 90 kt trainer and a 500 kt jet alike, plus the
+    phantom speed position error alone can produce over this gap. Exposed
     because the event records the limit that actually applied, not the
     config constant.
     """
     if record.reported_speed_kt is None:
         return None
-    return max(cfg.speed_delta_kt, abs(record.reported_speed_kt) * cfg.speed_delta_frac)
+    base = max(cfg.speed_delta_kt, abs(record.reported_speed_kt) * cfg.speed_delta_frac)
+    return base + speed_position_error_kt(record, cfg)
+
+
+def speed_position_error_kt(
+    record: SpoofingFeatureRecord, cfg: SpoofingConfig
+) -> float:
+    """How much apparent speed position error alone can produce.
+
+    Either endpoint can be off by the position error, so the distance can be
+    wrong by up to twice that, and dividing by a short gap produces a large
+    phantom speed:
+
+        2 x 30 m over 0.55 s  ->  212 kt, on an aircraft flying steadily
+
+    This returns that bound so the rule can allow for it. It shrinks as the
+    gap grows -- 23 kt at 5 s, 4 kt at 30 s -- so a real contradiction over a
+    longer gap is still caught at nearly the original limit.
+    """
+    if record.dt_s <= 0:
+        return float("inf")
+    return 2.0 * cfg.position_error_m / record.dt_s * MPS_TO_KT
 
 
 def flag_speed_delta(
@@ -271,6 +293,7 @@ __all__ = [
     "flag_nic_floor",
     "flag_subterrain",
     "speed_delta_limit_kt",
+    "speed_position_error_kt",
     "subterrain_depth_ft",
     "position_error_speed_kt",
     "NACP_EPU_M",

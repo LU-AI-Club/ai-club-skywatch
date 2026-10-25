@@ -26,6 +26,7 @@ def test_teleport_fires(observations_from):
 |------|------------------|---------------------|
 | `pos_teleport.json` | One position displaced 47.3 nm sideways; implies ~34,000 kt | `teleport_v1` |
 | `pos_speed_contradiction.json` | Positions imply 450 kt, `ground_speed_kt` reports ~306 kt (32% off) | `speed_delta_v1` |
+| `pos_speed_lie_short_interval.json` | Reports every 0.55 s with ±15 m position error; positions imply ~450 kt, claims 100 kt | `speed_delta_v1` |
 | `pos_vrate_contradiction.json` | Claims +3500 fpm while altitude never changes | `vrate_delta_v1` |
 | `pos_impossible_turn.json` | 95° of heading change in 5 s = 19°/s | `turn_rate_v1` |
 | `pos_impersonation.json` | Two transmitters ~130 nm apart sharing one `icao24`, interleaved in time | `coexistence_v1`, `pingpong_v1` |
@@ -51,6 +52,7 @@ impersonation from a one-way jump.
 | `neg_brief_nic_dip.json` | `nic` dips to 1 for 20 s, then recovers | `nic_floor_v1` |
 | `neg_ground_vehicle.json` | An airport vehicle: 12 kt at field elevation, wandering heading | any |
 | `neg_sparse_track.json` | Only 2 observations — too little evidence; abstain | any |
+| `neg_short_interval_jitter.json` | Steady 228 kt, reports every 0.55 s with ±15 m position error (SPOOF-1) | `speed_delta_v1` |
 
 ## Conventions
 
