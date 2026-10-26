@@ -121,6 +121,7 @@ SCENARIOS = {
         "_expect": {"detections": 1, "severity": "HIGH", "window_edge_s": 60},
         "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 110, 300, 90, 10000, TIMES_A_EDGE, "edge_A")
         + _aircraft("bbb002", "TEST02", (0.0, 0.2), 110, 300, 270, 10200, TIMES_B_EDGE, "edge_B"),
+    },
     # PROX-2: head-on at FL360/FL370, 0.2 nm apart laterally. They hold the
     # standard 1000 ft vertical separation, reported 975 ft because baro
     # altitudes jitter ~25 ft -> exactly as separated as ATC intends, no detection.
@@ -152,6 +153,20 @@ SCENARIOS = {
         "_expect": {"detections": 1, "severity": "HIGH", "t_cpa_at_start_s": 30},
         "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 30, 300, 90, 10000, TIMES_A, "near_A")
         + _aircraft("bbb002", "TEST02", (0.0, 0.2), 30, 300, 270, 10200, TIMES_B, "near_B"),
+    },
+    # PROX-6: the head-on geometry exactly, but at 3,000 ft instead of 10,000.
+    # Terminal airspace: close traffic there is routine and our constant-track
+    # model does not hold, so the altitude floor suppresses it.
+    "proximity_terminal_altitude.json": {
+        "_expect": {"detections": 0},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 60, 300, 90, 3000, TIMES_A, "terminal_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 60, 300, 270, 3200, TIMES_B, "terminal_B"),
+    },
+    # PROX-6 counterpart: identical geometry just above the floor -> still HIGH.
+    "proximity_just_above_floor.json": {
+        "_expect": {"detections": 1, "severity": "HIGH", "t_cpa_at_start_s": 60},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 60, 300, 90, 5200, TIMES_A, "floor_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 60, 300, 270, 5400, TIMES_B, "floor_B"),
     },
     # Two aircraft taxiing toward each other at Lynchburg (field elevation
     # 938 ft MSL). Metres apart, but on the ground -> no detection.
