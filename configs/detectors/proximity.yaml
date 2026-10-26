@@ -11,7 +11,7 @@
 
 detector_id: skywatch.proximity
 detector_version: 0.1.0
-config_version: 2026-10-20.2
+config_version: 2026-10-26.2
 
 # --- Time alignment (tracks.py) ----------------------------------------------
 grid_step_s: 1.0        # interpolate every track onto this common clock
@@ -33,6 +33,15 @@ max_tcpa_s: 120.0       # beyond this, straight-line prediction is unreliable
 # median straight-line miss is 0.65 nm at 120 s (p90 5.2 nm) but only 0.13 nm at
 # 60 s (p90 1.6 nm). 10 nm keeps even the fastest closers to ~40 s lookahead.
 max_current_separation_nm: 10.0
+# Terminal-airspace floor. Below 5,000 ft MSL this detector does not report.
+# On the Lynchburg hour 338 of 354 flagged pairs (95%) had an aircraft below
+# 5,000 ft: median altitude 2,818 ft, median speed 169 kt, 26% below 1,000 ft.
+# That is pattern work, approach and departure — traffic that is close on
+# purpose, under separation standards we do not model, maneuvering in ways a
+# constant-track prediction cannot follow. En route traffic is what this
+# detector is built for; terminal proximity needs airport and runway context
+# (FAA NASR) we do not have yet.
+min_altitude_ft: 5000
 
 # --- Severity tiers, evaluated top to bottom; BOTH limits must hold ----------
 # predicted separation at closest approach, not current separation
@@ -52,6 +61,14 @@ tiers:
   - severity: LOW
     max_horizontal_nm: 3.0
     max_vertical_ft: 900
-  - severity: INFO
-    max_horizontal_nm: 5.0
-    max_vertical_ft: 900
+#
+# PROX-3: the INFO tier is removed, not loosened. It fired at < 5 nm / < 900 ft,
+# and 5 nm / 1000 ft IS en route standard separation -- so INFO reported pairs
+# that were correctly separated. On the Lynchburg hour all 25 INFO detections
+# sat at 3.09-4.96 nm and 820-900 ft, bunched against both limits, which is
+# where lawfully separated traffic lives. Nobody can act on "these two aircraft
+# complied with the standard", and every row flows downstream to TCE/CAATS.
+# LOW (3 nm) remains the loosest thing we will emit.
+#  - severity: INFO
+#    max_horizontal_nm: 5.0
+#    max_vertical_ft: 900

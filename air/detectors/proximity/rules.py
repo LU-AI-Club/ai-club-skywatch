@@ -51,6 +51,9 @@ def flag_pair(geom: PairGeometry, cfg: ProximityConfig) -> SeverityLevel | None:
       4. predicted separations are not None
       5. ``geom.horizontal_now_nm <= cfg.max_current_separation_nm`` (a pair
          already far apart has a long way to drift off the straight line)
+      6. both aircraft at or above ``cfg.min_altitude_ft`` (below that is
+         terminal airspace: different separation standards, constantly
+         maneuvering traffic, and a constant-track model that does not hold)
 
     Then return ``severity_for(predicted_horizontal, predicted_vertical, cfg)``.
     """
@@ -63,6 +66,11 @@ def flag_pair(geom: PairGeometry, cfg: ProximityConfig) -> SeverityLevel | None:
     if geom.predicted_horizontal_nm is None or geom.predicted_vertical_ft is None:
         return None
     if geom.horizontal_now_nm > cfg.max_current_separation_nm:
+        return None
+    alt_a, alt_b = geom.obs_a.altitude_ft, geom.obs_b.altitude_ft
+    if alt_a is None or alt_b is None:
+        return None
+    if min(alt_a, alt_b) < cfg.min_altitude_ft:
         return None
 
     return severity_for(geom.predicted_horizontal_nm, geom.predicted_vertical_ft, cfg)
