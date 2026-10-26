@@ -101,7 +101,7 @@ def test_flag_current_separation_boundary_is_inclusive():
     assert flag_pair(_geom(60.0, 0.2, 200.0, now_nm=on_limit), CFG) is SeverityLevel.HIGH
 
 
-# --- PROX-6: terminal-airspace altitude floor -----------------------------------
+# --- PROX-8: terminal-airspace altitude floor -----------------------------------
 def _geom_at(alt_a, alt_b, t_cpa=60.0, pred_h=0.2, pred_v=200.0, now_nm=5.0):
     """A PairGeometry that would fire, at a chosen pair of altitudes."""
     a = AdsbObservation(icao24="aaa001", observed_at=T0, latitude=37.4, longitude=-79.1,
@@ -149,7 +149,7 @@ def test_floor_reads_config_not_a_constant():
 
 
 def test_fixture_generator_still_runs():
-    """PROX-6: the generator lost a brace in a merge and nobody noticed, because
+    """PROX-8: the generator lost a brace in a merge and nobody noticed, because
     the fixtures it writes were already committed. Import-compile it so a future
     merge can't break it silently."""
     import py_compile

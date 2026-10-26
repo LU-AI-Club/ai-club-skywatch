@@ -1,6 +1,6 @@
 # PROX-3 root-cause note: INFO reported aircraft that were correctly separated
 
-**Found.** After PROX-6 the Lynchburg hour produced 28 detections, and 25 of them
+**Found.** After PROX-8 the Lynchburg hour produced 28 detections, and 25 of them
 were INFO. The INFO tier fired at predicted separation under 5 nm and 900 ft.
 **5 nm / 1000 ft is en route standard separation** — so INFO was reporting pairs
 that complied with the standard.
