@@ -18,7 +18,6 @@ def test_tiers_are_ordered_tightest_first():
         SeverityLevel.HIGH,
         SeverityLevel.MEDIUM,
         SeverityLevel.LOW,
-        SeverityLevel.INFO,
     ]
     horizontals = [t.max_horizontal_nm for t in cfg.tiers]
     assert horizontals == sorted(horizontals)

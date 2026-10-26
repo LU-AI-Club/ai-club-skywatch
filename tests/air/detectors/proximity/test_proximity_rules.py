@@ -41,10 +41,10 @@ def _geom(t_cpa, pred_h, pred_v, now_nm=5.0):
         (0.2, 400, SeverityLevel.MEDIUM),     # vertical alone can push it down a tier
         (1.4, 699, SeverityLevel.MEDIUM),
         (1.5, 200, SeverityLevel.LOW),
-        (2.9, 899, SeverityLevel.LOW),
+        (2.9, 899, SeverityLevel.LOW),   # LOW is now the loosest tier
         (2.9, 900, None),                     # ~standard 1000 ft separation, not an event
-        (3.0, 200, SeverityLevel.INFO),
-        (4.9, 899, SeverityLevel.INFO),
+        (3.0, 200, None),   # PROX-3: was INFO, now below the emit floor
+        (4.9, 899, None),   # PROX-3: lawfully separated, not emitted
         (4.9, 975, None),                     # 1000 ft standard, jittered low by altimetry
         (5.0, 200, None),                     # outside every tier
         (0.2, 1000, None),                    # close laterally, legally separated vertically
