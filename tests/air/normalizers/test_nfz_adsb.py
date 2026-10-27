@@ -6,9 +6,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest  # type: ignore[import-not-found]
 
 from air.detectors import no_fly_zone
+from air.detectors.no_fly_zone.collect.collector import write_hour
 from air.normalizers.no_fly_zone_adsb import load_states
 
 # Self-contained on purpose: this file sits beside the shared normalizer tests,
@@ -240,3 +243,71 @@ def test_many_bad_rows_log_a_summary_not_a_flood(
     per_row = [r for r in caplog.records if r.getMessage().startswith("Skipping ")]
     assert len(per_row) == 20
     assert "Skipped 30 unusable rows" in caplog.text
+
+
+# ---------------------------------------------------------------- collector Parquet
+
+_HOUR = datetime(2026, 9, 22, 14, tzinfo=UTC)
+
+
+def _parquet_row(**overrides: Any) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "icao24": "a1b2c3", "timestamp": datetime(2026, 9, 22, 14, 5, 1, 250000, tzinfo=UTC),
+        "lat": 37.425, "lon": -79.215, "alt_baro_ft": 4850.0, "alt_geom_ft": 5200.0,
+        "ground_speed_kt": 186.7, "track_deg": 4.92, "callsign": "TEST123",
+        "squawk": "7700", "emitter_category": "A3", "nic": 8, "nac_p": 9,
+        "on_ground": False,
+    }
+    row.update(overrides)
+    return row
+
+
+def test_parquet_round_trips_an_hour_from_write_hour(tmp_path: Path) -> None:
+    """What the collector writes, the loader reads back field for field."""
+    rows = [_parquet_row(), _parquet_row(icao24="a1b2c4", on_ground=True, source_row_id="poll-7")]
+    path = write_hour(rows, tmp_path, _HOUR)
+
+    first, second = load_states(path)
+
+    assert first.icao24 == "a1b2c3"
+    assert first.timestamp == datetime(2026, 9, 22, 14, 5, 1, 250000, tzinfo=UTC)
+    assert first.timestamp.tzinfo is UTC
+    assert (first.lat, first.lon) == (37.425, -79.215)
+    assert (first.alt_baro_ft, first.alt_geom_ft) == (4850.0, 5200.0)
+    assert (first.ground_speed_kt, first.track_deg) == (186.7, 4.92)
+    assert (first.callsign, first.squawk, first.emitter_category) == ("TEST123", "7700", "A3")
+    assert (first.nic, first.nac_p, first.on_ground) == (8, 9, False)
+    assert first.source_row_id == f"{path}:1"
+    assert (second.icao24, second.on_ground, second.source_row_id) == ("a1b2c4", True, "poll-7")
+
+
+def test_parquet_missing_keys_become_defaults(tmp_path: Path) -> None:
+    """write_hour stores absent keys as null; null on_ground reads as False."""
+    minimal = {k: _parquet_row()[k] for k in ("icao24", "timestamp", "lat", "lon", "alt_baro_ft")}
+    (state,) = load_states(write_hour([minimal], tmp_path, _HOUR))
+    assert state.on_ground is False
+    assert state.alt_geom_ft is None
+    assert (state.callsign, state.nic) == (None, None)
+
+
+def test_parquet_skips_bad_rows_and_continues(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
+    rows = [_parquet_row(lat=120.0), _parquet_row(icao24=None), _parquet_row(icao24="a1b2c4")]
+    states = list(load_states(write_hour(rows, tmp_path, _HOUR)))
+    assert [state.icao24 for state in states] == ["a1b2c4"]
+    assert "row 1" in caplog.text
+    assert "row 2" not in caplog.text
+
+
+def test_parquet_missing_required_column_raises(tmp_path: Path) -> None:
+    path = tmp_path / "states-2026-09-22T14.parquet"
+    pq.write_table(pa.table({"icao24": ["a1b2c3"], "lat": [37.4]}), path)
+    with pytest.raises(ValueError, match="timestamp"):
+        list(load_states(path))
+
+
+def test_parquet_missing_file_is_opened_only_on_iteration(tmp_path: Path) -> None:
+    states = load_states(tmp_path / "states-2026-09-22T14.parquet")
+    with pytest.raises(FileNotFoundError):
+        next(states)
