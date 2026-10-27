@@ -47,6 +47,11 @@ Also populate ``altitude_ft``, ``zone_id`` and ``penetration_nm`` when known -
 they become the platform record's geospatial context. ``zone_type`` and
 ``signal_facts`` feed episode grouping (logic/episodes.py).
 
+``activation_state`` and ``activation_basis`` carry the activation verdict as
+fields rather than only as explanation prose. ``activation_state`` is the reason
+severity was capped, so a reader filtering detections has to be able to separate
+a confirmed incursion from a maybe-cold zone without parsing text.
+
 Failure causes
 --------------
 KeyError
