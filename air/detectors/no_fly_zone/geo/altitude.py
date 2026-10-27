@@ -8,9 +8,11 @@ both on a common reference.
 Inputs
 ------
 state:
-    Supplies ``alt_geom_ft`` and ``alt_baro_ft``. Geometric is preferred when
-    present, because MSL floors and ceilings are geometric heights; barometric
-    is the fallback and is recorded as such in the result.
+    Supplies ``alt_geom_ft`` and ``alt_baro_ft``. Geometric altitude is preferred
+    for MSL / SFC limits because MSL floors and ceilings are true heights above
+    sea level. Barometric (pressure) altitude is preferred for FL (Flight Level)
+    limits because Flight Levels are standard pressure altitudes (referenced to
+    1013.25 hPa / 29.92 inHg). Each falls back to the other when unavailable.
 zone:
     Supplies ``floor_ft``/``floor_datum`` and ``ceiling_ft``/``ceiling_datum``.
 
@@ -31,8 +33,9 @@ Both altitude fields ``None``
 
 Notes
 -----
-:attr:`Datum.FL` values are already stored in feet (FL180 -> 18000), so they
-need no conversion; :attr:`Datum.SFC` is stored as 0.
+:attr:`Datum.FL` values are stored in feet (FL180 -> 18000) and represent
+pressure altitude, so they are compared against ``state.alt_baro_ft`` (falling
+back to ``state.alt_geom_ft``). :attr:`Datum.SFC` is stored as 0.
 """
 from __future__ import annotations
 
@@ -46,21 +49,34 @@ from ..types import (
 )
 
 
+def _resolve_altitude(
+    state: AircraftState, datum: Datum
+) -> tuple[float, AltitudeSource]:
+    """Resolve the aircraft altitude and source appropriate for ``datum``.
+
+    FL limits are standard pressure altitudes, so barometric altitude is preferred.
+    MSL and SFC limits are geometric heights, so geometric altitude is preferred.
+    Each falls back to the other available altitude if the preferred one is None.
+    """
+    if datum == Datum.FL:
+        if state.alt_baro_ft is not None:
+            return state.alt_baro_ft, AltitudeSource.BAROMETRIC
+        assert state.alt_geom_ft is not None
+        return state.alt_geom_ft, AltitudeSource.GEOMETRIC
+    else:
+        if state.alt_geom_ft is not None:
+            return state.alt_geom_ft, AltitudeSource.GEOMETRIC
+        assert state.alt_baro_ft is not None
+        return state.alt_baro_ft, AltitudeSource.BAROMETRIC
+
+
 def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
     """Compare ``state``'s altitude to ``zone``'s floor/ceiling band."""
     # -------------------------------------------------------------------------
-    # 1. Resolve altitude source and value
-    # Geometric altitude is preferred because MSL floors and ceilings are
-    # geometric heights. Barometric altitude is used as a fallback.
+    # 1. Validate available altitudes
     # If neither altitude is available, abstain with BAD_INPUT (never guess).
     # -------------------------------------------------------------------------
-    if state.alt_geom_ft is not None:
-        alt = state.alt_geom_ft
-        source = AltitudeSource.GEOMETRIC
-    elif state.alt_baro_ft is not None:
-        alt = state.alt_baro_ft
-        source = AltitudeSource.BAROMETRIC
-    else:
+    if state.alt_geom_ft is None and state.alt_baro_ft is None:
         return VerticalResult(
             within=False,
             altitude_ft=None,
@@ -73,33 +89,73 @@ def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
     # AGL (Above Ground Level) requires a terrain elevation model that this
     # detector lacks. Comparing AGL directly against MSL/FL would produce
     # significant errors, so abstain with BAD_INPUT when AGL is encountered.
-    # Note: Datum.FL is pre-stored in feet and Datum.SFC is stored as 0.0.
     # -------------------------------------------------------------------------
     if zone.floor_datum == Datum.AGL or zone.ceiling_datum == Datum.AGL:
+        default_alt = (
+            state.alt_geom_ft
+            if state.alt_geom_ft is not None
+            else state.alt_baro_ft
+        )
+        default_source = (
+            AltitudeSource.GEOMETRIC
+            if state.alt_geom_ft is not None
+            else AltitudeSource.BAROMETRIC
+        )
         return VerticalResult(
             within=False,
-            altitude_ft=alt,
-            altitude_source=source,
+            altitude_ft=default_alt,
+            altitude_source=default_source,
             reason=ExitReason.BAD_INPUT,
         )
 
     # -------------------------------------------------------------------------
-    # 3. Check vertical containment within the [floor_ft, ceiling_ft] band
-    # If the aircraft is within the band, report within=True.
-    # Otherwise, it is cleanly above or below the zone, so report VERTICAL_CLEAR.
+    # 3. Resolve altitude values for each boundary datum
+    # MSL/SFC boundaries are geometric heights above sea level, so geometric
+    # altitude is preferred, falling back to barometric.
+    # FL (Flight Level) boundaries are pressure altitudes, so barometric
+    # altitude is preferred, falling back to geometric.
     # -------------------------------------------------------------------------
-    if zone.floor_ft <= alt <= zone.ceiling_ft:
+    floor_alt, floor_source = _resolve_altitude(state, zone.floor_datum)
+    ceiling_alt, ceiling_source = _resolve_altitude(state, zone.ceiling_datum)
+
+    # -------------------------------------------------------------------------
+    # 4. Check vertical containment within the [floor_ft, ceiling_ft] band
+    # If the aircraft is cleanly above or below the band, report VERTICAL_CLEAR
+    # with the altitude value that was compared against that boundary.
+    # -------------------------------------------------------------------------
+    if floor_alt < zone.floor_ft:
         return VerticalResult(
-            within=True,
-            altitude_ft=alt,
-            altitude_source=source,
-            reason=None,
+            within=False,
+            altitude_ft=floor_alt,
+            altitude_source=floor_source,
+            reason=ExitReason.VERTICAL_CLEAR,
         )
 
+    if ceiling_alt > zone.ceiling_ft:
+        return VerticalResult(
+            within=False,
+            altitude_ft=ceiling_alt,
+            altitude_source=ceiling_source,
+            reason=ExitReason.VERTICAL_CLEAR,
+        )
+
+    # -------------------------------------------------------------------------
+    # 5. Aircraft is within the band
+    # If both datums are FL, record barometric altitude. Otherwise, record
+    # geometric altitude (if available) as the primary physical position.
+    # -------------------------------------------------------------------------
+    if zone.floor_datum == Datum.FL and zone.ceiling_datum == Datum.FL:
+        within_alt, within_source = ceiling_alt, ceiling_source
+    elif state.alt_geom_ft is not None:
+        within_alt, within_source = state.alt_geom_ft, AltitudeSource.GEOMETRIC
+    else:
+        assert state.alt_baro_ft is not None
+        within_alt, within_source = state.alt_baro_ft, AltitudeSource.BAROMETRIC
+
     return VerticalResult(
-        within=False,
-        altitude_ft=alt,
-        altitude_source=source,
-        reason=ExitReason.VERTICAL_CLEAR,
+        within=True,
+        altitude_ft=within_alt,
+        altitude_source=within_source,
+        reason=None,
     )
 
