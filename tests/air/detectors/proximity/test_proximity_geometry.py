@@ -87,6 +87,26 @@ def test_tcpa_none_when_no_relative_motion():
     assert time_to_cpa(6000.0, 0.0, 0.0, 0.0) is None
 
 
+def test_tcpa_none_when_nothing_moves_at_all():
+    # Same speed, same heading, both level: the gap never changes.
+    assert time_to_cpa(6000.0, 0.0, 0.0, 0.0, -1500.0, 0.0) is None
+
+
+def test_tcpa_vertical_when_no_horizontal_motion():
+    # B is 1500 ft below A and climbing 1000 fpm faster -> gap closes in 90 s.
+    assert time_to_cpa(0.0, 0.0, 0.0, 0.0, -1500.0, 1000.0) == pytest.approx(90.0)
+
+
+def test_tcpa_vertical_negative_when_diverging():
+    # B is 1500 ft below A and descending away from it: closest was in the past.
+    assert time_to_cpa(0.0, 0.0, 0.0, 0.0, -1500.0, -1000.0) == pytest.approx(-90.0)
+
+
+def test_tcpa_horizontal_wins_when_there_is_horizontal_motion():
+    # Vertical inputs must not change the ordinary horizontal answer.
+    assert time_to_cpa(6000.0, 0.0, -100.0, 0.0, -1500.0, 1000.0) == pytest.approx(60.0)
+
+
 def test_tcpa_crossing():
     # B at (1000, 1000) moving (-10, -10): straight at A, |r|/|v| = 100 s.
     assert time_to_cpa(1000.0, 1000.0, -10.0, -10.0) == pytest.approx(100.0)

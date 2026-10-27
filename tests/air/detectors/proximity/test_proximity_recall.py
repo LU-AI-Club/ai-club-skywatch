@@ -93,12 +93,25 @@ def test_low_altitude_collision_is_caught(alt_ft, speed_kt):
     assert detect(head_on(alt_ft, speed_kt))
 
 
-@pytest.mark.xfail(strict=True, reason="t_cpa is undefined when relative horizontal velocity is ~0")
 def test_pure_vertical_convergence_is_caught():
     """Same track and speed, one climbing into the other. Horizontally they never
-    move relative to each other, so |v| is ~0 and time_to_cpa returns None."""
+    move relative to each other (|v| is ~0), so time_to_cpa falls back to when
+    the vertical gap closes."""
     d = detect(collision_track("aaa001", 300, 400, 90, 24000)
                + collision_track("bbb002", 300, 400, 90, 21000, offset_s=1.1, vrate_fpm=1000))
+    assert d
+
+
+@pytest.mark.xfail(strict=True, reason="t_cpa follows horizontal motion only, so a near-parallel "
+                   "pair is judged at the horizontal closest point, not when the vertical gap closes")
+@pytest.mark.parametrize("speed_b_kt", [401, 405])
+def test_near_parallel_vertical_convergence_is_caught(speed_b_kt):
+    """Same as above but B is 1-5 kt faster. The vertical gap closes at t=180 s,
+    when they are 0.03-0.17 nm apart horizontally -- but any horizontal relative
+    motion sends t_cpa to the horizontal formula (t=300 s), by which time B is
+    2,000 ft above A, so nothing is flagged."""
+    d = detect(collision_track("aaa001", 300, 400, 90, 24000)
+               + collision_track("bbb002", 300, speed_b_kt, 90, 21000, offset_s=1.1, vrate_fpm=1000))
     assert d
 
 
