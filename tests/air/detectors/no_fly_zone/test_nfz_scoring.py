@@ -69,6 +69,10 @@ def test_prohibited_incursion_scores_high(cfg: Config) -> None:
     assert detection.baseline_or_model_version.endswith("sua-2026-08-07")
     assert detection.extras["source_row_id"] == "test-1"
     assert detection.explanation_facts
+    # Whether the zone was live, as fields a reader can filter on rather than
+    # prose they have to parse.
+    assert detection.extras["activation_state"] == "ACTIVE"
+    assert detection.extras["activation_basis"] == "always active"
 
 
 def test_unknown_activation_caps_severity(cfg: Config) -> None:
@@ -100,3 +104,8 @@ def test_unknown_activation_caps_severity(cfg: Config) -> None:
     assert detection.severity is Severity.LOW
     assert detection.raw_model_confidence == 0.0
     assert "Zone activation could not be determined." in detection.limitations
+    # The field that explains the cap: severity is LOW *because* we could not
+    # tell whether the zone was live. On real FAA airspace that is the common
+    # case, so it has to be readable without parsing the explanation text.
+    assert detection.extras["activation_state"] == "UNKNOWN"
+    assert detection.extras["activation_basis"] == "NOTAM activation could not be resolved"

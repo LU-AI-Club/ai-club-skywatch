@@ -100,6 +100,11 @@ def flatten_detection(record: dict[str, Any]) -> dict[str, Any]:
         "observed_end": record["temporal_bounds"].get("end_time"),
         "aircraft": entity_id.split(":", 1)[-1],
         "zone_id": extras.get("zone_id", ""),
+        # Whether the zone was live. "UNKNOWN" is the usual answer on real FAA
+        # airspace and is what caps severity, so it belongs in the table rather
+        # than only inside the explanation text.
+        "activation": extras.get("activation_state", ""),
+        "activation_basis": extras.get("activation_basis", ""),
         "severity": record["severity"],
         "anomaly_score": float(meta["anomaly_score"]),
         "confidence": float(record.get("confidence") or 0.0),
@@ -434,8 +439,9 @@ def main() -> None:
         st.subheader("Detections")
         if shown:
             table = pd.DataFrame(shown)[[
-                "anomaly_score", "severity", "aircraft", "zone_id", "observed_at",
-                "duration_s", "reports", "altitude_ft", "penetration_nm", "confidence",
+                "anomaly_score", "severity", "aircraft", "zone_id", "activation",
+                "observed_at", "duration_s", "reports", "altitude_ft",
+                "penetration_nm", "confidence",
             ]]
             st.dataframe(table, hide_index=True, width="stretch")
         elif detections.rows:

@@ -167,6 +167,14 @@ def build_detection(
         "lon": state.lon,
         "zone_id": zone.zone_id,
         "zone_type": zone.zone_type.value,
+        # Was the zone live? As fields, not only buried in the explanation
+        # prose. On real FAA airspace most zones are NOTAM-activated or carry a
+        # schedule we cannot parse, so the honest answer is usually UNKNOWN -
+        # and a reader has to be able to tell that from a confirmed incursion
+        # at a glance. UNKNOWN is also what caps severity, so this is the field
+        # that explains the severity.
+        "activation_state": activation.state.value,
+        "activation_basis": activation.basis,
         # The signal facts on their own, so episode grouping can say when a
         # signal (e.g. a squawk) first appeared during a crossing.
         "signal_facts": [signal.fact for signal in signals],
