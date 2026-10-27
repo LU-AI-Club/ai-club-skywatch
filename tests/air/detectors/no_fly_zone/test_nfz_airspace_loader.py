@@ -11,11 +11,17 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from nfz_support import AIRSPACE_FILE
+from nfz_support import AIRSPACE_FILE, FIXTURES
 
 from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
 from air.detectors.no_fly_zone.logic.activation import is_active
-from air.detectors.no_fly_zone.types import Activation, ActivationState, Datum, ZoneType
+from air.detectors.no_fly_zone.types import (
+    Activation,
+    ActivationState,
+    AirspaceZone,
+    Datum,
+    ZoneType,
+)
 
 SKIP = pytest.mark.skip(reason="stream B: not implemented")
 
@@ -117,3 +123,89 @@ def test_point_geometry_is_still_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Point"):
         load_zones(_write_variant(tmp_path, "point", to_point))
+
+
+# --- real FAA data -----------------------------------------------------------
+# klyh-faa-sample.geojson is nine real features from the FAA Special Use
+# Airspace service, cut from the 52 within 150 nm of KLYH by
+# scripts/make_faa_airspace.py. Chosen to cover every code path the fake
+# fixtures never exercised: all four TYPE_CODEs, all three activation kinds,
+# and the AGL / SFC / MSL / FL datums. The full file is generated, not
+# committed - see .gitignore.
+FAA_SAMPLE = FIXTURES / "airspace" / "klyh-faa-sample.geojson"
+
+
+def _faa_zones() -> dict[str, AirspaceZone]:
+    return {z.zone_id: z for z in load_zones(FAA_SAMPLE)}
+
+
+def test_faa_sample_loads_every_feature() -> None:
+    zones = _faa_zones()
+    assert len(zones) == 9
+    assert {z.zone_type for z in zones.values()} == {
+        ZoneType.PROHIBITED,
+        ZoneType.RESTRICTED,
+        ZoneType.MOA,
+        ZoneType.ALERT,
+    }
+
+
+def test_faa_repeated_names_get_distinct_ids() -> None:
+    """The FAA reuses NAME across sub-areas with different altitude bands.
+
+    logic/detector.py keys zones by id, so colliding ids would silently drop
+    every duplicate but one - three of Farmville MOA, in this sample.
+    """
+    zones = _faa_zones()
+    farmville = sorted(z for z in zones if z.startswith("FARMVILLE"))
+    assert farmville == ["FARMVILLE MOA", "FARMVILLE MOA #2", "FARMVILLE MOA #3"]
+    assert len(zones) == len(set(zones))
+
+
+def test_faa_nonzero_sfc_floor_is_agl_not_the_surface() -> None:
+    """A non-zero SFC value is a height above ground, not the surface.
+
+    Reading it as SFC/0 would put the floor on the deck and flag aircraft
+    legally overflying at 400 ft. AGL is honest, and geo/altitude.py then
+    abstains for want of a terrain model.
+    """
+    farmville = _faa_zones()["FARMVILLE MOA"]
+    assert (farmville.floor_ft, farmville.floor_datum) == (300.0, Datum.AGL)
+    assert farmville.ceiling_datum is Datum.MSL
+
+
+def test_faa_zero_sfc_floor_is_the_surface() -> None:
+    """Only a zero value is literally the surface, and that stays SFC."""
+    restricted = _faa_zones()["R-6602A"]
+    assert (restricted.floor_ft, restricted.floor_datum) == (0.0, Datum.SFC)
+
+
+def test_faa_flight_level_ceiling_converts_to_feet() -> None:
+    """FL180 arrives as "180 FL STD"; types.py stores flight levels in feet."""
+    evers = _faa_zones()["EVERS CENTER MOA"]
+    assert (evers.ceiling_ft, evers.ceiling_datum) == (18000.0, Datum.FL)
+    assert (evers.floor_ft, evers.floor_datum) == (11000.0, Datum.MSL)
+
+
+def test_faa_activation_comes_from_the_times_of_use_prose() -> None:
+    """CONTINUOUS is the only unambiguous value; the rest must not read ACTIVE.
+
+    A schedule we cannot parse into windows is SCHEDULED with no windows, which
+    logic/activation.py reports as UNKNOWN rather than guessing. Parsing
+    "0800 - 1700, MON - FRI" into real windows is a separate piece of work.
+    """
+    zones = _faa_zones()
+    assert zones["P-56"].activation is Activation.ALWAYS      # "CONTINUOUS"
+    assert zones["R-6602A"].activation is Activation.NOTAM    # "...BY NOTAM"
+    assert zones["FARMVILLE MOA"].activation is Activation.SCHEDULED
+    assert zones["FARMVILLE MOA"].active_windows == ()
+
+    live = is_active(zones["FARMVILLE MOA"], datetime(2026, 9, 22, 20, 15, tzinfo=UTC))
+    assert live.state is ActivationState.UNKNOWN
+
+
+def test_faa_sample_pins_the_publication_cycle() -> None:
+    """source_asof must match the FAA cycle: Config.baseline_version stamps it
+    onto every detection, so a stale value mislabels every result."""
+    assert all(z.source == "faa_sua" for z in _faa_zones().values())
+    assert {str(z.source_asof) for z in _faa_zones().values()} == {"2026-09-28"}
