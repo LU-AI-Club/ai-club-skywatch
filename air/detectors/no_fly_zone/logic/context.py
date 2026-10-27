@@ -29,7 +29,9 @@ Signals to implement (keys must match ``scoring.context_weights``)
 ``lifeguard_callsign``
     Callsign prefixed LIFEGUARD / MEDEVAC / AIR EVAC / HOSP.
 ``emergency_squawk``
-    7500, 7600 or 7700.
+    7600 or 7700.
+``unlawful_interference_squawk``
+    7500. Its negative configured weight raises the score to the maximum.
 
 Failure causes
 --------------
@@ -47,8 +49,8 @@ from __future__ import annotations
 from ..config import Config
 from ..types import AircraftState, ContextSignal
 
-_EMERGENCY_SQUAWKS: frozenset[str] = frozenset({"7500", "7600", "7700"})
-# 7500 is unlawful interference, 7600 is lost comms, 7700 is emergency.
+_EMERGENCY_SQUAWKS: frozenset[str] = frozenset({"7600", "7700"})
+_UNLAWFUL_INTERFERENCE_SQUAWK = "7500"
 # 0000 is not a valid discrete beacon code; 1200 is the default VFR code.
 _NON_DISCRETE_SQUAWKS: frozenset[str] = frozenset({"0000", "1200"})
 # can be replaced with non_discrete_squawks = cfg["squawks"]["non_discrete"] if the YAML is updated to include a list of regional non-disscrete codes.
@@ -77,7 +79,13 @@ def gather_signals(state: AircraftState, cfg: Config) -> list[ContextSignal]:
 
     squawk = _normalize_squawk(state.squawk)
 
-    if squawk in _EMERGENCY_SQUAWKS:
+    if squawk == _UNLAWFUL_INTERFERENCE_SQUAWK:
+        signals.append(ContextSignal(
+            name="unlawful_interference_squawk",
+            weight=weights["unlawful_interference_squawk"],
+            fact=f"squawk {squawk} indicates unlawful interference",
+        ))
+    elif squawk in _EMERGENCY_SQUAWKS:
         signals.append(ContextSignal(
             name="emergency_squawk",
             weight=weights["emergency_squawk"],

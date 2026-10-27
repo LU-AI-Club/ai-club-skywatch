@@ -7,7 +7,7 @@ from ..logic.context import gather_signals
 from .conftest import Config, make_state
 
 
-@pytest.mark.parametrize("squawk", ["7500", "7600", "7700", 7700])
+@pytest.mark.parametrize("squawk", ["7600", "7700", 7700])
 def test_emergency_squawk_produces_weighted_signal(squawk: str | int, cfg: Config) -> None:
     signals = gather_signals(make_state(squawk=squawk), cfg)
 
@@ -15,6 +15,20 @@ def test_emergency_squawk_produces_weighted_signal(squawk: str | int, cfg: Confi
     assert len(signals) == 1
     assert signals[0].name == "emergency_squawk"
     assert signals[0].weight == cfg["scoring"]["context_weights"]["emergency_squawk"]
+
+
+@pytest.mark.parametrize("squawk", ["7500", 7500])
+def test_unlawful_interference_squawk_is_separate_and_maximizes_score(
+    squawk: str | int, cfg: Config
+) -> None:
+    signals = gather_signals(make_state(squawk=squawk), cfg)
+
+    assert len(signals) == 1
+    assert signals[0].name == "unlawful_interference_squawk"
+    assert signals[0].weight == -1.0
+    assert signals[0].weight == cfg["scoring"]["context_weights"][
+        "unlawful_interference_squawk"
+    ]
 
 
 @pytest.mark.parametrize("squawk", ["0456", 456])
@@ -86,3 +100,10 @@ def test_missing_weight_key_raises_keyerror(cfg: Config) -> None:
 
     with pytest.raises(KeyError):
         gather_signals(make_state(squawk="7700"), cfg)
+
+
+def test_missing_unlawful_interference_weight_raises_keyerror(cfg: Config) -> None:
+    del cfg["scoring"]["context_weights"]["unlawful_interference_squawk"]
+
+    with pytest.raises(KeyError):
+        gather_signals(make_state(squawk="7500"), cfg)

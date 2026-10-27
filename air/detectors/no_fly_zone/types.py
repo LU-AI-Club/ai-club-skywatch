@@ -151,9 +151,9 @@ class ActivationResult:
 
 @dataclass(frozen=True, slots=True)
 class ContextSignal:
-    """Stream F: an observable fact that makes an incursion look authorized.
+    """Stream F: an observable fact that affects an incursion's score.
 
-    Signals lower the score. They never prove approval.
+    Positive weights lower the score when subtracted; negative weights raise it. They never prove approval
     """
     name: str                        # key into config scoring.context_weights
     weight: float                    # filled from config, not hard-coded

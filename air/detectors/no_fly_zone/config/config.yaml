@@ -44,11 +44,12 @@ scoring:
     MOA: 0.2
   depth_bump_per_nm: 0.01
   depth_bump_max: 0.1
-  context_weights:        # subtracted from the score
+  context_weights:        # subtracted from the score; negative weights raise it
     atc_discrete_squawk: 0.4
     military_hex: 0.3
     lifeguard_callsign: 0.3
     emergency_squawk: 0.2
+    unlawful_interference_squawk: -1.0
 
 severity:
   unknown_activation_cap: LOW
