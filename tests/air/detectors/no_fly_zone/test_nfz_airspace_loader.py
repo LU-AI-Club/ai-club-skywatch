@@ -117,3 +117,14 @@ def test_point_geometry_is_still_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Point"):
         load_zones(_write_variant(tmp_path, "point", to_point))
+
+
+def test_schedule_property_is_loaded(tmp_path: Path) -> None:
+    """A recurring ``schedule`` string reaches the zone, and is None when absent."""
+    def add_schedule(feature: dict[str, Any]) -> None:
+        feature["properties"]["schedule"] = "Mon-Fri 1300-2200Z"
+
+    zone = load_zones(_write_variant(tmp_path, "scheduled", add_schedule))[0]
+
+    assert zone.schedule == "Mon-Fri 1300-2200Z"
+    assert all(z.schedule is None for z in load_zones(AIRSPACE_FILE))

@@ -114,6 +114,7 @@ class AirspaceZone:
     ceiling_datum: Datum
     activation: Activation
     active_windows: tuple[TimeWindow, ...] = ()
+    schedule: str | None = None      # recurring hours, e.g. "Mon-Fri 1300-2200Z"
     controlling_agency: str | None = None
     source: str = ""                 # e.g. "faa_sua"
     source_asof: date | None = None  # publication cycle of the source file
