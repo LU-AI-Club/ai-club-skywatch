@@ -32,6 +32,9 @@ without a datum is read as MSL.
 
 Window times without a timezone are read as UTC, matching the ADS-B loader, so
 :func:`logic.activation.is_active` never compares naive and aware datetimes.
+A recurring ``schedule`` string (``"Mon-Fri 1300-2200Z"``) is passed through
+as text; :func:`logic.activation.is_active` parses it, so one malformed
+schedule makes that zone UNKNOWN rather than failing the whole load.
 
 Notes
 -----
@@ -116,6 +119,7 @@ def load_zones(path: str | Path) -> list[AirspaceZone]:
             ceiling_datum=ceiling_datum,
             activation=Activation(props["activation"]),
             active_windows=active_windows,
+            schedule=props.get("schedule"),
             controlling_agency=props.get("controlling_agency"),
             source=props.get("source", ""),
             source_asof=source_asof,
