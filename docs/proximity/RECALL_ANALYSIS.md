@@ -51,6 +51,20 @@ only; the vertical dimension is extrapolated to that time but never drives it.
 A level-off error — an aircraft climbing through an occupied flight level
 directly beneath traffic — is a real conflict shape and we cannot see it.
 
+**Update (Erik): partly fixed.** When there is no horizontal relative motion,
+`time_to_cpa` now falls back to when the *vertical* gap closes
+(`t = -vertical_now / vertical_rate_diff`). The exact-same-speed case is caught
+as HIGH, and the Lynchburg hour is unchanged at 3 detections.
+
+**Still open:** if the speeds differ by even 1 kt, `t_cpa` goes back to the
+horizontal formula and the pair is judged at the wrong moment. At 400 vs 401 kt
+the vertical gap closes at t=180 s with the pair 0.03 nm apart, but the detector
+evaluates t=300 s, when they are 2,000 ft apart, and stays quiet. Pinned by
+`test_near_parallel_vertical_convergence_is_caught` (strict xfail). The full fix
+is to evaluate both candidate moments — horizontal closest point and vertical
+crossing — and report the tighter one; that changes `features.py` and how
+`PairGeometry` picks its moment, so it needs a design decision first.
+
 ### 3. Warning time shrinks as closure rate rises
 
 | Closure rate | First alert before impact |

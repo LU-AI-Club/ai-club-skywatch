@@ -70,7 +70,14 @@ def velocity_xy(ground_speed_kt: float, track_deg: float) -> tuple[float, float]
     return speed_mps * math.sin(heading_rad), speed_mps * math.cos(heading_rad)
 
 
-def time_to_cpa(rx: float, ry: float, vx: float, vy: float) -> float | None:
+def time_to_cpa(
+    rx: float,
+    ry: float,
+    vx: float,
+    vy: float,
+    vertical_now_ft: float = 0.0,
+    vertical_rate_diff_fpm: float = 0.0,
+) -> float | None:
     """Seconds until two aircraft are closest, assuming both fly straight.
 
     ``(rx, ry)`` is B's position relative to A in metres; ``(vx, vy)`` is B's
@@ -83,13 +90,22 @@ def time_to_cpa(rx: float, ry: float, vx: float, vy: float) -> float | None:
         t_cpa < 0  -> already past closest point, diverging
         t_cpa = 0  -> closest right now
 
-    Return ``None`` when |v| is (near) zero — same speed and heading means the
-    separation never changes and there is no closest approach to speak of.
+    No horizontal relative motion (same speed and heading): the horizontal gap
+    never changes, so the only thing that can close is the vertical gap.
+    Closest approach is then when the vertical gap reaches zero:
+
+        t_cpa = -vertical_now_ft / (vertical_rate_diff_fpm / 60)
+
+    signed like ``predicted_separation``'s inputs (B minus A). Return ``None``
+    only when nothing moves relative to anything -- the separation never
+    changes and there is no closest approach to speak of.
     """
     speed_sq = vx * vx + vy * vy
-    if speed_sq < 1e-18:  # Relative speed below 1 nanometre per second.
+    if speed_sq >= 1e-18:  # Relative speed at least 1 nanometre per second.
+        return -(rx * vx + ry * vy) / speed_sq
+    if abs(vertical_rate_diff_fpm) < 1e-9:
         return None
-    return -(rx * vx + ry * vy) / speed_sq
+    return -vertical_now_ft / (vertical_rate_diff_fpm / 60.0)
 
 
 def predicted_separation(
