@@ -175,6 +175,29 @@ SCENARIOS = {
         "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 60, 15, 90, 940, TIMES_A, "taxi_A")
         + _aircraft("bbb002", "TEST02", (0.0, 0.02), 60, 20, 270, 940, TIMES_B, "taxi_B"),
     },
+
+    # Regression: aircraft remain far apart at predicted closest approach.
+    "proximity_far_apart.json": {
+        "_expect": {"detections": 0},
+        "rows": _aircraft(
+            "aaa001", "TEST01", (0.0, 0.0), 60, 300, 90, 10000, TIMES_A, "far_A"
+        )
+        + _aircraft(
+            "bbb002", "TEST02", (0.0, 8.0), 60, 300, 270, 10200, TIMES_B, "far_B"
+        ),
+    },
+
+    # Regression: close horizontal geometry below the 5,000 ft threshold.
+    "proximity_below_5000ft.json": {
+        "_expect": {"detections": 0},
+        "rows": _aircraft(
+            "aaa001", "TEST01", (0.0, 0.0), 60, 300, 90, 4000, TIMES_A, "low_A"
+        )
+        + _aircraft(
+            "bbb002", "TEST02", (0.0, 0.2), 60, 300, 270, 4200, TIMES_B, "low_B"
+        ),
+    },
+
 }
 
 
