@@ -27,6 +27,9 @@ FIXTURES = [
     "proximity_near_term.json",
     "proximity_terminal_altitude.json",
     "proximity_just_above_floor.json",
+    # PROX-7 regression guards: cases the detector must stay quiet on.
+    "proximity_far_apart.json",
+    "proximity_below_5000ft.json",
 ]
 
 
