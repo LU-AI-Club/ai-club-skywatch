@@ -398,6 +398,132 @@ def make_sparse_track():
 
 
 # --------------------------------------------------------------------------
+# guards — the floor nobody may tune below
+# --------------------------------------------------------------------------
+# Every other fixture answers "does this rule work". These answer a different
+# question: "is the detector still worth running". They are gross, unambiguous
+# misbehaviour, well clear of every threshold we might loosen, and each one is
+# built to survive the specific allowance that would otherwise excuse it --
+# cruise speed instead of taxi speed, a long gap instead of a short one, a
+# good reported fix instead of a poor one. If a calibration pass turns one of
+# these green, that pass went too far, whatever the alert count says.
+def make_guard_teleport():
+    """Hundreds of miles between consecutive reports.
+
+    Position error cannot explain it at any NACp, and the gap is long enough
+    that the allowance has shrunk to nothing. The aircraft also reports its
+    best possible fix, so it cannot claim the jump was its own GPS.
+    """
+    rows = make_clean_track(
+        icao24="a11111", callsign="GRD001", speed_kt=450.0,
+        altitude_ft=35000.0, n_points=12, interval_s=10.0,
+        nic=8, nacp=11, label="positive:teleport_v1",
+    )
+    row = rows[6]
+    row["latitude"], row["longitude"] = destination(
+        row["latitude"], row["longitude"], 90.0, 300.0 / M_TO_NM
+    )
+    row["_note"] = "300 nm sideways in 10 s; ~108,000 kt implied"
+    return rows
+
+
+def make_guard_turn_at_cruise():
+    """A 90 degree heading change in 5 s at 450 kt.
+
+    Deliberately at cruise, not taxi: the turn-rate rule is about to gain a
+    minimum-speed gate for slow traffic, and this fixture must sit above it.
+    No airframe rolls through 18 deg/s at this speed and stays together.
+    """
+    rows = make_clean_track(
+        icao24="a22222", callsign="GRD002", speed_kt=450.0,
+        altitude_ft=33000.0, n_points=12, interval_s=5.0,
+        label="positive:turn_rate_v1",
+    )
+    rows[6]["track_deg"] = round((rows[6]["track_deg"] + 90.0) % 360.0, 1)
+    rows[6]["_note"] = "90 deg in 5 s = 18 deg/s, at 450 kt"
+    return rows
+
+
+def make_guard_speed_lie_long_gap():
+    """Positions imply 480 kt over 30 s; the aircraft claims 90 kt.
+
+    Thirty seconds is long enough that position error buys roughly 4 kt, so
+    nothing about the fix quality explains a 390 kt gap. This is the case no
+    amount of short-gap forgiveness may ever reach.
+    """
+    rows = make_clean_track(
+        icao24="a33333", callsign="GRD003", speed_kt=480.0,
+        altitude_ft=31000.0, n_points=12, interval_s=30.0,
+        label="positive:speed_delta_v1",
+    )
+    for row in rows:
+        row["ground_speed_kt"] = 90.0
+        row["_note"] = "positions imply ~480 kt over 30 s; claims 90 kt"
+    return rows
+
+
+def make_guard_vrate_lie_at_cruise():
+    """Claims a 12,000 fpm climb while holding altitude at FL350.
+
+    The gap is 10 s, so altitude quantisation accounts for about 300 fpm. The
+    claim is forty times that, and no transport aircraft climbs at 12,000 fpm
+    at any altitude, let alone cruise.
+    """
+    rows = make_clean_track(
+        icao24="a44444", callsign="GRD004", speed_kt=440.0,
+        altitude_ft=35000.0, n_points=12, interval_s=10.0,
+        label="positive:vrate_delta_v1",
+    )
+    for row in rows:
+        row["vertical_rate_fpm"] = 12000.0
+        row["_note"] = "claims +12,000 fpm while level at FL350"
+    return rows
+
+
+def make_guard_integrity_collapse():
+    """NIC pinned at 0 for five minutes while the aircraft reports cruise.
+
+    A real receiver dips for a few seconds. Holding the worst possible
+    integrity for 300 s, far past the rule's minimum duration, while still
+    broadcasting positions, is a transmitter that is not what it says it is.
+    """
+    rows = make_clean_track(
+        icao24="a55555", callsign="GRD005", speed_kt=430.0,
+        altitude_ft=29000.0, n_points=40, interval_s=10.0,
+        label="positive:nic_floor_v1",
+    )
+    for row in rows:
+        row["nic"] = 0
+        row["_note"] = "NIC 0 held for 390 s, well past nic_min_duration_s"
+    return rows
+
+
+def make_guard_impersonation():
+    """Two aircraft broadcasting one address from 200 nm apart, at once.
+
+    One ICAO address is one transmitter. Two of them, interleaved in time and
+    hundreds of miles apart, cannot both be genuine however the thresholds
+    move -- there is no single aircraft the reports describe.
+    """
+    real = make_clean_track(
+        icao24="a66666", callsign="GRD006", speed_kt=420.0,
+        altitude_ft=30000.0, n_points=12, interval_s=10.0,
+        label="positive:coexistence_v1",
+    )
+    far_lat, far_lon = destination(LYH_LAT, LYH_LON, 270.0, 200.0 / M_TO_NM)
+    ghost = make_clean_track(
+        icao24="a66666", callsign="GRD006", lat=far_lat, lon=far_lon,
+        speed_kt=420.0, altitude_ft=30000.0, n_points=12, interval_s=10.0,
+        start_s=5.0, label="positive:coexistence_v1",
+    )
+    for row in ghost:
+        row["_note"] = "same address, 200 nm west, interleaved in time"
+    rows = real + ghost
+    rows.sort(key=lambda r: r["observed_at"])
+    return rows
+
+
+# --------------------------------------------------------------------------
 # write + self-check
 # --------------------------------------------------------------------------
 def implied_speeds_kt(rows):
@@ -446,6 +572,13 @@ def main() -> None:
         "pos_gap_takeover.json": inject_gap_takeover(clean),
         "pos_integrity_collapse.json": inject_integrity_collapse(clean),
         "pos_registry_mismatch.json": inject_registry_mismatch(clean),
+        # guards — gross misbehaviour that must survive any calibration
+        "pos_guard_teleport.json": make_guard_teleport(),
+        "pos_guard_turn_at_cruise.json": make_guard_turn_at_cruise(),
+        "pos_guard_speed_lie_long_gap.json": make_guard_speed_lie_long_gap(),
+        "pos_guard_vrate_lie_at_cruise.json": make_guard_vrate_lie_at_cruise(),
+        "pos_guard_integrity_collapse.json": make_guard_integrity_collapse(),
+        "pos_guard_impersonation.json": make_guard_impersonation(),
     }
 
     for name, rows in files.items():
