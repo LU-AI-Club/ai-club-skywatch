@@ -42,7 +42,7 @@ class AdsbObservation:
     observed_at: datetime             # UTC, timezone-aware
     latitude: float                   # WGS84 degrees
     longitude: float                  # WGS84 degrees
-    altitude_ft: float | None = None  # feet (barometric or geometric)
+    altitude_ft: float | None = None  # feet, barometric (the CSV normalizer maps `ab`)
     ground_speed_kt: float | None = None   # knots
     track_deg: float | None = None    # course over ground, 0-360
     vertical_rate_fpm: float | None = None  # feet per minute, + = climbing
@@ -51,6 +51,13 @@ class AdsbObservation:
     squawk: str | None = None         # transponder code, e.g. "7700"
     callsign: str | None = None
     receiver_id: str | None = None    # which sensor heard it (receiver-health FP work)
+    # --- Added after the first contract cut. Appended (never inserted) so any
+    # positional construction elsewhere keeps working, and all default to None
+    # so detectors that ignore them are unaffected.
+    alt_geom_ft: float | None = None  # feet, geometric (GNSS) altitude
+    on_ground: bool | None = None     # True/False as reported; None = feed did not say
+    emitter_category: str | None = None  # ADS-B emitter category, e.g. "A3"
+    source_row_id: str | None = None  # provenance back to the raw record, e.g. "file.csv:42"
 
     def __post_init__(self) -> None:
         if not isinstance(self.icao24, str) or not self.icao24.strip():

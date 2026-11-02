@@ -1,0 +1,149 @@
+{
+  "type": "FeatureCollection",
+  "name": "klyh-150nm",
+  "_comment": "Hand-built fixture zones near KLYH (37.3267, -79.2004). NOT REAL AIRSPACE - do not fly by these. Replace with the FAA SUA GeoJSON for the 2026-08-07 cycle before any real run.",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_id": "P-901",
+        "name": "Hand-built prohibited area (test)",
+        "zone_type": "PROHIBITED",
+        "floor_ft": 0.0,
+        "floor_datum": "SFC",
+        "ceiling_ft": 18000.0,
+        "ceiling_datum": "MSL",
+        "activation": "ALWAYS",
+        "active_windows": [],
+        "controlling_agency": "ZDC",
+        "source": "fixture",
+        "source_asof": "2026-08-07"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -79.25,
+              37.4
+            ],
+            [
+              -79.18,
+              37.4
+            ],
+            [
+              -79.18,
+              37.45
+            ],
+            [
+              -79.25,
+              37.45
+            ],
+            [
+              -79.25,
+              37.4
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_id": "TFR-6/1234",
+        "name": "Hand-built TFR with an explicit window (test)",
+        "zone_type": "TFR",
+        "floor_ft": 0.0,
+        "floor_datum": "SFC",
+        "ceiling_ft": 5000.0,
+        "ceiling_datum": "MSL",
+        "activation": "WINDOW",
+        "active_windows": [
+          {
+            "start": "2026-09-22T19:00:00+00:00",
+            "end": "2026-09-23T01:30:00+00:00"
+          }
+        ],
+        "controlling_agency": "FAA",
+        "source": "fixture",
+        "source_asof": "2026-08-07"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -79.3,
+              37.2
+            ],
+            [
+              -79.22,
+              37.2
+            ],
+            [
+              -79.22,
+              37.26
+            ],
+            [
+              -79.3,
+              37.26
+            ],
+            [
+              -79.3,
+              37.2
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "zone_id": "LYNCHBURG-MOA",
+        "name": "Hand-built MOA, floor well above the surface (test)",
+        "zone_type": "MOA",
+        "floor_ft": 8000.0,
+        "floor_datum": "MSL",
+        "ceiling_ft": 18000.0,
+        "ceiling_datum": "FL",
+        "activation": "SCHEDULED",
+        "active_windows": [
+          {
+            "start": "2026-09-22T12:00:00+00:00",
+            "end": "2026-09-22T22:00:00+00:00"
+          }
+        ],
+        "controlling_agency": "ZDC",
+        "source": "fixture",
+        "source_asof": "2026-08-07"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              -79.7,
+              37.3
+            ],
+            [
+              -79.45,
+              37.3
+            ],
+            [
+              -79.45,
+              37.5
+            ],
+            [
+              -79.7,
+              37.5
+            ],
+            [
+              -79.7,
+              37.3
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

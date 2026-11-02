@@ -1,0 +1,91 @@
+name: no-fly-zone
+
+# Scoped to the no-fly-zone files on purpose (the detector package, its ADS-B
+# loader in air/normalizers, its config and its tests). Running ruff and mypy across
+# the whole repo would fail on pre-existing findings in files this team does
+# not own, and a permanently red build is one nobody reads.
+
+on:
+  push:
+    branches: [main, No_Fly_Zone_Detector]
+    paths:
+      - "air/detectors/no_fly_zone/**"
+      # NFZ consumes these through adapter.py, so a change there can break it.
+      - "air/models/**"
+      - "air/normalizers/**"
+      - "scripts/replay_csv.py"
+      - "configs/detectors/no_fly_zone.yaml"
+      - "tests/air/detectors/no_fly_zone/**"
+      - "tests/air/normalizers/test_nfz_adsb.py"
+      - "pyproject.toml"
+      - ".github/workflows/no-fly-zone.yml"
+  pull_request:
+    paths:
+      - "air/detectors/no_fly_zone/**"
+      # NFZ consumes these through adapter.py, so a change there can break it.
+      - "air/models/**"
+      - "air/normalizers/**"
+      - "scripts/replay_csv.py"
+      - "configs/detectors/no_fly_zone.yaml"
+      - "tests/air/detectors/no_fly_zone/**"
+      - "tests/air/normalizers/test_nfz_adsb.py"
+      - "pyproject.toml"
+      - ".github/workflows/no-fly-zone.yml"
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        # The same line the README gives the NFZ team. nfz-dashboard lets the
+        # dashboard's full-page render test run instead of skipping.
+        run: pip install -e ".[dev,nfz,nfz-dashboard]"
+
+      - name: ruff
+        run: ruff check air/detectors/no_fly_zone/ air/normalizers/no_fly_zone_adsb.py tests/air/detectors/no_fly_zone/
+
+      - name: mypy
+        run: mypy air/detectors/no_fly_zone/ air/normalizers/no_fly_zone_adsb.py tests/air/detectors/no_fly_zone/
+
+      - name: pytest
+        run: pytest tests/air/detectors/no_fly_zone tests/air/normalizers/test_nfz_adsb.py -q
+
+      - name: CLI runs end to end on the fixture
+        # Every stage is implemented, so anything but exit 0 is a failure.
+        run: |
+          python -m air.detectors.no_fly_zone run \
+            --input air/detectors/no_fly_zone/fixtures/tracks/klyh_mixed.json \
+            --out /tmp/nfz-ci/fixture
+
+      - name: CLI runs end to end on data/lynchburg_adsb.csv
+        # The real recorded hour (~284k rows, ~15 s). Guards the ADS-B CSV path.
+        run: |
+          python -m air.detectors.no_fly_zone run \
+            --input data/lynchburg_adsb.csv \
+            --out /tmp/nfz-ci/lynchburg
+
+      - name: Shared runner runs NFZ on data/lynchburg_adsb.csv
+        # replay_csv.py exits 1 when every requested detector is skipped, so this
+        # fails if build_detector() ever stops being found. Then the shared route
+        # and the CLI route must give the same detections.
+        run: |
+          python scripts/replay_csv.py --detector no_fly_zone --out /tmp/nfz-ci/replay.jsonl
+          python - <<'PY'
+          import json, re
+          uuid = re.compile(r'"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"')
+          row = re.compile(r'"[^"]*lynchburg_adsb\.csv:(\d+)"')
+          def load(path):
+              out = []
+              for line in open(path):
+                  text = json.dumps(json.loads(line), sort_keys=True, default=str)
+                  out.append(row.sub(r'"lynchburg_adsb.csv:\1"', uuid.sub('"<id>"', text)))
+              return sorted(out)
+          shared = load("/tmp/nfz-ci/replay.jsonl")
+          cli = load("/tmp/nfz-ci/lynchburg/detections.jsonl")
+          print(f"shared runner: {len(shared)}  CLI: {len(cli)}")
+          assert shared == cli, "shared runner and CLI disagree"
+          PY

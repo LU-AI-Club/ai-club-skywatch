@@ -3,10 +3,10 @@
 A **no-database** way to see detectors work on real data: read the CSV, stream
 it through the shared normalizer, slice it into epoch-anchored time windows, feed
 each window to the selected detector(s), and print each emitted ``Detection`` as
-JSON. This is the one-shot form of how detection runs on a live feed — there, the
+JSON. This is the one-shot form of how detection runs on a live feed - there, the
 same windowing logic runs on a timer over a rolling "last N minutes" slice.
 
-Thin by design (the repo rule — streaming/feeds are enabling infra that *calls*
+Thin by design (the repo rule - streaming/feeds are enabling infra that *calls*
 detectors, never baked inside them): all real logic lives in
 ``air/normalizers/adsb_csv.py`` and ``air/windowing.py``; this file only parses
 args, wires them together, and emits output + a summary.
@@ -18,7 +18,7 @@ Run it (from the repo root)::
     python scripts/replay_csv.py --detector proximity --window 30 --step 10
     python scripts/replay_csv.py --out detections.jsonl --quiet
 
-A detector that a team has not built yet is skipped with a note — the moment its
+A detector that a team has not built yet is skipped with a note - the moment its
 package exposes ``build_detector()`` (or a ``*Detector`` class), it lights up here
 with no change to this script.
 """
@@ -31,6 +31,7 @@ import json
 import sys
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 # Allow `python scripts/replay_csv.py` from the repo root without installing:
 # put the repo root (this file's parent's parent) on sys.path so `air`/`contracts`
@@ -60,15 +61,24 @@ def load_detector(name: str):
     module_path, attr = DETECTORS[name]
     try:
         module = importlib.import_module(module_path)
-        factory = getattr(module, attr)
-    except (ImportError, AttributeError):
-        return None, f"{name}: not built yet (no {module_path}:{attr}) — skipped"
+    except ImportError as exc:
+        # The package exists but fails to import - a missing dependency or a
+        # typo in the detector, NOT an unbuilt detector. Show the real cause.
+        return None, (
+            f"{name}: import failed - {exc.__class__.__name__}: {exc}. "
+            f'If a dependency is missing, run: pip install -e ".[dev]" - skipped'
+        )
+    factory = getattr(module, attr, None)
+    if factory is None:
+        # Package imported fine but the entry point isn't there yet: this is
+        # the genuine "team hasn't shipped it" case.
+        return None, f"{name}: not built yet (no {module_path}:{attr}) - skipped"
     try:
         detector = factory()  # class() instantiates; build_detector() constructs
     except Exception as exc:  # noqa: BLE001 - report, don't crash the whole run
-        return None, f"{name}: failed to construct ({exc!r}) — skipped"
+        return None, f"{name}: failed to construct ({exc!r}) - skipped"
     if not hasattr(detector, "detect_observations"):
-        return None, f"{name}: has no detect_observations() — skipped"
+        return None, f"{name}: has no detect_observations() - skipped"
     return detector, None
 
 
@@ -126,25 +136,35 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.format == "json":
             out.write("[")
+        def emit(name: str, detections: Any) -> None:
+            nonlocal first_json, emitted
+            for detection in detections:
+                if dedup:
+                    key = detection_dedup_key(detection)
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                payload = json.dumps(detection.to_dict(), default=str)
+                if args.format == "json":
+                    out.write(("" if first_json else ",") + "\n  " + payload)
+                    first_json = False
+                else:
+                    out.write(payload + "\n")
+                per_detector[name] += 1
+                emitted += 1
+
         for window in iter_windows(observations, args.window, step):
             if args.max_windows is not None and windows_seen >= args.max_windows:
                 break
             windows_seen += 1
             for name, detector in detectors:
-                for detection in detector.detect_observations(window):
-                    if dedup:
-                        key = detection_dedup_key(detection)
-                        if key in seen_keys:
-                            continue
-                        seen_keys.add(key)
-                    payload = json.dumps(detection.to_dict(), default=str)
-                    if args.format == "json":
-                        out.write(("" if first_json else ",") + "\n  " + payload)
-                        first_json = False
-                    else:
-                        out.write(payload + "\n")
-                    per_detector[name] += 1
-                    emitted += 1
+                emit(name, detector.detect_observations(window))
+        # End of stream: a detector that holds state across windows (NFZ keeps
+        # open incursion episodes) exposes flush() to emit what is still open.
+        for name, detector in detectors:
+            flush = getattr(detector, "flush", None)
+            if callable(flush):
+                emit(name, flush())
         if args.format == "json":
             out.write("\n]\n")
     finally:
