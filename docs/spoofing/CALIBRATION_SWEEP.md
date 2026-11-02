@@ -10,16 +10,16 @@ Each row replays `data/lynchburg_adsb.csv` through 60s tumbling windows, exactly
 
 | Threshold | Current | Recommended | Alerts | vs current | Positives |
 |---|---:|---:|---:|---:|---:|
-| `turn_rate_dps` | 10.0 | **15.0** | 196 | -116 | 14/15 |
-| `speed_delta_kt` | 50.0 | **100.0** | 306 | -6 | 14/15 |
-| `speed_delta_frac` | 0.3 | 0.3 | 312 | +0 | 14/15 |
-| `vrate_delta_fpm` | 2000.0 | 2000.0 | 312 | +0 | 14/15 |
-| `position_error_m` | 30.0 | 30.0 | 312 | +0 | 14/15 |
-| `altitude_quantum_ft` | 25.0 | **50.0** | 298 | -14 | 14/15 |
-| `teleport_kt` | 1000.0 | **800.0** | 312 | +0 | 14/15 |
-| `min_dt_s` | 0.5 | 0.5 | 312 | +0 | 14/15 |
-| `min_confidence` | 0.35 | 0.35 | 312 | +0 | 14/15 |
-| `min_segment_observations` | 3 | **12** | 298 | -14 | 14/15 |
+| `turn_rate_dps` | 10.0 | **15.0** | 64 | -3 | 14/15 |
+| `speed_delta_kt` | 50.0 | **100.0** | 63 | -4 | 14/15 |
+| `speed_delta_frac` | 0.3 | 0.3 | 67 | +0 | 14/15 |
+| `vrate_delta_fpm` | 2000.0 | 2000.0 | 67 | +0 | 14/15 |
+| `position_error_m` | 30.0 | 30.0 | 67 | +0 | 14/15 |
+| `altitude_quantum_ft` | 25.0 | **50.0** | 53 | -14 | 14/15 |
+| `teleport_kt` | 1000.0 | **800.0** | 67 | +0 | 14/15 |
+| `min_dt_s` | 0.5 | 0.5 | 67 | +0 | 14/15 |
+| `min_confidence` | 0.35 | 0.35 | 67 | +0 | 14/15 |
+| `min_segment_observations` | 3 | **8** | 66 | -1 | 14/15 |
 
 A recommendation is the fewest alerts among values that keep every guard firing **and** catch at least as many ordinary positives as the current setting does. It is still a measurement, not a decision — read the per-threshold table before taking one.
 
@@ -29,13 +29,13 @@ Our largest single source of alerts.
 
 | Value | Alerts/hour | Guards | Positives | Negatives quiet |
 |---:|---:|---:|---:|---:|
-| 6.0 | 932 | 6/6 | 14/15 | 10/10 |
-| 8.0 | 498 | 6/6 | 14/15 | 10/10 |
-| 10.0 ← current | 312 | 6/6 | 14/15 | 10/10 |
-| 15.0 | 196 | 6/6 | 14/15 | 10/10 |
-| 20.0 | 174 | **5/6** | 12/15 | 10/10 |
-| 30.0 | 161 | **5/6** | 12/15 | 10/10 |
-| 45.0 | 156 | **5/6** | 12/15 | 10/10 |
+| 6.0 | 96 | 6/6 | 14/15 | 10/10 |
+| 8.0 | 68 | 6/6 | 14/15 | 10/10 |
+| 10.0 ← current | 67 | 6/6 | 14/15 | 10/10 |
+| 15.0 | 64 | 6/6 | 14/15 | 10/10 |
+| 20.0 | 59 | **5/6** | 12/15 | 10/10 |
+| 30.0 | 58 | **5/6** | 12/15 | 10/10 |
+| 45.0 | 57 | **5/6** | 12/15 | 10/10 |
 
 Guards lost:
 
@@ -49,12 +49,12 @@ Floor of the speed-disagreement limit.
 
 | Value | Alerts/hour | Guards | Positives | Negatives quiet |
 |---:|---:|---:|---:|---:|
-| 25.0 | 318 | 6/6 | 14/15 | 10/10 |
-| 50.0 ← current | 312 | 6/6 | 14/15 | 10/10 |
-| 75.0 | 309 | 6/6 | 14/15 | 10/10 |
-| 100.0 | 306 | 6/6 | 14/15 | 10/10 |
-| 150.0 | 283 | 6/6 | 13/15 | 10/10 |
-| 200.0 | 260 | 6/6 | 13/15 | 10/10 |
+| 25.0 | 73 | 6/6 | 14/15 | 10/10 |
+| 50.0 ← current | 67 | 6/6 | 14/15 | 10/10 |
+| 75.0 | 64 | 6/6 | 14/15 | 10/10 |
+| 100.0 | 63 | 6/6 | 14/15 | 10/10 |
+| 150.0 | 47 | 6/6 | 13/15 | 10/10 |
+| 200.0 | 37 | 6/6 | 12/15 | 10/10 |
 
 ## `speed_delta_frac`
 
@@ -62,11 +62,11 @@ The limit is the larger of this share of reported speed and the floor.
 
 | Value | Alerts/hour | Guards | Positives | Negatives quiet |
 |---:|---:|---:|---:|---:|
-| 0.15 | 387 | 6/6 | 14/15 | 10/10 |
-| 0.3 ← current | 312 | 6/6 | 14/15 | 10/10 |
-| 0.45 | 269 | 6/6 | 13/15 | 10/10 |
-| 0.6 | 250 | 6/6 | 13/15 | 10/10 |
-| 0.8 | 239 | 6/6 | 13/15 | 10/10 |
+| 0.15 | 123 | 6/6 | 14/15 | 10/10 |
+| 0.3 ← current | 67 | 6/6 | 14/15 | 10/10 |
+| 0.45 | 42 | 6/6 | 13/15 | 10/10 |
+| 0.6 | 36 | 6/6 | 13/15 | 10/10 |
+| 0.8 | 35 | 6/6 | 13/15 | 10/10 |
 
 ## `vrate_delta_fpm`
 
@@ -74,15 +74,17 @@ Measured disagreement on real traffic medians near 9,920 fpm.
 
 | Value | Alerts/hour | Guards | Positives | Negatives quiet |
 |---:|---:|---:|---:|---:|
-| 1000.0 | 331 | 6/6 | 14/15 | 10/10 |
-| 2000.0 ← current | 312 | 6/6 | 14/15 | 10/10 |
-| 4000.0 | 297 | 6/6 | 13/15 | 10/10 |
-| 6000.0 | 290 | 6/6 | 13/15 | 10/10 |
-| 9000.0 | 262 | 6/6 | 13/15 | 10/10 |
-| 12000.0 | 259 | **5/6** | 12/15 | 10/10 |
+| 1000.0 | 85 | 6/6 | 14/15 | 10/10 |
+| 2000.0 ← current | 67 | 6/6 | 14/15 | 10/10 |
+| 4000.0 | 52 | 6/6 | 13/15 | 10/10 |
+| 6000.0 | 47 | **5/6** | 12/15 | 10/10 |
+| 9000.0 | 47 | **5/6** | 12/15 | 10/10 |
+| 12000.0 | 47 | **5/6** | 12/15 | 10/10 |
 
 Guards lost:
 
+- `6000.0` → pos_guard_vrate_lie_at_cruise.json
+- `9000.0` → pos_guard_vrate_lie_at_cruise.json
 - `12000.0` → pos_guard_vrate_lie_at_cruise.json
 
 ## `position_error_m`
@@ -91,11 +93,11 @@ Floor on each endpoint's position error; widens every speed allowance.
 
 | Value | Alerts/hour | Guards | Positives | Negatives quiet |
 |---:|---:|---:|---:|---:|
-| 10.0 | 329 | 6/6 | 14/15 | 10/10 |
-| 30.0 ← current | 312 | 6/6 | 14/15 | 10/10 |
-| 60.0 | 263 | 6/6 | 13/15 | 10/10 |
-| 100.0 | 238 | 6/6 | 12/15 | 10/10 |
-| 200.0 | 238 | 6/6 | 12/15 | 10/10 |
+| 10.0 | 92 | 6/6 | 14/15 | 10/10 |
+| 30.0 ← current | 67 | 6/6 | 14/15 | 10/10 |
+| 60.0 | 37 | 6/6 | 12/15 | 10/10 |
+| 100.0 | 34 | 6/6 | 12/15 | 10/10 |
+| 200.0 | 33 | 6/6 | 12/15 | 10/10 |
 
 ## `altitude_quantum_ft`
 
@@ -103,10 +105,10 @@ Altitude step size; sets the phantom climb rate at short gaps.
 
 | Value | Alerts/hour | Guards | Positives | Negatives quiet |
 |---:|---:|---:|---:|---:|
-| 25.0 ← current | 312 | 6/6 | 14/15 | 10/10 |
-| 50.0 | 298 | 6/6 | 14/15 | 10/10 |
-| 100.0 | 295 | 6/6 | 13/15 | 10/10 |
-| 200.0 | 264 | 6/6 | 13/15 | 10/10 |
+| 25.0 ← current | 67 | 6/6 | 14/15 | 10/10 |
+| 50.0 | 53 | 6/6 | 14/15 | 10/10 |
+| 100.0 | 50 | 6/6 | 13/15 | 10/10 |
+| 200.0 | 47 | 6/6 | 13/15 | 10/10 |
 
 ## `teleport_kt`
 
@@ -114,11 +116,11 @@ Already quiet on this hour; swept to prove the guard holds.
 
 | Value | Alerts/hour | Guards | Positives | Negatives quiet |
 |---:|---:|---:|---:|---:|
-| 600.0 | 337 | 6/6 | 14/15 | 9/10 |
-| 800.0 | 312 | 6/6 | 14/15 | 10/10 |
-| 1000.0 ← current | 312 | 6/6 | 14/15 | 10/10 |
-| 1500.0 | 312 | 6/6 | 14/15 | 10/10 |
-| 3000.0 | 312 | 6/6 | 14/15 | 10/10 |
+| 600.0 | 92 | 6/6 | 14/15 | 9/10 |
+| 800.0 | 67 | 6/6 | 14/15 | 10/10 |
+| 1000.0 ← current | 67 | 6/6 | 14/15 | 10/10 |
+| 1500.0 | 67 | 6/6 | 14/15 | 10/10 |
+| 3000.0 | 67 | 6/6 | 14/15 | 10/10 |
 
 ## `min_dt_s`
 
@@ -126,11 +128,11 @@ Pairs closer together than this are not measured at all.
 
 | Value | Alerts/hour | Guards | Positives | Negatives quiet |
 |---:|---:|---:|---:|---:|
-| 0.5 ← current | 312 | 6/6 | 14/15 | 10/10 |
-| 1.0 | 282 | 6/6 | 13/15 | 10/10 |
-| 2.0 | 219 | 6/6 | 13/15 | 10/10 |
-| 3.0 | 176 | 6/6 | 13/15 | 10/10 |
-| 5.0 | 164 | 6/6 | 13/15 | 10/10 |
+| 0.5 ← current | 67 | 6/6 | 14/15 | 10/10 |
+| 1.0 | 49 | 6/6 | 13/15 | 10/10 |
+| 2.0 | 22 | 6/6 | 13/15 | 10/10 |
+| 3.0 | 16 | 6/6 | 13/15 | 10/10 |
+| 5.0 | 15 | 6/6 | 13/15 | 10/10 |
 
 ## `min_confidence`
 
@@ -138,11 +140,11 @@ Alerts below this confidence are suppressed. Raising it is the blunt lever.
 
 | Value | Alerts/hour | Guards | Positives | Negatives quiet |
 |---:|---:|---:|---:|---:|
-| 0.2 | 313 | 6/6 | 14/15 | 10/10 |
-| 0.35 ← current | 312 | 6/6 | 14/15 | 10/10 |
-| 0.5 | 312 | 6/6 | 14/15 | 10/10 |
-| 0.65 | 292 | **5/6** | 12/15 | 10/10 |
-| 0.8 | 259 | **4/6** | 8/15 | 10/10 |
+| 0.2 | 68 | 6/6 | 14/15 | 10/10 |
+| 0.35 ← current | 67 | 6/6 | 14/15 | 10/10 |
+| 0.5 | 67 | 6/6 | 14/15 | 10/10 |
+| 0.65 | 66 | **5/6** | 12/15 | 10/10 |
+| 0.8 | 46 | **4/6** | 8/15 | 10/10 |
 
 Guards lost:
 
@@ -155,9 +157,9 @@ Segments shorter than this are too thin to judge.
 
 | Value | Alerts/hour | Guards | Positives | Negatives quiet |
 |---:|---:|---:|---:|---:|
-| 2 | 313 | 6/6 | 14/15 | 10/10 |
-| 3 ← current | 312 | 6/6 | 14/15 | 10/10 |
-| 5 | 312 | 6/6 | 14/15 | 10/10 |
-| 8 | 301 | 6/6 | 14/15 | 10/10 |
-| 12 | 298 | 6/6 | 14/15 | 10/10 |
+| 2 | 68 | 6/6 | 14/15 | 10/10 |
+| 3 ← current | 67 | 6/6 | 14/15 | 10/10 |
+| 5 | 67 | 6/6 | 14/15 | 10/10 |
+| 8 | 66 | 6/6 | 14/15 | 10/10 |
+| 12 | 66 | 6/6 | 14/15 | 10/10 |
 
