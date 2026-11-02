@@ -58,17 +58,78 @@ FEATURE_SCHEMA_VERSION = "air-features-v1"
 
 
 # --- Scoring + output (done) --------------------------------------------------
-def confidence_for(geom: PairGeometry, cfg: ProximityConfig) -> float:
-    """DONE. How sure we are about the geometry (NOT how threatening it is).
+# NACp (Navigation Accuracy Category - Position) is the 95% containment radius
+# the aircraft itself reports for its position, in nautical miles. A pair whose
+# positions could each be off by a third of a mile cannot support a claim about
+# a half-mile predicted miss, so it lowers our confidence.
+NACP_RADIUS_NM: dict[int, float] = {
+    11: 0.002, 10: 0.005, 9: 0.016, 8: 0.05, 7: 0.1,
+    6: 0.3, 5: 0.5, 4: 1.0, 3: 2.0, 2: 4.0, 1: 10.0,
+}
+UNKNOWN_NACP_RADIUS_NM = 0.3   # treat "not reported" as NACp 6
+MIN_POSITION_QUALITY = 0.3     # never discount a detection to nothing
 
-    Straight-line prediction degrades with lookahead, so confidence falls
-    linearly from 1.0 at t_cpa = 0 to 0.5 at t_cpa = max_tcpa_s. Data quality
-    (nic/nacp) can lower it further later — leave that to the false-positive
-    lane.
+
+def position_quality(geom: PairGeometry, cfg: ProximityConfig) -> float:
+    """DONE. How much the aircraft's own reported position accuracy is worth, 0.3-1.0.
+
+    Taken against the tightest horizontal threshold we have: if the reported
+    uncertainty is as large as the HIGH limit, the predicted separation tells
+    us very little. Uses the WORSE of the two aircraft.
+    """
+    tightest = min((t.max_horizontal_nm for t in cfg.tiers), default=0.5)
+    radii = [
+        NACP_RADIUS_NM.get(obs.nacp, UNKNOWN_NACP_RADIUS_NM)
+        if obs.nacp is not None else UNKNOWN_NACP_RADIUS_NM
+        for obs in (geom.obs_a, geom.obs_b)
+    ]
+    worst = max(radii)
+    return round(max(MIN_POSITION_QUALITY, min(1.0, 1.0 - worst / tightest)), 3)
+
+
+def raw_model_confidence_for(geom: PairGeometry, cfg: ProximityConfig) -> float:
+    """DONE. The detector's own certainty from the geometry alone, before any
+    data-quality adjustment.
+
+    Straight-line prediction degrades with lookahead, so this falls linearly
+    from 1.0 at t_cpa = 0 to 0.5 at t_cpa = max_tcpa_s.
     """
     assert geom.t_cpa_s is not None
     frac = min(1.0, max(0.0, geom.t_cpa_s / cfg.max_tcpa_s))
     return round(1.0 - 0.5 * frac, 3)
+
+
+def confidence_for(geom: PairGeometry, cfg: ProximityConfig) -> float:
+    """DONE. How sure we are about the geometry (NOT how threatening it is).
+
+    The raw geometric certainty, discounted by how well the two aircraft know
+    where they are. This is the number we report; ``raw_model_confidence_for``
+    is the same thing before the data-quality discount, so the two differ
+    exactly when position reporting is poor.
+    """
+    return round(raw_model_confidence_for(geom, cfg) * position_quality(geom, cfg), 3)
+
+
+def anomaly_score_for(geom: PairGeometry, cfg: ProximityConfig) -> float:
+    """DONE. How far outside normal this encounter is, 0.0-1.0.
+
+    A different question from confidence. "Normal" is the loosest tier we emit:
+    a pair predicted to pass right on that boundary scores 0.0, and a predicted
+    collision scores 1.0.
+
+    Both dimensions have to be inside a tier for it to fire, so the binding
+    constraint is whichever is proportionally closer to its limit -- that is the
+    one that decides how anomalous the pair is.
+    """
+    assert geom.predicted_horizontal_nm is not None
+    assert geom.predicted_vertical_ft is not None
+    loosest_h = max((t.max_horizontal_nm for t in cfg.tiers), default=3.0)
+    loosest_v = max((t.max_vertical_ft for t in cfg.tiers), default=900.0)
+    worst_fraction = max(
+        geom.predicted_horizontal_nm / loosest_h,
+        geom.predicted_vertical_ft / loosest_v,
+    )
+    return round(max(0.0, min(1.0, 1.0 - worst_fraction)), 3)
 
 
 def explanation_facts(geom: PairGeometry) -> list[str]:
@@ -180,8 +241,9 @@ def to_detection(geom: PairGeometry, severity: SeverityLevel, cfg: ProximityConf
             "limitations": list(LIMITATIONS),
             "feature_schema_version": FEATURE_SCHEMA_VERSION,
             "baseline_or_model_version": cfg.config_version,
-            "anomaly_score": confidence,  # placeholder until the evaluation lane defines it
-            "raw_model_confidence": confidence,
+            "anomaly_score": anomaly_score_for(geom, cfg),
+            "raw_model_confidence": raw_model_confidence_for(geom, cfg),
+            "position_quality": position_quality(geom, cfg),
         },
     )
 
@@ -259,6 +321,9 @@ class ProximityDetector(BaseDetector):
 
 __all__ = [
     "DETECTION_TYPE",
+    "anomaly_score_for",
+    "position_quality",
+    "raw_model_confidence_for",
     "FEATURE_SCHEMA_VERSION",
     "LIMITATIONS",
     "ProximityDetector",
