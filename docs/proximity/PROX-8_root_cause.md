@@ -1,4 +1,4 @@
-# PROX-6 root-cause note: almost everything we flag is terminal-area traffic
+# PROX-8 root-cause note: almost everything we flag is terminal-area traffic
 
 **Found.** After PROX-1 and PROX-2 the Lynchburg hour still produced 722 detections
 over 361 aircraft pairs. 338 of those 354 flagged pairs — **95%** — had at least one
@@ -55,6 +55,9 @@ and runway context (FAA NASR) that we have not sourced yet.
 fixtures lock the boundary: `proximity_terminal_altitude` (the head-on geometry at
 3,000 ft, expects nothing) and `proximity_just_above_floor` (the same at 5,200 ft,
 still HIGH).
+
+**Numbering.** This was first written as PROX-6, which collides with the
+calibration workbook's PROX-6 (pair-finding performance). Renamed to PROX-8.
 
 **Left alone.** `max_tcpa_s`, the severity tiers and the ground check are
 unchanged. The double-counting is PROX-5, the severity floor is PROX-3, and
