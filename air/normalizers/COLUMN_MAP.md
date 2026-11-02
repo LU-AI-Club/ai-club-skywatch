@@ -24,6 +24,10 @@ drops untrustworthy rows.
 | `nacp` | `np` | Navigation Accuracy Category – Position (0–11). |
 | `squawk` | `sq` | 4-digit transponder code, kept as a string (e.g. `7700`). |
 | `callsign` | `f` | Flight id; ADS-B space-padding is stripped. |
+| `alt_geom_ft` | `ag` | Geometric (GNSS) altitude, feet. Filled on every row of the recorded hour, including the ~4.7% where `ab` is blank. |
+| `on_ground` | `og` | readsb writes `True`/`False`; parsed case-insensitively (`1`/`0` also accepted). Blank or unrecognised → `None` ("not reported"), never a guess. |
+| `emitter_category` | `c` | ADS-B emitter category string, e.g. `A3`. |
+| `source_row_id` | — | Set by `iter_observations` to `"<path>:<n>"` (1-based data row), for provenance back to the raw line. `normalize_row` takes it as an optional argument. |
 | `receiver_id` | — | Not present in this single-receiver feed. Defaults to `None`; the runner may pass `receiver_id="lynchburg"`. |
 
 ## Ignored columns (intentionally)
@@ -31,16 +35,16 @@ drops untrustworthy rows.
 Present in the CSV but **not** in the `AdsbObservation` contract, so the
 normalizer skips them. Listed here so nobody wonders whether they were missed:
 
-`c` (emitter category), `d` (description), `ag` (alt_geom), `gv`, `rc` (radius
+`d` (description), `gv`, `rc` (radius
 of containment), `s` (SIL), `st` (SIL type), `v` (ADS-B version), `nb`
 (NIC-baro), `nv` (NAC-v), `nq` (nav QNH), `nam`/`naf` (nav selected altitudes),
 `nh` (nav heading), `nm` (nav modes), `em` (emergency), `ra` (duplicate time),
 `rs`, `sp`, `a`, `spi`, `wd`/`ws` (wind), `oat`/`tat` (temps), `rds`, `rdi`,
-`sda`, `ct`, `gpb`, `sn`, `og` (on-ground flag), `t` (message type), `link`,
+`sda`, `ct`, `gpb`, `sn`, `t` (message type), `link`,
 `m`, `i`, `mh`, `trr`, `ro`.
 
-If a detector later needs one of these (e.g. `s`/`np` for a receiver-quality
-false-positive gate, or `og` to treat on-ground aircraft specially), add it to
+If a detector later needs one of these (e.g. `s` for a receiver-quality
+false-positive gate), add it to
 `AdsbObservation` first — one PR that changes the contract, updates this
 normalizer, and is announced so downstream owners rebase.
 

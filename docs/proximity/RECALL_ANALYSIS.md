@@ -83,6 +83,16 @@ A **time-based** gate would behave correctly: "ignore the pair until closest
 approach is within N seconds", which gives the same filtering at every speed.
 Worth raising as a follow-up ticket.
 
+## Ticket status (2026-11-02)
+
+- **PROX-4** (modelling maneuvering traffic) is **demoted**, not planned. Blind
+  spot 1 is therefore a permanent scope limit for this semester, not a defect
+  awaiting a fix. Covering terminal airspace properly needs FAA NASR airport and
+  runway data we have not sourced.
+- **PROX-6** (pair-finding performance) is **closed without doing it**. The
+  grid-cell pre-filter already bounds the work; an hour of 915 aircraft replays
+  in ~30 s.
+
 ## What this means
 
 The detector is **correctly calibrated for what it now claims to cover** —

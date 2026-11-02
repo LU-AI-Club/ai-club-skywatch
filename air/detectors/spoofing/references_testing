@@ -1,0 +1,157 @@
+"""
+Tests for reference.py -- run it, don't import it.
+
+    cd air/detectors/spoofing
+    python references_testing.py
+
+Or from anywhere:
+
+    python air/detectors/spoofing/references_testing.py
+
+Plain standard library, no pytest needed. Every check prints PASS or FAIL,
+and the script exits non-zero if anything failed, so it drops into CI later.
+
+Fixtures are read from air/fixtures/spoofing/.
+"""
+
+import sys
+from pathlib import Path
+
+# This file lives at air/detectors/spoofing/references_testing.py
+HERE = Path(__file__).resolve().parent          # .../air/detectors/spoofing
+AIR = HERE.parents[1]                           # .../air
+FIXTURES = AIR / "fixtures" / "spoofing"
+
+# Allow running this file directly (python references_testing.py) as well as
+# importing it as part of the air.detectors.spoofing package.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(HERE))
+    from reference import (
+        FAARecord,
+        country_for_icao24,
+        load_faa_registry,
+        load_icao_blocks,
+    )
+else:
+    from .reference import (
+        FAARecord,
+        country_for_icao24,
+        load_faa_registry,
+        load_icao_blocks,
+    )
+
+BLOCKS_CSV = FIXTURES / "icao_blocks_sample.csv"
+REGISTRY_CSV = FIXTURES / "faa_registry_sample.csv"
+
+_results = []
+
+
+def require(path):
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Missing fixture: {path}\n"
+            f"Expected it in {FIXTURES}"
+        )
+    return path
+
+
+def check(name, actual, expected):
+    ok = actual == expected
+    _results.append(ok)
+    print(f"{'PASS' if ok else 'FAIL'}  {name}")
+    if not ok:
+        print(f"        expected: {expected!r}")
+        print(f"        actual:   {actual!r}")
+
+
+def check_raises(name, exc_type, fn, *args, **kwargs):
+    try:
+        fn(*args, **kwargs)
+    except exc_type:
+        _results.append(True)
+        print(f"PASS  {name}")
+        return
+    except Exception as e:
+        _results.append(False)
+        print(f"FAIL  {name}\n        raised {type(e).__name__} instead of {exc_type.__name__}")
+        return
+    _results.append(False)
+    print(f"FAIL  {name}\n        did not raise {exc_type.__name__}")
+
+
+def main():
+    blocks = load_icao_blocks(require(BLOCKS_CSV))
+    registry = load_faa_registry(require(REGISTRY_CSV))
+
+    print(f"fixtures: {FIXTURES}")
+    print(f"loaded {len(blocks)} ICAO blocks, {len(registry)} registry records\n")
+
+    # ---- loaders --------------------------------------------------------
+    print("-- load_icao_blocks --")
+    check("six blocks loaded", len(blocks), 6)
+    check("sorted by start address", blocks, sorted(blocks, key=lambda b: b[0]))
+    check("hex parsed to int", blocks[0][0], 0x3C0000)     # Germany sorts first
+    check("first block is Germany after sort", blocks[0][2], "Germany")
+
+    print("\n-- load_faa_registry --")
+    check("nine records loaded", len(registry), 9)
+    check("keyed lowercase", "a1b2c3" in registry, True)
+    check(
+        "record fields parsed",
+        registry["a1b2c3"],
+        FAARecord("N447TG", "BOEING", "737-800", 5, 4, 470, 41000),
+    )
+    check("numeric fields are ints", isinstance(registry["ad4e21"].ceiling_ft, int), True)
+
+    # ---- country_for_icao24: inside blocks ------------------------------
+    print("\n-- country_for_icao24: hits --")
+    check("US airliner",    country_for_icao24("a1b2c3", blocks), "United States")
+    check("Canada",         country_for_icao24("c11111", blocks), "Canada")
+    check("United Kingdom", country_for_icao24("401ABC", blocks), "United Kingdom")
+    check("Germany",        country_for_icao24("3D2F00", blocks), "Germany")
+    check("Portugal",       country_for_icao24("491000", blocks), "Portugal")
+    check("Argentina",      country_for_icao24("e20000", blocks), "Argentina")
+
+    # ---- boundaries: the classic off-by-one bugs ------------------------
+    print("\n-- country_for_icao24: block boundaries --")
+    check("first address in US block", country_for_icao24("A00000", blocks), "United States")
+    check("last address in US block",  country_for_icao24("AFFFFF", blocks), "United States")
+    check("one below US block",        country_for_icao24("9FFFFF", blocks), None)
+    check("one above US block",        country_for_icao24("B00000", blocks), None)
+    check("last address in Portugal",  country_for_icao24("497FFF", blocks), "Portugal")
+    check("one above Portugal",        country_for_icao24("498000", blocks), None)
+
+    # ---- misses: None is a real answer, not an error --------------------
+    print("\n-- country_for_icao24: unallocated --")
+    check("gap between blocks", country_for_icao24("500000", blocks), None)
+    check("below every block",  country_for_icao24("000001", blocks), None)
+    check("above every block",  country_for_icao24("FFFFFE", blocks), None)
+    check("empty block list",   country_for_icao24("a1b2c3", []), None)
+
+    # ---- input formats ---------------------------------------------------
+    print("\n-- country_for_icao24: input handling --")
+    check("uppercase hex",     country_for_icao24("A1B2C3", blocks), "United States")
+    check("0x prefix",         country_for_icao24("0xa1b2c3", blocks), "United States")
+    check("surrounding space", country_for_icao24("  a1b2c3  ", blocks), "United States")
+    check("plain int",         country_for_icao24(0xA1B2C3, blocks), "United States")
+
+    print("\n-- country_for_icao24: bad input --")
+    check_raises("non-hex string rejected", ValueError, country_for_icao24, "zzzz", blocks)
+    check_raises("empty string rejected",   ValueError, country_for_icao24, "", blocks)
+    check_raises("too large rejected",      ValueError, country_for_icao24, 0x1000000, blocks)
+
+    # ---- the two fixtures agreeing with each other ----------------------
+    # Every address in the FAA registry should resolve to the United States.
+    # If one doesn't, either a block boundary is wrong or a registry row is.
+    print("\n-- cross-check: registry against blocks --")
+    for hex_id, rec in sorted(registry.items()):
+        check(f"{hex_id} ({rec.n_number}) resolves to US",
+              country_for_icao24(hex_id, blocks), "United States")
+
+    passed = sum(_results)
+    print(f"\n{passed}/{len(_results)} checks passed")
+    return 0 if passed == len(_results) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
