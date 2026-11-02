@@ -104,3 +104,64 @@ from `main` into `Proximity_Detector`.
 - Whether two genuinely separate encounters of the same pair inside the hour
   should be two events (Option A says yes; the whole-hour run says no). The
   episode gap decides this.
+
+---
+
+## Fix (2026-11-02) — the window-edge case only
+
+**What changed.** `to_detection` now sets `temporal_bounds` to the **predicted
+closest approach**, rounded to the second, instead of the tick the pair happened
+to be evaluated at. Closest approach is a property of the encounter, so every
+window that sees it computes the same instant (the two halves of
+`proximity_spans_window` agree to 52 microseconds). `detection_dedup_key` keys on
+`temporal_bounds.start_time`, so the key is now identical across windows and the
+runner collapses the halves into one event.
+
+`scripts/replay_csv.py` also now dedups for **tumbling** windows, not just
+overlapping ones. The old assumption was that non-overlapping windows cannot
+double-count; that is false for proximity, because an encounter straddling an
+edge is a genuine converging pair in both halves.
+
+The three strict xfails in `test_proximity_windowing.py` now pass and their
+markers are removed. `test_dedup_key_differs_between_windows` asserted the bug,
+so it is inverted to `test_dedup_key_matches_across_windows`.
+
+## What it does NOT fix
+
+**On the shipped config this is moot** — the Lynchburg hour gives 3 detections
+over 3 pairs, no duplication at all. But loosening the thresholds back to
+pre-tuning levels shows the fix is nearly ineffective on real traffic:
+
+| | Detections | Unique pairs | Ratio |
+|---|---|---|---|
+| Before the fix | 713 | 354 | 2.01x |
+| After the fix | 689 | 354 | 1.95x |
+
+**Why.** Real-data repeats are a different phenomenon from the window-edge
+artifact. Aircraft maneuver, so each window's prediction of closest approach
+genuinely differs — by a median of 43 s for pairs seen more than once, and by up
+to 29 minutes. The gaps between a pair's repeat detections form a smooth
+distribution from 1 s to 600 s with **no natural break**:
+
+| Gap between repeats | Count |
+|---|---|
+| 1-5 s | 69 |
+| 5-30 s | 88 |
+| 30-120 s | 110 |
+| 120-600 s | 68 |
+
+So there is no bucket size that separates "same encounter seen twice" from "the
+same two aircraft having a second encounter". Rounding harder would merge
+genuinely distinct events; rounding softer changes nothing.
+
+## What the real fix needs
+
+Encounter **sessionisation**: group a pair's detections into encounters by gap
+(e.g. a gap over 120 s starts a new encounter), and emit one event per encounter
+with its own start and end. That requires state across windows, which a pure
+`detect_observations` call cannot have — it belongs in the runner or in whatever
+writes to the detection table.
+
+That makes it a Week 12 question rather than a detector change, and one for the
+Technical Lead: once detections land in `adsb_proximity_detections`, the upsert
+on `dedup_key` is exactly where sessionisation should happen.
