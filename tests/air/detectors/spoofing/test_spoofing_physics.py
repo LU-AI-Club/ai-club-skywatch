@@ -20,6 +20,7 @@ from air.detectors.spoofing.physics import (
     flag_vrate_delta,
     speed_delta_limit_kt,
     speed_position_error_kt,
+    speed_timing_error_kt,
     subterrain_depth_ft,
     vrate_quantisation_fpm,
 )
@@ -77,21 +78,62 @@ def test_teleport_abstains_on_a_very_short_gap():
 
 
 # --- flag_turn_rate ----------------------------------------------------------
+# Turn rate is only measured at flying speed, so every case here carries a
+# cruise ground speed. The abstention below the gate is tested on its own.
+CRUISE_KT = 450.0
+
+
 def test_turn_rate_fires_on_an_aerobatic_turn():
-    assert flag_turn_rate(record(turn_rate_dps=19.0), CFG) == "IMPOSSIBLE_TURN"
+    hit = flag_turn_rate(
+        record(turn_rate_dps=19.0, reported_speed_kt=CRUISE_KT), CFG
+    )
+    assert hit == "IMPOSSIBLE_TURN"
 
 
 def test_turn_rate_fires_the_same_turning_left():
     """Turn rate is signed; the rule compares magnitude."""
-    assert flag_turn_rate(record(turn_rate_dps=-19.0), CFG) == "IMPOSSIBLE_TURN"
+    hit = flag_turn_rate(
+        record(turn_rate_dps=-19.0, reported_speed_kt=CRUISE_KT), CFG
+    )
+    assert hit == "IMPOSSIBLE_TURN"
 
 
 def test_turn_rate_ignores_a_standard_rate_turn():
-    assert flag_turn_rate(record(turn_rate_dps=3.0), CFG) is None
+    assert flag_turn_rate(
+        record(turn_rate_dps=3.0, reported_speed_kt=CRUISE_KT), CFG
+    ) is None
 
 
 def test_turn_rate_abstains_without_a_heading():
-    assert flag_turn_rate(record(turn_rate_dps=None), CFG) is None
+    assert flag_turn_rate(
+        record(turn_rate_dps=None, reported_speed_kt=CRUISE_KT), CFG
+    ) is None
+
+
+def test_turn_rate_abstains_on_slow_traffic():
+    """156 of 312 alerts were slow traffic, median reported speed 55 kt.
+
+    Track is the direction of travel. An aircraft barely moving has almost
+    none, so its reported heading swings freely without it turning in any
+    sense this rule means.
+    """
+    taxiing = record(turn_rate_dps=40.0, reported_speed_kt=12.0)
+    assert flag_turn_rate(taxiing, CFG) is None
+
+
+def test_turn_rate_abstains_without_a_speed_to_judge_by():
+    """We cannot tell a taxiing aircraft from a cruising one; abstain."""
+    assert flag_turn_rate(
+        record(turn_rate_dps=40.0, reported_speed_kt=None), CFG
+    ) is None
+
+
+def test_turn_rate_still_fires_just_above_the_speed_gate():
+    """The gate must excuse slow traffic, not quietly disable the rule."""
+    just_fast_enough = record(
+        turn_rate_dps=19.0, reported_speed_kt=CFG.turn_rate_min_speed_kt + 1.0
+    )
+    assert flag_turn_rate(just_fast_enough, CFG) == "IMPOSSIBLE_TURN"
 
 
 # --- flag_speed_delta --------------------------------------------------------
@@ -110,9 +152,37 @@ def test_the_limit_scales_with_the_aircraft():
     """A fixed margin alone is wrong for both a trainer and a jet."""
     slow = record(reported_speed_kt=90.0)
     fast = record(reported_speed_kt=500.0)
-    allowance = speed_position_error_kt(slow, CFG)
-    assert speed_delta_limit_kt(slow, CFG) == 50.0 + allowance    # the floor wins
-    assert speed_delta_limit_kt(fast, CFG) == 150.0 + allowance   # 30% wins
+    # Position error depends only on the gap; timing error also depends on
+    # how fast the aircraft is going, so the two aircraft get different ones.
+    position = speed_position_error_kt(slow, CFG)
+    assert speed_position_error_kt(fast, CFG) == position
+    assert speed_delta_limit_kt(slow, CFG) == (
+        50.0 + position + speed_timing_error_kt(slow, CFG)       # the floor wins
+    )
+    assert speed_delta_limit_kt(fast, CFG) == (
+        150.0 + position + speed_timing_error_kt(fast, CFG)      # 30% wins
+    )
+
+
+def test_the_timing_allowance_scales_with_speed_and_shrinks_with_the_gap():
+    """A timestamp slip is a speed error in proportion, not a distance."""
+    at_390 = record(dt_s=1.9, reported_speed_kt=390.0)
+    assert speed_timing_error_kt(at_390, CFG) == pytest.approx(51.3, abs=0.1)
+    # Twice the speed, twice the phantom; ten times the gap, a tenth of it.
+    assert speed_timing_error_kt(
+        record(dt_s=1.9, reported_speed_kt=780.0), CFG
+    ) == pytest.approx(102.6, abs=0.1)
+    assert speed_timing_error_kt(
+        record(dt_s=19.0, reported_speed_kt=390.0), CFG
+    ) == pytest.approx(5.1, abs=0.1)
+
+
+def test_the_timing_allowance_does_not_excuse_a_real_lie():
+    """It must suppress a 1.5x artefact without hiding a 4.5x contradiction."""
+    artefact = record(dt_s=1.91, reported_speed_kt=389.0, speed_delta_kt=180.0)
+    assert flag_speed_delta(artefact, CFG) is None
+    real_lie = record(dt_s=0.55, reported_speed_kt=100.0, speed_delta_kt=350.0)
+    assert flag_speed_delta(real_lie, CFG) == "SPEED_DISAGREEMENT"
 
 
 def test_speed_delta_abstains_without_a_reported_speed():

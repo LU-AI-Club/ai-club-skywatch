@@ -74,10 +74,22 @@ def flag_turn_rate(
 
     Track comes from the velocity message, not the position fix, so NIC/NACp
     deliberately play no part here.
+
+    Below ``cfg.turn_rate_min_speed_kt`` the rule abstains. Track is the
+    direction of travel, and an aircraft barely moving has almost none, so
+    its reported heading swings freely without the aircraft turning in any
+    sense this rule means. That is not a measurement we can interpret, and
+    abstaining is the honest answer -- on the real hour it was also our
+    largest single source of false alerts.
     """
     if record.turn_rate_dps is None:
         return None
     if record.dt_s < cfg.min_dt_s:
+        return None
+    if (
+        record.reported_speed_kt is None
+        or abs(record.reported_speed_kt) < cfg.turn_rate_min_speed_kt
+    ):
         return None
     if abs(record.turn_rate_dps) > cfg.turn_rate_dps:
         return "IMPOSSIBLE_TURN"
@@ -90,15 +102,41 @@ def speed_delta_limit_kt(
     """The effective speed-disagreement limit for this record.
 
     The larger of the fixed margin and a fraction of the reported speed, so
-    the rule works for a 90 kt trainer and a 500 kt jet alike, plus the
-    phantom speed position error alone can produce over this gap. Exposed
-    because the event records the limit that actually applied, not the
-    config constant.
+    the rule works for a 90 kt trainer and a 500 kt jet alike, plus the two
+    phantom speeds measurement error alone can produce over this gap: one
+    from position error, one from timing error. Exposed because the event
+    records the limit that actually applied, not the config constant.
     """
     if record.reported_speed_kt is None:
         return None
     base = max(cfg.speed_delta_kt, abs(record.reported_speed_kt) * cfg.speed_delta_frac)
-    return base + speed_position_error_kt(record, cfg)
+    return (
+        base
+        + speed_position_error_kt(record, cfg)
+        + speed_timing_error_kt(record, cfg)
+    )
+
+
+def speed_timing_error_kt(
+    record: SpoofingFeatureRecord, cfg: SpoofingConfig
+) -> float:
+    """How much apparent speed a timestamp slip alone can produce.
+
+    Implied speed is distance over the gap between two timestamps. If a
+    timestamp sits ``cfg.timing_error_s`` away from the fix it carries, the
+    gap is wrong by that much and the speed is wrong in proportion:
+
+        390 kt with 0.25 s of slip over 1.9 s  ->  51 kt
+
+    Unlike position error this scales with how fast the aircraft is going,
+    not with a distance, which is why it cannot be folded into the position
+    allowance. Both shrink as the gap grows.
+    """
+    if record.dt_s <= 0:
+        return float("inf")
+    if record.reported_speed_kt is None:
+        return 0.0
+    return abs(record.reported_speed_kt) * cfg.timing_error_s / record.dt_s
 
 
 def speed_position_error_kt(
@@ -192,10 +230,22 @@ def flag_vrate_delta(
     all of them level aircraft observed half a second apart. Subtracting the
     step-size artefact is the honest fix: widening the threshold instead
     would have hidden real disagreements at long gaps.
+
+    A reported rate beyond ``cfg.vrate_max_plausible_fpm`` is treated as a
+    field we failed to receive rather than a claim the aircraft made, and
+    the rule abstains. These were the rule's remaining alerts: aircraft
+    holding altitude exactly while broadcasting +9,920 or +18,176 fpm. The
+    altitude is not in doubt and the aircraft is not climbing; the rate
+    field is corrupt, and calling that a contradiction describes it wrongly.
     """
     if record.vrate_delta_fpm is None:
         return None
     if record.dt_s < cfg.min_dt_s:
+        return None
+    if (
+        record.reported_vrate_fpm is not None
+        and abs(record.reported_vrate_fpm) > cfg.vrate_max_plausible_fpm
+    ):
         return None
 
     disagreement = abs(record.vrate_delta_fpm) - vrate_quantisation_fpm(record, cfg)
@@ -285,6 +335,7 @@ __all__ = [
     "flag_subterrain",
     "speed_delta_limit_kt",
     "speed_position_error_kt",
+    "speed_timing_error_kt",
     "subterrain_depth_ft",
     "NACP_EPU_M",
 ]

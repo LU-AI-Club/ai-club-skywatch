@@ -31,6 +31,20 @@ class SpoofingConfig:
     turn_rate_dps: float = 10.0
     """A standard rate turn is 3 deg/s. 10 is aerobatic and unsustainable."""
 
+    turn_rate_min_speed_kt: float = 150.0
+    """Below this reported ground speed, turn rate is not measured at all.
+
+    Track is the direction of travel, and an aircraft barely moving has
+    almost none: a taxiing aircraft, a tug, or a parked transmitter swings
+    its reported heading freely without turning in any sense the rule means.
+    This was our largest single source of false alerts -- 156 of 312, median
+    reported speed 55 kt, 93% of them under 150 kt.
+
+    The limit is a speed at which track becomes meaningful, not an aircraft
+    class. A genuinely impossible turn happens at flying speed, which is why
+    the guard fixture turns at 450 kt.
+    """
+
     speed_delta_kt: float = 50.0
     """How far claimed and derived ground speed may disagree..."""
 
@@ -51,8 +65,47 @@ class SpoofingConfig:
     on the real file were pairs under one second apart.
     """
 
+    timing_error_s: float = 0.25
+    """How far a report's timestamp may sit from the fix it carries.
+
+    The timestamp is when we received the message; the position inside it
+    was measured slightly earlier, and by a varying amount. Implied speed
+    divides distance by the gap between timestamps, so a timing slip is a
+    speed error of ``reported_speed * timing_error_s / dt_s``: large at
+    short gaps, negligible at long ones, and proportional to how fast the
+    aircraft is going rather than to any distance.
+
+    This is a different error from ``position_error_m`` and has to be
+    allowed for separately. The evidence is in the raw feed: one aircraft at
+    a steady 390 kt advances 0.00418, 0.00664, 0.00584 and 0.00418 degrees
+    of longitude over gaps of 2.02, 3.14, 1.91 and 2.97 s. No single step
+    gives 390 kt; all four together do exactly. Across the hour the ratio of
+    implied to reported speed has a median of 1.00 at every gap size, while
+    its 5th-95th percentile spread tightens from 0.82-1.20 under a second to
+    0.99-1.01 past ten -- the signature of a time error, not a lie.
+
+    0.25 s is near the 99th percentile of that spread. It is deliberately
+    not generous enough to excuse a real lie: a 4.5x speed contradiction at
+    the feed's fastest cadence still fires.
+    """
+
     vrate_delta_fpm: float = 2000.0
     """Above barometric noise and sensor lag; a normal climb is 1500-2500."""
+
+    vrate_max_plausible_fpm: float = 6000.0
+    """A reported climb rate beyond this is a corrupt field, not a claim.
+
+    Nothing in this traffic climbs at 6,000 fpm: across 279,725 messages the
+    99.9th percentile is 4,544 fpm, and only 41 exceed 6,000 -- values like
+    +18,176 and +32,192 fpm, broadcast by aircraft holding altitude exactly.
+    Those are decode errors in the rate field, the same class of corruption
+    as a garbled callsign.
+
+    A number that cannot be true is not evidence that the aircraft lied; it
+    is evidence we did not receive the field. Comparing it against the
+    altitude can only manufacture a disagreement, so the rule abstains. See
+    ``flag_vrate_delta``.
+    """
 
     altitude_quantum_ft: float = 25.0
     """The step size altitude is reported in.

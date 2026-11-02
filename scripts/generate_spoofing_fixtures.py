@@ -209,13 +209,13 @@ def inject_impersonation():
         icao24="a1b2c3", callsign="SKY101",
         lat=37.20, lon=-79.90, heading_deg=60.0,
         n_points=12, interval_s=10.0, start_s=0.0,
-        label="positive:identity_coexistence",
+        label="positive:coexistence_v1",
     )
     b = make_clean_track(
         icao24="a1b2c3", callsign="SKY101",
         lat=38.60, lon=-77.30, heading_deg=200.0,
         n_points=12, interval_s=10.0, start_s=5.0,
-        label="positive:identity_coexistence",
+        label="positive:coexistence_v1",
     )
     for row in a:
         row["_note"] = "transmitter A, south-west"
@@ -463,11 +463,17 @@ def make_guard_speed_lie_long_gap():
 
 
 def make_guard_vrate_lie_at_cruise():
-    """Claims a 12,000 fpm climb while holding altitude at FL350.
+    """Claims a 5,000 fpm climb while holding altitude at FL350.
 
-    The gap is 10 s, so altitude quantisation accounts for about 300 fpm. The
-    claim is forty times that, and no transport aircraft climbs at 12,000 fpm
-    at any altitude, let alone cruise.
+    The gap is 10 s, so altitude quantisation accounts for about 300 fpm,
+    against an altitude that does not move at all.
+
+    The rate sits deliberately under ``vrate_max_plausible_fpm``. Past that
+    ceiling the rule treats the field as corrupt and abstains, which is
+    right for the +18,176 fpm decode errors in the real feed -- but it means
+    a guard built on an impossible number would be testing the abstention
+    rather than the rule. A claim that could have been true and plainly is
+    not is the harder case, and the one worth pinning.
     """
     rows = make_clean_track(
         icao24="a44444", callsign="GRD004", speed_kt=440.0,
@@ -475,8 +481,8 @@ def make_guard_vrate_lie_at_cruise():
         label="positive:vrate_delta_v1",
     )
     for row in rows:
-        row["vertical_rate_fpm"] = 12000.0
-        row["_note"] = "claims +12,000 fpm while level at FL350"
+        row["vertical_rate_fpm"] = 5000.0
+        row["_note"] = "claims +5,000 fpm while level at FL350"
     return rows
 
 
