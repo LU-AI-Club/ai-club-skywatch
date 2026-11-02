@@ -115,7 +115,19 @@ def to_detection(geom: PairGeometry, severity: SeverityLevel, cfg: ProximityConf
             ),
         ),
     )
+    # PROX-5: anchor the detection to the encounter, not to the moment we
+    # happened to evaluate it. The predicted closest approach is a property of
+    # the two aircraft, so every window that sees this encounter computes the
+    # same instant (agreeing to a few microseconds), while the evaluation tick
+    # differs by whole seconds. Rounding to the second makes
+    # air.windowing.detection_dedup_key -- which keys on
+    # temporal_bounds.start_time -- identical across windows, so one encounter
+    # collapses to one event. The evaluation tick is not lost: it is on the
+    # evidence records and in the provenance chain.
     cpa_time = geom.at + timedelta(seconds=geom.t_cpa_s)
+    cpa_time = cpa_time.replace(microsecond=0) + timedelta(
+        seconds=1 if cpa_time.microsecond >= 500_000 else 0
+    )
     mid_lat = (a.latitude + b.latitude) / 2
     mid_lon = (a.longitude + b.longitude) / 2
     mid_alt = None
@@ -128,7 +140,7 @@ def to_detection(geom: PairGeometry, severity: SeverityLevel, cfg: ProximityConf
         detection_type=DETECTION_TYPE,
         severity=severity,
         confidence=confidence,
-        temporal_bounds=TimeBounds(start_time=geom.at, end_time=cpa_time),
+        temporal_bounds=TimeBounds(start_time=cpa_time, end_time=cpa_time),
         provenance=provenance,
         entities_involved=[
             EntityRef(entity_id=f"aircraft:{a.icao24}", entity_type="aircraft", domain=DOMAIN),
