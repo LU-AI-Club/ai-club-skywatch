@@ -41,26 +41,6 @@ NACP_EPU_M: dict[int, float] = {
 }
 
 
-def position_error_speed_kt(record: SpoofingFeatureRecord) -> float:
-    """Implied speed that position error alone can produce over this gap.
-
-    A jump is a claim about two positions, and either can be off by its own
-    error bound, so the two bounds add. Dividing by a short gap turns a small
-    position error into a large phantom speed, the same way altitude
-    quantisation does for climb rate.
-
-    Missing or zero NACp (unknown) contributes nothing. A self-reported low
-    NACp therefore only buys slack equal to the error radius it claims; it
-    does not make a gross teleport invisible.
-    """
-    err_m = sum(
-        NACP_EPU_M.get(nacp, 0.0)
-        for nacp in (record.prev_nacp, record.nacp)
-        if nacp
-    )
-    return err_m / record.dt_s * MPS_TO_KT
-
-
 def flag_teleport(
     record: SpoofingFeatureRecord, cfg: SpoofingConfig
 ) -> str | None:
@@ -79,7 +59,7 @@ def flag_teleport(
     if record.dt_s < cfg.min_dt_s:
         # Timestamp error dominates at very short gaps.
         return None
-    if record.implied_speed_kt - position_error_speed_kt(record) > cfg.teleport_kt:
+    if record.implied_speed_kt - speed_position_error_kt(record, cfg) > cfg.teleport_kt:
         return "TELEPORT"
     return None
 
@@ -126,19 +106,30 @@ def speed_position_error_kt(
 ) -> float:
     """How much apparent speed position error alone can produce.
 
-    Either endpoint can be off by the position error, so the distance can be
-    wrong by up to twice that, and dividing by a short gap produces a large
+    Either endpoint can be off by its own error bound, so the distance can be
+    wrong by the sum of the two, and dividing by a short gap produces a large
     phantom speed:
 
         2 x 30 m over 0.55 s  ->  212 kt, on an aircraft flying steadily
 
-    This returns that bound so the rule can allow for it. It shrinks as the
-    gap grows -- 23 kt at 5 s, 4 kt at 30 s -- so a real contradiction over a
+    Each endpoint contributes the error radius its NACp claims, floored at
+    ``cfg.position_error_m`` so an absent, unknown or optimistic NACp still
+    gets the slack a good fix deserves. A self-reported low NACp only buys
+    slack equal to the radius it claims; it does not make a gross teleport
+    invisible.
+
+    This is the single place position error is allowed for. Every rule that
+    needs the allowance calls this, and applies it once. It shrinks as the gap
+    grows -- 23 kt at 5 s, 4 kt at 30 s -- so a real contradiction over a
     longer gap is still caught at nearly the original limit.
     """
     if record.dt_s <= 0:
         return float("inf")
-    return 2.0 * cfg.position_error_m / record.dt_s * MPS_TO_KT
+    err_m = sum(
+        max(NACP_EPU_M.get(nacp, 0.0), cfg.position_error_m)
+        for nacp in (record.prev_nacp, record.nacp)
+    )
+    return err_m / record.dt_s * MPS_TO_KT
 
 
 def flag_speed_delta(
@@ -150,9 +141,10 @@ def flag_speed_delta(
     disagree by more than wind and sensor error explain, at least one of them
     is fabricated.
 
-    Implied speed comes from the two positions, so the disagreement is first
-    reduced by what position error alone could produce (see
-    ``position_error_speed_kt``). Only the remainder is compared to the limit.
+    Implied speed comes from the two positions, so the limit already carries
+    what position error alone could produce (see ``speed_delta_limit_kt``).
+    The allowance is applied there and nowhere else -- subtracting it from the
+    measurement as well would grant it twice and hide real speed lies.
     """
     if record.speed_delta_kt is None:
         return None
@@ -161,8 +153,7 @@ def flag_speed_delta(
     limit = speed_delta_limit_kt(record, cfg)
     if limit is None:
         return None
-    disagreement = abs(record.speed_delta_kt) - position_error_speed_kt(record)
-    if disagreement > limit:
+    if abs(record.speed_delta_kt) > limit:
         return "SPEED_DISAGREEMENT"
     return None
 
@@ -295,6 +286,5 @@ __all__ = [
     "speed_delta_limit_kt",
     "speed_position_error_kt",
     "subterrain_depth_ft",
-    "position_error_speed_kt",
     "NACP_EPU_M",
 ]
