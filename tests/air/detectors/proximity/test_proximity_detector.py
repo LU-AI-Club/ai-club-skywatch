@@ -20,6 +20,16 @@ FIXTURES = [
     "proximity_stacked.json",
     "proximity_crossing_low.json",
     "proximity_ground.json",
+    "proximity_spans_window.json",
+    "proximity_standard_vertical.json",
+    "proximity_small_vertical_gap.json",
+    "proximity_far_converging.json",
+    "proximity_near_term.json",
+    "proximity_terminal_altitude.json",
+    "proximity_just_above_floor.json",
+    # PROX-7 regression guards: cases the detector must stay quiet on.
+    "proximity_far_apart.json",
+    "proximity_below_5000ft.json",
 ]
 
 

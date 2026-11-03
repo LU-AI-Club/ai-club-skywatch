@@ -63,7 +63,7 @@ def pair_geometry(a: AdsbObservation, b: AdsbObservation) -> PairGeometry | None
     closure_mps = 0.0 if dist_m < 1e-6 else -(rx * vx + ry * vy) / dist_m
     closure_kt = closure_mps * 3600.0 / 1852.0
 
-    t = time_to_cpa(rx, ry, vx, vy)
+    t = time_to_cpa(rx, ry, vx, vy, vertical_now, vrate_diff)
     if t is None:
         pred_h, pred_v = None, None
     else:

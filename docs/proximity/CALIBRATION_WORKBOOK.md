@@ -115,9 +115,22 @@ downstream to the platform's trust/scoring layer.
 
 ---
 
-## PROX-4 — Straight lines don't fly approaches
+## PROX-4 — Straight lines don't fly approaches  **[DEMOTED — documented limitation]**
 
-**Type:** Spike · **Priority:** Medium · **Labels:** model, accuracy
+**Type:** Spike · **Priority:** Low · **Labels:** model, accuracy · **Demoted:** 2026-11-02
+
+> **Not planned for this semester.** PROX-8 made this a stated scope limit
+> instead of an open defect: the detector reports nothing below 5,000 ft,
+> precisely *because* a constant-track model cannot follow maneuvering terminal
+> traffic. That limitation is recorded in `RECALL_ANALYSIS.md`, in the
+> `min_altitude_ft` comment in `configs/detectors/proximity.yaml`, and belongs in
+> the handoff memo.
+>
+> Doing the analysis is still the route back to covering terminal airspace rather
+> than excluding it, and it needs FAA NASR airport and runway data we have not
+> sourced. Kept here as the first thing a follow-on team should pick up.
+
+The original ticket follows.
 
 **Symptom.** KLYH is a busy terminal area; aircraft on approach and departure turn
 constantly, climb, and descend. Our model assumes constant track and uses
@@ -151,14 +164,24 @@ detections are de-duplicated, and whether an encounter should be **one** event
 from start to finish. Bring runner-level findings to the Tech Lead. Deliver an
 analysis and a fixture.
 
-### PROX-6 — Will pair-finding keep up with a busy sky?
-**Type:** Spike · **Labels:** performance
+### PROX-6 — Will pair-finding keep up with a busy sky?  **[CLOSED — won't do]**
+**Type:** Spike · **Labels:** performance · **Closed:** 2026-11-02
 
-The detector lines every track up on a one-second clock and then looks at pairs.
-Work out how that cost grows as the number of simultaneous aircraft rises, and
-whether a spatial pre-filter (the no-fly-zone team uses H3) should narrow the
-candidate pairs first. Deliver a measurement and a recommendation — implementation
-optional.
+> The detector lines every track up on a one-second clock and then looks at pairs.
+> Work out how that cost grows as the number of simultaneous aircraft rises, and
+> whether a spatial pre-filter (the no-fly-zone team uses H3) should narrow the
+> candidate pairs first.
+
+**Closed without doing it.** The grid-cell pre-filter in `pairs.py` already
+solves this: aircraft are binned into 0.5° cells and only same-or-adjacent cells
+are compared, so the work grows with local traffic density rather than with the
+square of the total. A full hour of 915 aircraft — 284,476 position reports —
+replays in about 30 seconds end to end.
+
+Nothing on the semester plan makes the sky busier than that. Week 12 moves to a
+live feed, which is a *smaller* window of data per call, not a larger one.
+Reopen if a measurement ever shows this costing real time; H3 (which the
+no-fly-zone team uses) is the obvious next step if so.
 
 ### PROX-7 — Turn today's noise into tests
 **Type:** Task · **Labels:** test-coverage
