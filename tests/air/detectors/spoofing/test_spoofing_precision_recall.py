@@ -70,9 +70,10 @@ def test_tn_is_not_needed():
 
 def test_always_fires_detector_on_real_fixtures():
     counts = confusion_counts(run_on_fixtures(AlwaysFiresDetector(), FIXTURES_DIR))
-    # teleport_v1 has one pos_ file and one neg_ file, and both fired:
-    # caught everything planted, but half of what it flagged was wrong.
-    assert precision_recall(counts["teleport_v1"]) == (0.5, 1.0)
+    # teleport_v1 has two pos_ files (one of them a guard) and one neg_
+    # file, and all three fired: caught everything planted, but a third of
+    # what it flagged was wrong.
+    assert precision_recall(counts["teleport_v1"]) == (2 / 3, 1.0)
 
 
 def test_never_fires_detector_on_real_fixtures():

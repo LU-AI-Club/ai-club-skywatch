@@ -78,14 +78,15 @@ def test_empty_results_give_empty_counts():
 def test_never_fires_detector_only_misses_and_correct_quiets():
     results = run_on_fixtures(NeverFiresDetector(), FIXTURES_DIR)
     counts = confusion_counts(results)
-    assert counts["teleport_v1"] == {"tp": 0, "fp": 0, "fn": 1, "tn": 1}
+    # two planted teleports now -- pos_teleport and the pos_guard_ one.
+    assert counts["teleport_v1"] == {"tp": 0, "fp": 0, "fn": 2, "tn": 1}
     assert all(c["tp"] == 0 and c["fp"] == 0 for c in counts.values())
 
 
 def test_always_fires_detector_only_catches_and_false_alarms():
     results = run_on_fixtures(AlwaysFiresDetector(), FIXTURES_DIR)
     counts = confusion_counts(results)
-    assert counts["teleport_v1"] == {"tp": 1, "fp": 1, "fn": 0, "tn": 0}
+    assert counts["teleport_v1"] == {"tp": 2, "fp": 1, "fn": 0, "tn": 0}
     assert all(c["fn"] == 0 and c["tn"] == 0 for c in counts.values())
     total = sum(sum(c.values()) for c in counts.values())
     assert total == len(results)

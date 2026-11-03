@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Optional, Sequence
 
+from air.detectors.spoofing.callsigns import is_readable_callsign
 
 
 EARTH_RADIUS_M = 6_371_000.0
@@ -336,6 +337,13 @@ def flag_identity_drift(observations: Sequence[Any]) -> Optional[str]:
     ADS-B pads them to 8 characters. Blank or missing callsigns are skipped,
     not counted as a change.
 
+    Garbled receptions are skipped for the same reason. Every one of this
+    rule's alerts on the real hour was a radio error rather than a callsign
+    change -- ``VXP468`` read back as ``VXP?29T3`` and then as ``VXP468``
+    again. A character we failed to decode says nothing about what the
+    aircraft actually broadcast, so comparing it against a clean callsign can
+    only invent a change. See ``is_readable_callsign``.
+
     Returns a reason string naming the first change, or None.
     """
     def field(obs: Any, name: str) -> Any:
@@ -362,16 +370,19 @@ def flag_identity_drift(observations: Sequence[Any]) -> Optional[str]:
     first: Optional[str] = None
     for obs in ordered:
         raw = field(obs, "callsign")
-        callsign = str(raw).strip().upper() if raw is not None else ""
-        if not callsign:
+        if not is_readable_callsign(raw if isinstance(raw, str) else None):
             continue
+        callsign = str(raw).strip().upper()
         if first is None:
             first = callsign
         elif callsign != first:
             seen = []
             for o in ordered:
-                c = str(field(o, "callsign") or "").strip().upper()
-                if c and c not in seen:
+                c = field(o, "callsign")
+                if not is_readable_callsign(c if isinstance(c, str) else None):
+                    continue
+                c = str(c).strip().upper()
+                if c not in seen:
                     seen.append(c)
             stamp = field(obs, "observed_at") or field(obs, "timestamp")
             at = f" at {stamp}" if stamp is not None else ""
