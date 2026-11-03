@@ -107,14 +107,37 @@ class SpoofingConfig:
     ``flag_vrate_delta``.
     """
 
-    altitude_quantum_ft: float = 25.0
-    """The step size altitude is reported in.
+    altitude_quantum_min_samples: int = 4
+    """How many altitude changes a segment must show before we read its step.
 
-    This feed rounds altitude to 25 ft. A level aircraft therefore appears to
-    jump a whole step at a time, and over a short gap that implies a large
-    climb rate purely as an artefact: 25 ft in 0.55 s reads as 2,727 fpm.
-    Without accounting for it, 96% of all alerts on the real file were level
-    aircraft tripping the vertical-rate rule.
+    The step is inferred as the common divisor of a segment's altitude
+    changes. With one or two changes a coincidence is as likely as a
+    measurement -- two steps of 100 ft prove nothing about an aircraft that
+    usually moves in 25s -- so below this count we fall back to
+    ``altitude_quantum_ft``.
+    """
+
+    altitude_quantum_max_ft: float = 100.0
+    """The coarsest altitude step we will believe is rounding.
+
+    100 ft is the Mode C granularity still in use alongside 25 ft reporting.
+    A larger common divisor means we are reading a climb rather than a
+    rounding step, and accepting it would hand the rule an allowance wide
+    enough to hide a real lie, so it is rejected and the default applies.
+    """
+
+    altitude_quantum_ft: float = 25.0
+    """The step size altitude is reported in, when the aircraft has not shown us.
+
+    Most of this feed rounds altitude to 25 ft. A level aircraft therefore
+    appears to jump a whole step at a time, and over a short gap that implies
+    a large climb rate purely as an artefact: 25 ft in 0.55 s reads as
+    2,727 fpm. Without accounting for it, 96% of all alerts on the real file
+    were level aircraft tripping the vertical-rate rule.
+
+    This is only the fallback. Where a segment moves enough to show its own
+    step, the rule uses that instead -- 31 aircraft in the same hour report
+    in 100 ft steps, and 25 ft is badly wrong for them.
     """
 
     nic_floor: int = 1
@@ -146,6 +169,34 @@ class SpoofingConfig:
     score_margin_frac: float = 1.0
     """How far past a threshold counts as fully anomalous. 1.0 means twice
     the limit scores 1.0."""
+
+    episode_gap_s: float = 60.0
+    """How long one aircraft must go quiet before a rule's hits count twice.
+
+    A rule testing consecutive pairs fires once per pair, so one stretch of
+    behaviour arrives as many identical findings: on a real hour one
+    aircraft produced twelve climb-rate alerts for a single episode. Hits of
+    the same rule on the same aircraft closer together than this are
+    reported as one, which is the difference between "twelve aircraft
+    misbehaved" and "one aircraft misbehaved twelve times".
+
+    Matches ``max_gap_s``, since that is already where the detector decides
+    a track has been interrupted.
+    """
+
+    severity_high_at: float = 0.6
+    """Combined weight-times-score at or above which an alert reads HIGH."""
+
+    severity_medium_at: float = 0.35
+    """...and at or above which it reads MEDIUM. Below this it is LOW.
+
+    Severity used to be a fixed lookup per rule, so every teleport and every
+    turn-rate wobble arrived at the same loudness: one real run emitted 156
+    HIGH out of 286, which tells a reader nothing. It is now how much the
+    kind of finding matters (``severity_weight``) multiplied by how far past
+    the limit this one went (``anomaly_score``), so a rule that fires on
+    something marginal no longer shouts.
+    """
 
     min_confidence: float = 0.35
     """Below this, abstain rather than alert. A wild reading built on thin

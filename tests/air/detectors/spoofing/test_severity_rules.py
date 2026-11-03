@@ -31,9 +31,23 @@ def test_registry_and_impersonation_are_high(gate):
     assert 0.7 <= severity_weight(gate) < 0.9
 
 
-@pytest.mark.parametrize("gate", ["turn_rate_v1", "identity_drift_v1"])
-def test_noisy_gates_are_low(gate):
+@pytest.mark.parametrize("gate", ["identity_drift_v1"])
+def test_weak_evidence_gates_are_low(gate):
     assert severity_weight(gate) <= 0.4
+
+
+def test_turn_rate_sits_between_weak_and_near_certain():
+    """Recalibrated when flag_turn_rate gained its minimum-speed gate.
+
+    It was 0.2 while the rule fired on taxiing aircraft and about half its
+    alerts were noise, which capped it below MEDIUM at any score. It now
+    abstains below flying speed, so a hit means an aircraft at cruise
+    reporting a turn no airframe can fly: real evidence, though heading is
+    noisier than position, so it stays under teleport and coexistence.
+    """
+    weight = severity_weight("turn_rate_v1")
+    assert severity_weight("identity_drift_v1") < weight
+    assert weight < severity_weight("teleport_v1")
 
 
 def test_teleport_outweighs_turn_rate():

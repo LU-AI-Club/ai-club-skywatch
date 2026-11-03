@@ -119,25 +119,54 @@ def test_confidence_stays_within_bounds():
 
 
 # --- severity_for ------------------------------------------------------------
+# Severity is the weight of the kind of finding times how far past the limit
+# this one went, so a gate no longer has one fixed level. Each case says
+# which score it is asking about.
 @pytest.mark.parametrize(
-    "gate, expected",
+    "gate, score, expected",
     [
-        ("teleport_v1", SeverityLevel.HIGH),
-        ("turn_rate_v1", SeverityLevel.HIGH),
-        ("coexistence_v1", SeverityLevel.HIGH),
-        ("speed_delta_v1", SeverityLevel.MEDIUM),
-        ("vrate_delta_v1", SeverityLevel.MEDIUM),
-        ("nic_floor_v1", SeverityLevel.LOW),
-        ("identity_drift_v1", SeverityLevel.LOW),
+        # Firing hard: strong gates reach HIGH, weak ones still do not.
+        ("teleport_v1", 1.0, SeverityLevel.HIGH),
+        ("coexistence_v1", 1.0, SeverityLevel.HIGH),
+        ("turn_rate_v1", 1.0, SeverityLevel.HIGH),
+        ("registry_mismatch_v1", 1.0, SeverityLevel.HIGH),
+        ("speed_delta_v1", 1.0, SeverityLevel.MEDIUM),
+        ("vrate_delta_v1", 1.0, SeverityLevel.MEDIUM),
+        ("identity_drift_v1", 1.0, SeverityLevel.LOW),
+        # Barely over the line: everything quietens down.
+        ("teleport_v1", 0.5, SeverityLevel.MEDIUM),
+        ("turn_rate_v1", 0.5, SeverityLevel.MEDIUM),
+        ("speed_delta_v1", 0.5, SeverityLevel.LOW),
+        ("identity_drift_v1", 0.5, SeverityLevel.LOW),
     ],
 )
-def test_severity_follows_the_tier(gate, expected):
-    assert severity_for(gate) is expected
+def test_severity_combines_the_kind_of_finding_with_how_far_over(
+    gate, score, expected
+):
+    assert severity_for(gate, score, CFG) is expected
 
 
-def test_an_unknown_gate_is_low_not_an_error():
-    """A new rule must not crash the pipeline on its first run."""
-    assert severity_for("something_new_v1") is SeverityLevel.LOW
+def test_the_same_gate_is_louder_the_further_past_the_limit_it_goes():
+    """The whole point: one run emitted 156 HIGH out of 286, all identical."""
+    assert severity_for("teleport_v1", 0.5, CFG) is SeverityLevel.MEDIUM
+    assert severity_for("teleport_v1", 1.0, CFG) is SeverityLevel.HIGH
+
+
+def test_a_weak_gate_firing_hard_stays_below_a_strong_gate_firing_hard():
+    assert severity_for("identity_drift_v1", 1.0, CFG) is SeverityLevel.LOW
+    assert severity_for("teleport_v1", 1.0, CFG) is SeverityLevel.HIGH
+
+
+def test_an_unknown_gate_does_not_crash_and_lands_mid_scale():
+    """A new rule must not crash the pipeline, nor be silently ignored."""
+    assert severity_for("something_new_v1", 1.0, CFG) is SeverityLevel.MEDIUM
+    assert severity_for("something_new_v1", 0.5, CFG) is SeverityLevel.LOW
+
+
+def test_a_gate_with_no_measurement_still_gets_a_level():
+    """identity_drift carries no quantity; asking without a score must work."""
+    assert severity_for("identity_drift_v1") is SeverityLevel.LOW
+    assert severity_for("teleport_v1") in tuple(SeverityLevel)
 
 
 # --- should_abstain ----------------------------------------------------------
@@ -153,3 +182,46 @@ def test_thin_evidence_stays_quiet_however_extreme():
 def test_the_floor_is_configurable():
     strict = SpoofingConfig(min_confidence=0.95)
     assert should_abstain(score=1.0, confidence=0.9, cfg=strict) is True
+
+
+# --- confidence reflects the aircraft's own reported fix quality -------------
+def feature_with_fix(nic: int | None, nacp: int | None, dt_s: float = 8.0):
+    """One feature record carrying the integrity values both rows reported."""
+    return SpoofingFeatureRecord(
+        icao24="a1b2c3",
+        segment_id=0,
+        prev_observed_at=T0,
+        curr_observed_at=T0 + timedelta(seconds=dt_s),
+        dt_s=dt_s,
+        dist_m=1000.0,
+        nic=nic,
+        nacp=nacp,
+        prev_nic=nic,
+        prev_nacp=nacp,
+    )
+
+
+def test_a_poor_reported_fix_lowers_confidence():
+    """Most rules are arithmetic on two positions; a bad fix weakens them."""
+    good = event(features=(feature_with_fix(11, 11),))
+    poor = event(features=(feature_with_fix(1, 1),))
+    assert confidence_for(poor, CFG) < confidence_for(good, CFG)
+
+
+def test_a_feed_without_integrity_fields_is_not_penalised():
+    """Silence is not an admission; otherwise every aircraft is down-ranked."""
+    silent = event(features=(feature_with_fix(None, None),))
+    best = event(features=(feature_with_fix(11, 11),))
+    assert confidence_for(silent, CFG) == confidence_for(best, CFG)
+
+
+def test_the_worst_fix_in_the_evidence_decides():
+    """One bad row is enough to weaken the finding built across the pair."""
+    mixed = event(features=(feature_with_fix(11, 11), feature_with_fix(1, 1)))
+    worst_only = event(features=(feature_with_fix(1, 1),))
+    assert confidence_for(mixed, CFG) == confidence_for(worst_only, CFG)
+
+
+def test_confidence_stays_in_range_with_the_worst_possible_fix():
+    worst = event(features=(feature_with_fix(0, 0),))
+    assert 0.0 <= confidence_for(worst, CFG) <= 1.0

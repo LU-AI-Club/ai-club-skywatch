@@ -179,7 +179,7 @@ def to_detection(event: SpoofingEvent, cfg: SpoofingConfig) -> Detection:
         detector_id=DETECTOR_ID,
         detector_version=DETECTOR_VERSION,
         detection_type=event.detection_type,
-        severity=severity_for(event.gate),
+        severity=severity_for(event.gate, score, cfg),
         confidence=confidence,
         temporal_bounds=TimeBounds(
             start_time=event.observed_from, end_time=event.observed_to

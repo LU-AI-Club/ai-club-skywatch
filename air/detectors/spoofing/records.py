@@ -66,6 +66,19 @@ class SpoofingFeatureRecord:
     prev_nacp: int | None = None
     callsign: str | None = None
 
+    altitude_quantum_ft: float | None = None
+    """The step size *this* aircraft reports altitude in, if we could tell.
+
+    Transmitters differ: in one real hour 742 aircraft stepped altitude by
+    25 ft and 31 by 100 ft. Assuming the common value for all of them turns
+    an honest 1,500 fpm climb on a 100 ft reporter into an implied
+    12,121 fpm over half a second, which is where most of the remaining
+    climb-rate false alerts came from.
+
+    ``None`` means the segment did not move enough to tell, and the rule
+    falls back to the configured default.
+    """
+
     def __post_init__(self) -> None:
         if not isinstance(self.icao24, str) or not self.icao24.strip():
             raise ValueError("icao24 must be a non-blank string")

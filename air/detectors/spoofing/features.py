@@ -26,6 +26,11 @@ EARTH_RADIUS_M = 6_371_000.0
 MPS_TO_KT = 1.943844
 DEFAULT_MAX_GAP_S = 60.0
 
+# Mirrors of the matching SpoofingConfig fields, so the calculation stage
+# stays callable on its own. The detector always passes the config's values.
+DEFAULT_ALTITUDE_QUANTUM_MIN_SAMPLES = 4
+DEFAULT_ALTITUDE_QUANTUM_MAX_FT = 100.0
+
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Return the great-circle distance between two degree coordinates in metres."""
@@ -103,10 +108,62 @@ def split_segments(
     return segments
 
 
+def infer_altitude_quantum_ft(
+    observations: Sequence[AdsbObservation],
+    min_samples: int,
+    max_quantum_ft: float,
+) -> float | None:
+    """The step size this aircraft reports altitude in, read off its own track.
+
+    Altitude arrives rounded, and not every transmitter rounds the same way:
+    in one real hour 742 aircraft stepped by 25 ft and 31 by 100 ft. The rule
+    comparing claimed climb rate against altitude change has to allow for
+    whichever applies, because assuming 25 ft for a 100 ft reporter reads an
+    honest 1,500 fpm climb as 12,121 fpm over half a second.
+
+    The step is the greatest common divisor of every altitude change in the
+    segment: a 100 ft reporter only ever moves in multiples of 100, while a
+    25 ft reporter sooner or later shows a 25. Changes of zero are skipped --
+    a level aircraft says nothing about its own resolution.
+
+    Changes are measured against the last altitude we actually received, not
+    the previous row, so a row without one does not discard the comparison.
+    A change spanning several reports is still a whole number of steps, so
+    it divides exactly like any other.
+
+    Returns ``None`` below ``min_samples`` changes, where a coincidence is as
+    likely as a measurement, and never claims more than ``max_quantum_ft``:
+    past that we would be reading a climb as if it were a rounding step, and
+    handing the rule an allowance big enough to hide a real lie.
+    """
+    steps: list[int] = []
+    last_known: float | None = None
+    for observation in observations:
+        if observation.altitude_ft is None:
+            continue
+        if last_known is not None:
+            step = abs(round(observation.altitude_ft - last_known))
+            if step:
+                steps.append(step)
+        last_known = observation.altitude_ft
+
+    if len(steps) < min_samples:
+        return None
+
+    quantum = 0
+    for step in steps:
+        quantum = math.gcd(quantum, step)
+        if quantum == 1:
+            return None  # no common step; this feed is not rounding
+
+    return float(quantum) if quantum <= max_quantum_ft else None
+
+
 def build_pair_features(
     previous: AdsbObservation,
     current: AdsbObservation,
     segment_id: int = 0,
+    altitude_quantum_ft: float | None = None,
 ) -> SpoofingFeatureRecord | None:
     """Work out what one consecutive pair of reports implies.
 
@@ -176,11 +233,15 @@ def build_pair_features(
         prev_nic=previous.nic,
         prev_nacp=previous.nacp,
         callsign=current.callsign,
+        altitude_quantum_ft=altitude_quantum_ft,
     )
 
 
 def build_features(
-    observations: Iterable[AdsbObservation], max_gap_s: float = DEFAULT_MAX_GAP_S
+    observations: Iterable[AdsbObservation],
+    max_gap_s: float = DEFAULT_MAX_GAP_S,
+    altitude_quantum_min_samples: int = DEFAULT_ALTITUDE_QUANTUM_MIN_SAMPLES,
+    altitude_quantum_max_ft: float = DEFAULT_ALTITUDE_QUANTUM_MAX_FT,
 ) -> list[SpoofingFeatureRecord]:
     """Run the whole calculation stage over every aircraft.
 
@@ -190,12 +251,23 @@ def build_features(
 
     ``segment_id`` counts from 0 per aircraft, so a rule can tell whether two
     records belong to the same unbroken stretch of flight.
+
+    Each segment's altitude step is read once and stamped onto its records,
+    because a single pair cannot show the resolution the aircraft reports in.
+    The two quantum arguments mirror the matching ``SpoofingConfig`` fields;
+    the defaults keep this callable without one.
     """
     records: list[SpoofingFeatureRecord] = []
     for track in group_by_aircraft(observations).values():
         for segment_id, segment in enumerate(split_segments(track, max_gap_s)):
+            # Read once per segment: a pair cannot show its own step size.
+            quantum_ft = infer_altitude_quantum_ft(
+                segment, altitude_quantum_min_samples, altitude_quantum_max_ft
+            )
             for previous, current in zip(segment, segment[1:]):
-                record = build_pair_features(previous, current, segment_id)
+                record = build_pair_features(
+                    previous, current, segment_id, quantum_ft
+                )
                 if record is not None:
                     records.append(record)
     return records
@@ -208,7 +280,10 @@ __all__ = [
     "split_segments",
     "build_pair_features",
     "build_features",
+    "infer_altitude_quantum_ft",
     "EARTH_RADIUS_M",
     "MPS_TO_KT",
     "DEFAULT_MAX_GAP_S",
+    "DEFAULT_ALTITUDE_QUANTUM_MIN_SAMPLES",
+    "DEFAULT_ALTITUDE_QUANTUM_MAX_FT",
 ]

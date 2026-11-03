@@ -201,19 +201,28 @@ def vrate_quantisation_fpm(
 ) -> float:
     """How much apparent climb rate the altitude step size alone can produce.
 
-    Altitude is reported in fixed steps -- 25 ft in this feed -- so a level
-    aircraft still appears to jump a whole step at a time. Either endpoint
-    can be rounded, so the error is up to two steps, and dividing that by a
-    short gap produces a large phantom rate:
+    Altitude is reported in fixed steps, so a level aircraft still appears to
+    jump a whole step at a time. Either endpoint can be rounded, so the error
+    is up to two steps, and dividing that by a short gap produces a large
+    phantom rate:
 
         25 ft over 0.55 s  ->  2,727 fpm, on an aircraft flying level
+
+    The step is the one this aircraft was observed using, falling back to
+    ``cfg.altitude_quantum_ft`` when its segment never moved enough to show
+    one. Transmitters differ -- 742 aircraft in one hour stepped by 25 ft and
+    31 by 100 ft -- and assuming the common value for a 100 ft reporter reads
+    an honest 1,500 fpm climb as 12,121 fpm.
 
     This returns that bound so the rule can ignore it. It shrinks as the gap
     grows, which is why a longer gap is more trustworthy here.
     """
     if record.dt_s <= 0:
         return float("inf")
-    return 2.0 * cfg.altitude_quantum_ft * 60.0 / record.dt_s
+    quantum_ft = record.altitude_quantum_ft
+    if quantum_ft is None:
+        quantum_ft = cfg.altitude_quantum_ft
+    return 2.0 * quantum_ft * 60.0 / record.dt_s
 
 
 def flag_vrate_delta(
