@@ -15,11 +15,9 @@ import pytest
 from air.live import (
     PersistResult,
     dedup_key,
-    finish_run,
     persist,
     read_window,
     run_live,
-    start_run,
 )
 
 
@@ -53,10 +51,6 @@ def test_stubs_raise_until_owning_teams_implement_them() -> None:
         read_window(None, start=now, end=now)
     with pytest.raises(NotImplementedError):
         persist(None, "spoofing_detections", [])
-    with pytest.raises(NotImplementedError):
-        start_run(None, "skywatch.spoofing", "0.1.0")
-    with pytest.raises(NotImplementedError):
-        finish_run(None, "run-1", status="SUCCESS", counts={})
     with pytest.raises(NotImplementedError):
         run_live(
             detector=SimpleNamespace(detector_id="skywatch.spoofing"),
