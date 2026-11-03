@@ -56,8 +56,8 @@ Each stage records an ExitReason when a state leaves without a detection.
 | F | logic/context.py | gather_signals(state, cfg) -> list[ContextSignal] |
 | G | logic/scoring.py | build_detection(...) -> Detection |
 | Lead | logic/episodes.py | group_episodes(reports, cfg) -> Iterator[Detection]; EpisodeTracker(cfg) for windowed input |
-| H | cli.py, fixtures/ | python -m air.detectors.no_fly_zone run --input x --out y |
-| I | collect/collector.py | collect(url, out_dir) -> None |
+| H | cli.py, fixtures/ | python -m air.detectors.no_fly_zone run --input x --out y; ... collect --url u --out y |
+| I | collect/collector.py | collect(url, out_dir, *, cfg, max_polls=None) -> None; parse_aircraft_json(payload, source, polled_at) -> list[dict]; poll_once(url) -> dict |
 | J | dashboard/app.py | streamlit run air/detectors/no_fly_zone/dashboard/app.py |
 | Lead | logic/detector.py | run(states, zones, cfg, *, exit_counts, per_report) — wiring only |
 | Lead | emit.py | to_platform_detection(detection) -> contracts.Detection |
