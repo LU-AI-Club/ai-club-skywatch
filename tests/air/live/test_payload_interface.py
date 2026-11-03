@@ -41,5 +41,9 @@ def test_stubs_raise_until_their_owners_implement_them():
     row = {"entity_id": "icao24:a1b2c3", "payload": {}}
     with pytest.raises(NotImplementedError):
         unusable_reason(row)
-    with pytest.raises(NotImplementedError):
-        observation_from_row(row)
+
+
+def test_observation_from_row_never_raises():
+    """A3a is implemented; whatever the row, it returns rather than raising."""
+    for row in ({}, {"entity_id": None}, {"entity_id": "icao24:a1b2c3", "payload": "not json"}):
+        assert observation_from_row(row) is None
