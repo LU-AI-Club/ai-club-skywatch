@@ -5,8 +5,7 @@ ADS-B stream. You own **two things this week**:
 
 1. **Spine component B — detection persistence** (shared infrastructure the
    *other two teams depend on*), including the shared `detector_runs` table.
-2. **Your detector's live lane** — detection table, mapper, runner service, and
-   validation.
+2. **Your detector's live lane** — detection table, mapper, and validation.
 
 Shared context: [`SPINE_PLAN.md`](SPINE_PLAN.md) (the full contract) and
 [`DETECTION_TABLE_COLUMNS.md`](DETECTION_TABLE_COLUMNS.md) (the table base).
@@ -20,10 +19,13 @@ Everything finishes to the repo's definition of done: **a merged PR with a
 > than duplicate it.
 
 **Dependencies:** the Tech Lead freezes the interfaces (day 1) and provides the
-base runner image + Compose services, the observations API, and the local
-populate script. A (Spoofing) and B (yours) have no dependency on each other and
-start immediately; C (No-Fly-Zone) depends on your B interface, so **freeze B's
-signature early and keep it stable.**
+base runner image, the Compose services, and the generic `run_live_detector.py`
+entry — so there is **no runner service for you to build** (it picks up your
+detector, table and `extra_columns` automatically; see
+[`../../docker/README.md`](../../docker/README.md)). The Tech Lead also provides
+the observations API and the local populate script. A (Spoofing) and B (yours)
+have no dependency on each other and start immediately; C (No-Fly-Zone) depends
+on your B interface, so **freeze B's signature early and keep it stable.**
 
 ---
 
@@ -84,8 +86,8 @@ then one update); a unit test covers insert, update, and the `extra_columns` hoo
 
 ## Part 2 — Proximity detection table
 
-**Goal.** Create `db/schema/0NN_adsb_proximity_detections.sql` (confirm the name
-with the Tech Lead) from the base template in `DETECTION_TABLE_COLUMNS.md`.
+**Goal.** Create `db/schema/003_proximity_detections.sql` (table
+`proximity_detections`) from the base template in `DETECTION_TABLE_COLUMNS.md`.
 
 - Keep the shared columns; add proximity's extra columns:
   `member_entity_ids TEXT[]` (both aircraft), `predicted_horizontal_nm`,
@@ -102,25 +104,14 @@ name/columns with the Lead; `T3` verify load via `docker compose up -d db`.
 `predicted_horizontal_nm`, `predicted_vertical_ft`, `t_cpa_seconds` (read from the
 detection's `evidence`/`metadata`). Shared columns are filled by `persist`.
 
+- **Where:** put it at `air/detectors/proximity/live.py` as `extra_columns` — the
+  runner (`scripts/run_live_detector.py`) imports it from there automatically.
 - **Done when:** a unit test maps a sample proximity `Detection` (a pair) to the
   expected row and `persist` writes it.
 
 **Suggested tickets:** `M1` implement `extra_columns`; `M2` fixture test (pair row).
 
-## Part 4 — Runner service
-
-**Goal.** Run proximity continuously via the Tech Lead's base image + `run_live`.
-
-- Params: your detector, table, `extra_columns`, and **`window_s ≈ 120`,
-  `step_s ≈ 15–30`, `poll ≈ 15–30 s`** (short lookback: proximity needs only a
-  short track to predict closest approach). Tune on live data.
-- **Done when:** the service runs, logs ticks, rows land as the stream advances;
-  a restart adds no duplicates.
-
-**Suggested tickets:** `R1` entry point calling `run_live(...)`; `R2` choose/justify
-window/step/poll; `R3` confirm the Compose service with the Lead.
-
-## Part 5 — End-to-end + live validation
+## Part 4 — End-to-end + live validation
 
 **Goal.** Prove the chain and that thresholds hold on live data.
 

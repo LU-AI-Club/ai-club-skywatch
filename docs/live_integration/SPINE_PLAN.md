@@ -126,7 +126,8 @@ def finish_run(conn, run_id, *, status, counts) -> None:
 ```
 
 **Key behaviors.**
-- Fills the shared base columns every air detection table has (see `002`) from
+- Fills the shared base columns every air detection table has (see
+  [`DETECTION_TABLE_COLUMNS.md`](DETECTION_TABLE_COLUMNS.md)) from
   `Detection.to_dict()`: ids, type, severity, confidence, `entity_id`,
   `entities_involved`, temporal bounds, lat/lon, `evidence`, `provenance`,
   `tags`, `metadata`, `raw_detection`, `dedup_key`.
@@ -182,11 +183,12 @@ def run_live(
   structured line per tick (counts, lag); clean shutdown on SIGTERM.
 - `once=True` runs a single tick for the end-to-end test and CI.
 
-**Containers.** A base `Dockerfile` for the runner image and **one Compose
-service per detector** (the maritime "one service per detector" pattern — isolates
-failures and lets each team own and deploy theirs). Each service is the same
-image with different env: detector name, `table`, `window_s`, `step_s`,
-`poll_interval_s`, and `SKYWATCH_DB_DSN`.
+**Containers (already built by the Tech Lead).** A base `Dockerfile` for the
+runner image and **one Compose service per detector** (the maritime "one service
+per detector" pattern — isolates failures). Each service is the same image with a
+different `--detector`; the generic `scripts/run_live_detector.py` entry invokes
+`run_live`. See [`../../docker/README.md`](../../docker/README.md). The harness
+(`run_live`) is still C's to implement.
 
 **Done when:** `run_live(..., once=True)` takes a seeded `observations` table
 through read → detect → persist into the detector's table in one pass (the
@@ -222,7 +224,7 @@ local DB.
 | A detection table (`db/schema/00N_<detector>.sql`) | `persistence.persist` fills its shared columns |
 | An `extra_columns(detection) -> dict` mapper | `persistence` / `runner` call it |
 | Their detector's `window_s` / `step_s` / `poll_interval_s` | `runner.run_live` consumes them |
-| Their detector's runner entry point/params | the base image + Compose services (Tech Lead) |
+| _(no runner to build)_ | base image + Compose services + `scripts/run_live_detector.py` entry (Tech Lead) |
 | An end-to-end test using `run_live(once=True)` | `run_live(once=True)` single-pass mode (C) |
 
 ## Sequencing
@@ -233,10 +235,10 @@ local DB.
 2. **Spoofing (A)** and **Proximity (B)** build in parallel immediately — no
    cross-dependency; B also creates the `detector_runs` heartbeat table.
 3. **No-Fly-Zone (C)** builds the runner against A's and B's frozen interfaces
-   (loop skeleton, cursor, container wiring, `flush()` first), then integrates
-   once A and B land; wire **one** detector end-to-end as the reference.
-4. Each team's detector lane (table, mapper, runner service, validation) proceeds
-   in parallel with its spine component.
+   (loop skeleton, cursor, `flush()` first), then integrates once A and B land;
+   wire **one** detector end-to-end as the reference.
+4. Each team's detector lane (table, mapper, validation) proceeds in parallel
+   with its spine component.
 
 ## Open decisions
 

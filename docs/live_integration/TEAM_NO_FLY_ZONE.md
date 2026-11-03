@@ -5,8 +5,7 @@ ADS-B stream. You own **two things this week**:
 
 1. **Spine component C — the live runner harness** (shared infrastructure the
    *other two teams run on*).
-2. **Your detector's live lane** — detection table, mapper, runner service, and
-   validation.
+2. **Your detector's live lane** — detection table, mapper, and validation.
 
 Shared context: [`SPINE_PLAN.md`](SPINE_PLAN.md) (the full contract) and
 [`DETECTION_TABLE_COLUMNS.md`](DETECTION_TABLE_COLUMNS.md) (the table base).
@@ -21,10 +20,13 @@ Everything finishes to the repo's definition of done: **a merged PR with a
 
 **Dependencies:** C depends on **A** (Spoofing's reader) and **B** (Proximity's
 persistence). Build against their **frozen interfaces / stubs** from day 1 — start
-on the loop skeleton, cursor logic, container wiring, and `flush()` handling,
-which need neither implementation — and integrate once A and B land. The Tech
-Lead freezes the interfaces (day 1) and provides the base runner image + Compose
-services, the observations API, and the local populate script.
+on the loop skeleton, cursor logic, and `flush()` handling, which need neither
+implementation — and integrate once A and B land. The Tech Lead freezes the
+interfaces (day 1) and provides the base runner **image**, the Compose services,
+and the generic `run_live_detector.py` entry that calls your `run_live` — so
+there is **no per-detector runner service for any team to build** (see
+[`../../docker/README.md`](../../docker/README.md)) — plus the observations API
+and the local populate script.
 
 ---
 
@@ -94,8 +96,8 @@ env/params contract (detector name, `table`, `window_s`, `step_s`,
 
 ## Part 2 — No-fly-zone detection table
 
-**Goal.** Create `db/schema/0NN_airspace_violation_detections.sql` (confirm the
-name with the Tech Lead) from the base template in `DETECTION_TABLE_COLUMNS.md`.
+**Goal.** Create `db/schema/004_no_fly_zone_detections.sql` (table
+`no_fly_zone_detections`) from the base template in `DETECTION_TABLE_COLUMNS.md`.
 
 - Keep the shared columns; add NFZ's extra columns: `zone_id`, `zone_name`,
   `zone_type`, `duration_seconds`. Add a `(zone_id, temporal_bounds_start DESC)`
@@ -111,26 +113,14 @@ name/columns with the Lead; `T3` verify load via `docker compose up -d db`.
 `zone_type`, `duration_seconds` (from the detection's `geospatial_context` /
 `metadata`). Shared columns are filled by `persist`.
 
+- **Where:** put it at `air/detectors/no_fly_zone/live.py` as `extra_columns` —
+  the runner (`scripts/run_live_detector.py`) imports it from there automatically.
 - **Done when:** a unit test maps a sample incursion `Detection` to the expected
   row and `persist` writes it.
 
 **Suggested tickets:** `M1` implement `extra_columns`; `M2` fixture test.
 
-## Part 4 — Runner service
-
-**Goal.** Run no-fly-zone continuously via the Tech Lead's base image + your
-`run_live` harness.
-
-- Params: your detector, table, `extra_columns`, and **short `window_s`,
-  `step_s ≈ 15–30`, `poll ≈ 15–30 s`**, relying on `flush()` to carry episodes
-  across ticks. Tune on live data.
-- **Done when:** the service runs, logs ticks, incursion rows land as the stream
-  advances, and an episode spanning a window edge is one row, not two.
-
-**Suggested tickets:** `R1` entry point calling `run_live(...)` with `flush()` wired;
-`R2` choose/justify window/step/poll; `R3` confirm the Compose service with the Lead.
-
-## Part 5 — End-to-end + live validation
+## Part 4 — End-to-end + live validation
 
 **Goal.** Prove the chain, especially episode continuity across windows, and that
 thresholds hold on live data.

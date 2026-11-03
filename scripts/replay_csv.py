@@ -100,7 +100,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     step = args.step if args.step is not None else args.window
-    dedup = step < args.window  # overlapping windows would otherwise double-count
+    # PROX-5: tumbling windows double-count too. An encounter spanning a window
+    # edge is a converging pair in BOTH halves, so each window emits it once --
+    # on the Lynchburg hour that was 1,128 rows covering 534 pairs. Dedup is a
+    # no-op when there is nothing to collapse, so it is always on.
+    dedup = True
 
     # --- Build the requested detectors; skip (with a note) any not built yet.
     requested = args.detector or sorted(DETECTORS)

@@ -5,8 +5,7 @@ ADS-B stream. You own **two things this week**:
 
 1. **Spine component A — the observations reader** (shared infrastructure the
    *other two teams depend on*).
-2. **Your detector's live lane** — detection table, mapper, runner service, and
-   validation.
+2. **Your detector's live lane** — detection table, mapper, and validation.
 
 Shared context: [`SPINE_PLAN.md`](SPINE_PLAN.md) (the full contract) and
 [`DETECTION_TABLE_COLUMNS.md`](DETECTION_TABLE_COLUMNS.md) (the table base).
@@ -19,10 +18,13 @@ Everything finishes to the repo's definition of done: **a merged PR with a
 > strongest stake in parsing them correctly and consistently for everyone.
 
 **Dependencies:** the Tech Lead freezes the interfaces (day 1) and provides the
-base runner image + Compose services, the observations API, and the local
-populate script. A (yours) and B (Proximity) have no dependency on each other and
-start immediately; C (No-Fly-Zone) depends on your A interface, so **freeze A's
-signature early and keep it stable.**
+base runner image, the Compose services, and the generic `run_live_detector.py`
+entry — so there is **no runner service for you to build** (it picks up your
+detector, table and `extra_columns` automatically; see
+[`../../docker/README.md`](../../docker/README.md)). The Tech Lead also provides
+the observations API and the local populate script. A (yours) and B (Proximity)
+have no dependency on each other and start immediately; C (No-Fly-Zone) depends
+on your A interface, so **freeze A's signature early and keep it stable.**
 
 ---
 
@@ -72,8 +74,8 @@ fixture row (include one `payload`-only field and one skipped bad row).
 
 ## Part 2 — Spoofing detection table
 
-**Goal.** Create `db/schema/0NN_adsb_spoof_detections.sql` (confirm the name with
-the Tech Lead) from the base template in
+**Goal.** Create `db/schema/002_spoofing_detections.sql` (table
+`spoofing_detections`) from the base template in
 [`DETECTION_TABLE_COLUMNS.md`](DETECTION_TABLE_COLUMNS.md).
 
 - Keep all shared columns as-is. Spoofing needs **few or no extra columns** — the
@@ -88,27 +90,15 @@ name/columns with the Lead; `T3` verify it loads via `docker compose up -d db`.
 **Goal.** `extra_columns(detection) -> dict` for your table (likely `{}` or a
 tiny set). The shared columns are filled by `air/live/persistence.py`.
 
+- **Where:** put it at `air/detectors/spoofing/live.py` as `extra_columns` — the
+  runner (`scripts/run_live_detector.py`) imports it from there automatically;
+  absent is fine (shared columns only).
 - **Done when:** a unit test maps a sample spoofing `Detection` to the expected
   row and `persistence.persist` writes it.
 
 **Suggested tickets:** `M1` implement `extra_columns`; `M2` fixture test.
 
-## Part 4 — Runner service
-
-**Goal.** Run spoofing continuously via the Tech Lead's base image + the shared
-`run_live` harness.
-
-- Provide the entry point/params: your detector, your table, your `extra_columns`,
-  and **`window_s ≈ 3600`, `step_s ≈ 60–300`, `poll ≈ 60–300 s`** (long lookback:
-  spoofing compares a whole track for gaps/reappearance/coexistence). Tune on live
-  data.
-- **Done when:** the service runs, logs ticks, and rows land in your table as the
-  stream advances; a restart adds no duplicates.
-
-**Suggested tickets:** `R1` entry point calling `run_live(...)`; `R2` choose/justify
-window/step/poll; `R3` confirm the Compose service with the Lead.
-
-## Part 5 — End-to-end + live validation
+## Part 4 — End-to-end + live validation
 
 **Goal.** Prove the chain and that the fine-tuned thresholds hold on live data.
 
