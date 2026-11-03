@@ -90,6 +90,9 @@ name/columns with the Lead; `T3` verify it loads via `docker compose up -d db`.
 **Goal.** `extra_columns(detection) -> dict` for your table (likely `{}` or a
 tiny set). The shared columns are filled by `air/live/persistence.py`.
 
+- **Where:** put it at `air/detectors/spoofing/live.py` as `extra_columns` — the
+  runner (`scripts/run_live_detector.py`) imports it from there automatically;
+  absent is fine (shared columns only).
 - **Done when:** a unit test maps a sample spoofing `Detection` to the expected
   row and `persistence.persist` writes it.
 

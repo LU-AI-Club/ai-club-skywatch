@@ -113,6 +113,8 @@ name/columns with the Lead; `T3` verify load via `docker compose up -d db`.
 `zone_type`, `duration_seconds` (from the detection's `geospatial_context` /
 `metadata`). Shared columns are filled by `persist`.
 
+- **Where:** put it at `air/detectors/no_fly_zone/live.py` as `extra_columns` —
+  the runner (`scripts/run_live_detector.py`) imports it from there automatically.
 - **Done when:** a unit test maps a sample incursion `Detection` to the expected
   row and `persist` writes it.
 

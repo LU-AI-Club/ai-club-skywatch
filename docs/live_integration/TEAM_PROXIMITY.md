@@ -104,6 +104,8 @@ name/columns with the Lead; `T3` verify load via `docker compose up -d db`.
 `predicted_horizontal_nm`, `predicted_vertical_ft`, `t_cpa_seconds` (read from the
 detection's `evidence`/`metadata`). Shared columns are filled by `persist`.
 
+- **Where:** put it at `air/detectors/proximity/live.py` as `extra_columns` — the
+  runner (`scripts/run_live_detector.py`) imports it from there automatically.
 - **Done when:** a unit test maps a sample proximity `Detection` (a pair) to the
   expected row and `persist` writes it.
 
