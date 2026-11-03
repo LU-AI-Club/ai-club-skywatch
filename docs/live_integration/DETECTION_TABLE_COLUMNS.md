@@ -6,11 +6,18 @@ air detection table should carry so the shared persistence adapter
 (`air/live/persistence.py`) can write it and TCE/CAATS can read it the same way
 for all three detectors.
 
-**How to use it:** copy the base template below into your team's migration
-(`db/schema/0NN_<your_table>.sql`), keep the shared columns as-is, then **add your
-own detector-specific columns** for the facts you want queryable without opening
-`raw_detection`. Confirm the final table name with the Tech Lead before it lands
-(these become the real SENTINEL migrations).
+**How to use it:** copy the base template below into your team's migration, keep
+the shared columns as-is, then **add your own detector-specific columns** for the
+facts you want queryable without opening `raw_detection`. The migration file and
+table names are fixed by the Tech Lead:
+
+| Team | Migration file | Table |
+| --- | --- | --- |
+| Spoofing | `db/schema/002_spoofing_detections.sql` | `spoofing_detections` |
+| Proximity | `db/schema/003_proximity_detections.sql` | `proximity_detections` |
+| No-Fly-Zone | `db/schema/004_no_fly_zone_detections.sql` | `no_fly_zone_detections` |
+
+(These become the real SENTINEL migrations.)
 
 ---
 
