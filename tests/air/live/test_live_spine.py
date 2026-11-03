@@ -1,8 +1,6 @@
-"""Contract tests for the air.live spine stubs.
+"""Contract tests for the air.live spine interfaces.
 
-Keeps CI green from day 1 and locks the two pieces that are implemented now
-(``PersistResult`` and ``dedup_key``). The owning teams replace the
-NotImplementedError stubs with real behavior and their own fixture tests.
+Locks the frozen A/B interfaces while their owning teams implement them.
 """
 
 from __future__ import annotations
@@ -18,7 +16,6 @@ from air.live import (
     finish_run,
     persist,
     read_window,
-    run_live,
     start_run,
 )
 
@@ -57,12 +54,3 @@ def test_stubs_raise_until_owning_teams_implement_them() -> None:
         start_run(None, "skywatch.spoofing", "0.1.0")
     with pytest.raises(NotImplementedError):
         finish_run(None, "run-1", status="SUCCESS", counts={})
-    with pytest.raises(NotImplementedError):
-        run_live(
-            detector=SimpleNamespace(detector_id="skywatch.spoofing"),
-            table="spoofing_detections",
-            dsn="postgresql://x",
-            window_s=120,
-            step_s=30,
-            poll_interval_s=30,
-        )
