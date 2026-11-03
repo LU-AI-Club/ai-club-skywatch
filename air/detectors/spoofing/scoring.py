@@ -12,25 +12,15 @@ silence, not an alarm.
 from __future__ import annotations
 
 from air.detectors.spoofing.config import SpoofingConfig
+from air.detectors.spoofing.quality import fix_quality_factor
 from air.detectors.spoofing.records import SpoofingEvent
+from air.detectors.spoofing.severity_rules import severity_weight
 from contracts import SeverityLevel
 
-# Physics limits sit beyond what is possible, so a hit is a finding rather
-# than a judgement call. Residuals have innocent explanations. A single soft
-# indicator is weaker still.
-_SEVERITY_BY_GATE: dict[str, SeverityLevel] = {
-    "teleport_v1": SeverityLevel.HIGH,
-    "turn_rate_v1": SeverityLevel.HIGH,
-    "subterrain_v1": SeverityLevel.HIGH,
-    "coexistence_v1": SeverityLevel.HIGH,
-    "pingpong_v1": SeverityLevel.HIGH,
-    "reappear_v1": SeverityLevel.MEDIUM,
-    "speed_delta_v1": SeverityLevel.MEDIUM,
-    "vrate_delta_v1": SeverityLevel.MEDIUM,
-    "registry_mismatch_v1": SeverityLevel.MEDIUM,
-    "nic_floor_v1": SeverityLevel.LOW,
-    "identity_drift_v1": SeverityLevel.LOW,
-}
+# The fixed level-per-gate table that used to live here is gone: severity is
+# now the gate's weight times how far past its limit the hit went. Its
+# judgement was not thrown away -- each gate's standing was carried across
+# into SEVERITY_WEIGHTS, so nothing was silently re-rated.
 
 # What a gate with no number scores. It fired, so it is not zero; we simply
 # cannot say how far past the line it went.
@@ -120,21 +110,50 @@ def confidence_for(event: SpoofingEvent, cfg: SpoofingConfig) -> float:
     if event.measured is None or event.threshold is None:
         confidence -= 0.2
 
+    # Finally, what the aircraft says about its own fix. Most of these rules
+    # are arithmetic on two positions, so a disagreement computed from a fix
+    # the aircraft itself calls unreliable is a weaker finding than the same
+    # disagreement from a good one. Scaling rather than subtracting keeps the
+    # deductions above meaning what they say; a feed that omits NIC and NACp
+    # returns 1.0 and is unaffected.
+    if features:
+        confidence *= min(fix_quality_factor(f) for f in features)
+
     return round(max(0.0, min(1.0, confidence)), 3)
 
 
-def severity_for(gate: str) -> SeverityLevel:
-    """How loud the alarm should be, from which rule fired.
+def severity_for(
+    gate: str, score: float | None = None, cfg: SpoofingConfig | None = None
+) -> SeverityLevel:
+    """How loud the alarm should be: what kind of finding, and how far over.
 
-    Physics violations are HIGH: their limits sit beyond the possible, so a
-    hit means something is genuinely wrong. Residuals are MEDIUM, since
-    claimed and derived values disagreeing has innocent explanations. A
-    single soft indicator is LOW.
+    Two things decide it. ``severity_weight`` says how much this kind of
+    finding matters at all -- a teleport is near-certain evidence of
+    spoofing, a turn-rate hit much weaker. ``anomaly_score`` says how far
+    past the limit this particular one went. Multiplying them means a weak
+    rule firing marginally cannot reach the loudness of a strong rule
+    firing hard.
 
-    An unknown gate is LOW rather than an error -- a new rule should not be
-    able to crash the pipeline on its first run.
+    This replaced a fixed level per rule, under which every hit on a gate
+    arrived identical: one real run emitted 156 HIGH out of 286 alerts,
+    which tells a reader nothing and teaches them to ignore the field.
+
+    Called without a score it falls back to ``UNMEASURED_SCORE``, the value
+    ``anomaly_score`` itself returns for a gate with no quantity attached.
+    An unknown gate takes the default weight rather than raising -- a new
+    rule must not be able to crash the pipeline on its first run.
     """
-    return _SEVERITY_BY_GATE.get(gate, SeverityLevel.LOW)
+    if cfg is None:
+        cfg = SpoofingConfig()
+    if score is None:
+        score = UNMEASURED_SCORE
+
+    combined = severity_weight(gate) * score
+    if combined >= cfg.severity_high_at:
+        return SeverityLevel.HIGH
+    if combined >= cfg.severity_medium_at:
+        return SeverityLevel.MEDIUM
+    return SeverityLevel.LOW
 
 
 def should_abstain(score: float, confidence: float, cfg: SpoofingConfig) -> bool:

@@ -22,9 +22,11 @@ the repo rule: abstain rather than guess.
 from __future__ import annotations
 
 from air.detectors.spoofing.config import SpoofingConfig
+from air.detectors.spoofing.episodes import consolidate_episodes
 from air.detectors.spoofing.emit import to_detection
 from air.detectors.spoofing.features import (
     build_pair_features,
+    infer_altitude_quantum_ft,
     haversine_m,
     group_by_aircraft,
     split_segments,
@@ -137,6 +139,12 @@ class SpoofingDetector(BaseDetector):
             for segment_id, segment in enumerate(segments):
                 events.extend(self._segment_events(segment, segment_id, cfg))
             events.extend(self._identity_events(track, segments, cfg))
+
+        # One finding per episode, not one per pair: a rule testing
+        # consecutive reports fires repeatedly for a single stretch of
+        # behaviour, and a queue of twelve identical rows reads as twelve
+        # aircraft rather than one.
+        events = consolidate_episodes(events, cfg)
 
         detections: list[Detection] = []
         for event in events:
@@ -296,8 +304,18 @@ class SpoofingDetector(BaseDetector):
         """Run every physics rule over one unbroken stretch of a track."""
         events: list[SpoofingEvent] = []
 
+        # Read once per segment: a single pair cannot show the resolution
+        # this aircraft reports altitude in.
+        quantum_ft = infer_altitude_quantum_ft(
+            segment,
+            cfg.altitude_quantum_min_samples,
+            cfg.altitude_quantum_max_ft,
+        )
+
         for previous, current in zip(segment, segment[1:]):
-            record = build_pair_features(previous, current, segment_id)
+            record = build_pair_features(
+                previous, current, segment_id, quantum_ft
+            )
             if record is None:
                 continue
             events.extend(self._pair_events(record, segment, cfg))

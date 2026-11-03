@@ -1,6 +1,6 @@
 [
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:00Z",
     "latitude": 37.2,
@@ -16,7 +16,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:05Z",
     "latitude": 38.6,
@@ -32,7 +32,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:10Z",
     "latitude": 37.210407,
@@ -48,7 +48,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:15Z",
     "latitude": 38.580436,
@@ -64,7 +64,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:20Z",
     "latitude": 37.220814,
@@ -80,7 +80,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:25Z",
     "latitude": 38.560872,
@@ -96,7 +96,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:30Z",
     "latitude": 37.231221,
@@ -112,7 +112,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:35Z",
     "latitude": 38.541308,
@@ -128,7 +128,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:40Z",
     "latitude": 37.241628,
@@ -144,7 +144,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:45Z",
     "latitude": 38.521744,
@@ -160,7 +160,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:50Z",
     "latitude": 37.252035,
@@ -176,7 +176,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:00:55Z",
     "latitude": 38.50218,
@@ -192,7 +192,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:00Z",
     "latitude": 37.262442,
@@ -208,7 +208,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:05Z",
     "latitude": 38.482616,
@@ -224,7 +224,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:10Z",
     "latitude": 37.272849,
@@ -240,7 +240,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:15Z",
     "latitude": 38.463052,
@@ -256,7 +256,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:20Z",
     "latitude": 37.283256,
@@ -272,7 +272,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:25Z",
     "latitude": 38.443488,
@@ -288,7 +288,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:30Z",
     "latitude": 37.293663,
@@ -304,7 +304,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:35Z",
     "latitude": 38.423924,
@@ -320,7 +320,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:40Z",
     "latitude": 37.30407,
@@ -336,7 +336,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:45Z",
     "latitude": 38.40436,
@@ -352,7 +352,7 @@
     "_note": "transmitter B, north-east, same icao24; note this also trips the physics gates, which is expected \u2014 the ping-pong pattern is what separates impersonation from a one-way jump"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:50Z",
     "latitude": 37.314477,
@@ -368,7 +368,7 @@
     "_note": "transmitter A, south-west"
   },
   {
-    "_label": "positive:identity_coexistence",
+    "_label": "positive:coexistence_v1",
     "icao24": "a1b2c3",
     "observed_at": "2026-09-01T00:01:55Z",
     "latitude": 38.384796,
