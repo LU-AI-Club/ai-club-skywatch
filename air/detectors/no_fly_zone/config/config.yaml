@@ -27,6 +27,14 @@ airspace:
   military_icao24_ranges:
     - ["AE0000", "AFFFFF"]
 
+squawks:
+  unlawful_interference: ["7500"]
+  emergency: ["7600", "7700"]
+  non_discrete: ["0000", "1200"]
+
+callsigns:
+  lifeguard_prefixes: ["LIFEGUARD", "MEDEVAC", "AIREVAC", "HOSP"]
+
 geometry:
   h3_resolution: 7        # ~5 km cells, matches SENTINEL
   default_uncertainty_m: 185   # used when NIC/NACp are missing

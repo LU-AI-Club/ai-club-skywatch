@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from air.detectors.no_fly_zone.config import load_config
+from air.detectors.no_fly_zone.config import DEFAULT_PATH, load_config
 from air.detectors.no_fly_zone.types import AircraftState, Detection, Severity
 
 
@@ -40,3 +40,24 @@ def test_detection_serializes_to_contract_shape() -> None:
     out = d.to_dict()
     assert out["severity"] == "HIGH"
     assert isinstance(out["entity_ids"], list)
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "value"),
+    [
+        ("squawks", "emergency", ["8888"]),
+        ("squawks", "non_discrete", "1200"),
+        ("callsigns", "lifeguard_prefixes", [""]),
+        ("callsigns", "lifeguard_prefixes", ["medevac", "MEDEVAC"]),
+    ],
+)
+def test_context_lists_are_validated(tmp_path, section: str, key: str, value: object) -> None:
+    import yaml
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw[section][key] = value
+    config_path = tmp_path / "invalid-config.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError):
+        load_config(config_path)

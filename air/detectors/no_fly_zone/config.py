@@ -15,6 +15,7 @@ import yaml
 from .types import Severity, ZoneType
 
 DEFAULT_PATH = Path(__file__).parent / "config" / "config.yaml"
+_SQUAWK_GROUPS = frozenset({"unlawful_interference", "emergency", "non_discrete"})
 
 
 @dataclass(frozen=True)
@@ -38,9 +39,13 @@ def load_config(path: str | Path = DEFAULT_PATH) -> Config:
 
 
 def _validate(raw: Mapping[str, Any]) -> None:
-    for section in ("detector", "scope", "sampling", "airspace", "geometry", "scoring", "severity", "dedup"):
+    for section in (
+        "detector", "scope", "sampling", "airspace", "squawks", "callsigns",
+        "geometry", "scoring", "severity", "dedup",
+    ):
         if section not in raw:
             raise ValueError(f"config missing section: {section}")
+    _validate_context_lists(raw)
     bases = raw["scoring"]["base_by_zone_type"]
     missing = {z.value for z in ZoneType} - set(bases)
     if missing:
@@ -52,3 +57,40 @@ def _validate(raw: Mapping[str, Any]) -> None:
         Severity(raw["severity"][key])  # raises if not a valid severity
     if raw["sampling"]["target_hz"] <= 0:
         raise ValueError("sampling.target_hz must be positive")
+
+
+def _validate_context_lists(raw: Mapping[str, Any]) -> None:
+    """Validate squawk categories and configured lifeguard callsign prefixes."""
+    squawks = raw["squawks"]
+    if not isinstance(squawks, Mapping) or set(squawks) != _SQUAWK_GROUPS:
+        raise ValueError(f"squawks must define exactly these groups: {sorted(_SQUAWK_GROUPS)}")
+
+    assigned_codes: dict[str, str] = {}
+    for group, codes in squawks.items():
+        if not isinstance(codes, list):
+            raise ValueError(f"squawks.{group} must be a list")
+        for code in codes:
+            if (
+                not isinstance(code, str)
+                or len(code) != 4
+                or any(digit not in "01234567" for digit in code)
+            ):
+                raise ValueError(f"squawks.{group} entries must be four-digit octal strings")
+        if len(codes) != len(set(codes)):
+            raise ValueError(f"squawks.{group} must not contain duplicates")
+        for code in codes:
+            if code in assigned_codes:
+                raise ValueError(
+                    f"squawk {code} cannot be in both {assigned_codes[code]} and {group}"
+                )
+            assigned_codes[code] = group
+
+    callsigns = raw["callsigns"]
+    prefixes = callsigns.get("lifeguard_prefixes") if isinstance(callsigns, Mapping) else None
+    if not isinstance(prefixes, list):
+        raise ValueError("callsigns.lifeguard_prefixes must be a list")
+    if any(not isinstance(prefix, str) or not prefix.strip() for prefix in prefixes):
+        raise ValueError("callsigns.lifeguard_prefixes entries must be non-empty strings")
+    normalized_prefixes = [prefix.strip().upper() for prefix in prefixes]
+    if len(normalized_prefixes) != len(set(normalized_prefixes)):
+        raise ValueError("callsigns.lifeguard_prefixes must not contain duplicates")

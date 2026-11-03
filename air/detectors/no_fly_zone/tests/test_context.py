@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import pytest
+import yaml
 
+from ..config import DEFAULT_PATH, load_config
 from ..logic.context import gather_signals
 from .conftest import Config, make_state
 
@@ -107,3 +109,26 @@ def test_missing_unlawful_interference_weight_raises_keyerror(cfg: Config) -> No
 
     with pytest.raises(KeyError):
         gather_signals(make_state(squawk="7500"), cfg)
+
+
+def test_editing_yaml_changes_configured_squawks_and_prefixes(tmp_path) -> None:
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw["squawks"]["emergency"] = ["7654"]
+    raw["squawks"]["non_discrete"] = ["4321"]
+    raw["callsigns"]["lifeguard_prefixes"] = ["RESCUE"]
+
+    config_path = tmp_path / "custom-config.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    custom_cfg = load_config(config_path)
+
+    assert [signal.name for signal in gather_signals(
+        make_state(squawk="7654", callsign=None), custom_cfg
+    )] == ["emergency_squawk"]
+    assert [signal.name for signal in gather_signals(
+        make_state(squawk="7700", callsign=None), custom_cfg
+    )] == ["atc_discrete_squawk"]
+    assert gather_signals(make_state(squawk="4321", callsign=None), custom_cfg) == []
+    assert [signal.name for signal in gather_signals(
+        make_state(squawk="4321", callsign="RESCUE1"), custom_cfg
+    )] == ["lifeguard_callsign"]
+    assert gather_signals(make_state(squawk="4321", callsign="MEDEVAC1"), custom_cfg) == []

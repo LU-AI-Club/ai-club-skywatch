@@ -27,11 +27,12 @@ Signals to implement (keys must match ``scoring.context_weights``)
 ``military_hex``
     ``icao24`` inside a configured military ICAO24 range.
 ``lifeguard_callsign``
-    Callsign prefixed LIFEGUARD / MEDEVAC / AIR EVAC / HOSP.
+    Callsign prefixed by one of the configured lifeguard prefixes.
 ``emergency_squawk``
-    7600 or 7700.
+    Squawk in the configured emergency set.
 ``unlawful_interference_squawk``
-    7500. Its negative configured weight raises the score to the maximum.
+    Squawk in the configured unlawful-interference set. Its negative weight
+    raises the score.
 
 Failure causes
 --------------
@@ -48,13 +49,6 @@ from __future__ import annotations
 
 from ..config import Config
 from ..types import AircraftState, ContextSignal
-
-_EMERGENCY_SQUAWKS: frozenset[str] = frozenset({"7600", "7700"})
-_UNLAWFUL_INTERFERENCE_SQUAWK = "7500"
-# 0000 is not a valid discrete beacon code; 1200 is the default VFR code.
-_NON_DISCRETE_SQUAWKS: frozenset[str] = frozenset({"0000", "1200"})
-# can be replaced with non_discrete_squawks = cfg["squawks"]["non_discrete"] if the YAML is updated to include a list of regional non-disscrete codes.
-_LIFEGUARD_PREFIXES: tuple[str, ...] = ("LIFEGUARD", "MEDEVAC", "AIREVAC", "HOSP")
 
 
 def _normalize_squawk(squawk: str | int |None) -> str | None:
@@ -75,23 +69,24 @@ def _normalize_squawk(squawk: str | int |None) -> str | None:
 def gather_signals(state: AircraftState, cfg: Config) -> list[ContextSignal]:
     """Collect the authorization-context signals present in ``state``."""
     weights = cfg["scoring"]["context_weights"]
+    squawk_groups = cfg["squawks"]
     signals: list[ContextSignal] = []
 
     squawk = _normalize_squawk(state.squawk)
 
-    if squawk == _UNLAWFUL_INTERFERENCE_SQUAWK:
+    if squawk in squawk_groups["unlawful_interference"]:
         signals.append(ContextSignal(
             name="unlawful_interference_squawk",
             weight=weights["unlawful_interference_squawk"],
             fact=f"squawk {squawk} indicates unlawful interference",
         ))
-    elif squawk in _EMERGENCY_SQUAWKS:
+    elif squawk in squawk_groups["emergency"]:
         signals.append(ContextSignal(
             name="emergency_squawk",
             weight=weights["emergency_squawk"],
             fact=f"squawk {squawk} is an emergency code",
         ))
-    elif squawk and squawk not in _NON_DISCRETE_SQUAWKS: 
+    elif squawk and squawk not in squawk_groups["non_discrete"]:
         signals.append(ContextSignal(
             name="atc_discrete_squawk",
             weight=weights["atc_discrete_squawk"],
@@ -99,9 +94,12 @@ def gather_signals(state: AircraftState, cfg: Config) -> list[ContextSignal]:
         ))
 
     callsign = (state.callsign or "").strip().upper()
-    if callsign.startswith(_LIFEGUARD_PREFIXES):
+    lifeguard_prefixes = tuple(
+        prefix.strip().upper() for prefix in cfg["callsigns"]["lifeguard_prefixes"]
+    )
+    if callsign.startswith(lifeguard_prefixes):
         medical_prefix = next(
-            prefix for prefix in _LIFEGUARD_PREFIXES if callsign.startswith(prefix)
+            prefix for prefix in lifeguard_prefixes if callsign.startswith(prefix)
         )
         signals.append(ContextSignal(
             name="lifeguard_callsign",
@@ -114,7 +112,7 @@ def gather_signals(state: AircraftState, cfg: Config) -> list[ContextSignal]:
         digit in "0123456789ABCDEF" for digit in icao24
     ):
         address = int(icao24, 16)
-        for first_hex, last_hex in cfg["airspace"]["military_icao24_ranges"]: # needs to be provided by the YAML file
+        for first_hex, last_hex in cfg["airspace"]["military_icao24_ranges"]:
             first_address = int(first_hex, 16)
             last_address = int(last_hex, 16)
             if first_address <= address <= last_address:
