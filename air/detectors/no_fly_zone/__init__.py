@@ -31,13 +31,16 @@ if TYPE_CHECKING:
 def build_detector(
     config_path: str | Path | None = None,
     airspace_path: str | Path | None = None,
+    *,
+    emit_open: bool = False,
 ) -> NoFlyZoneDetector:
     """Build the detector the shared runner (``scripts/replay_csv.py``) calls.
 
     Zero arguments is the runner's call: ``configs/detectors/no_fly_zone.yaml``
     and the airspace file it names. Pass either path to override, exactly like
     the CLI's ``--config`` and ``--airspace``. Config and zones are loaded once
-    here, not per window.
+    here, not per window. ``emit_open`` turns on live mode (see
+    :func:`build_live_detector`).
 
     Failure causes: whatever ``load_config`` or ``load_zones`` raise for a bad
     file. The runner reports that and skips NFZ rather than crashing.
@@ -48,7 +51,22 @@ def build_detector(
 
     cfg = load_config(config_path if config_path is not None else DEFAULT_PATH)
     zones_file = Path(airspace_path) if airspace_path is not None else configured_airspace_path(cfg)
-    return NoFlyZoneDetector(cfg, load_zones(zones_file))
+    return NoFlyZoneDetector(cfg, load_zones(zones_file), emit_open=emit_open)
 
 
-__all__ = ["build_detector"]
+def build_live_detector(
+    config_path: str | Path | None = None,
+    airspace_path: str | Path | None = None,
+) -> NoFlyZoneDetector:
+    """Build the detector for the live runner (``scripts/run_live_detector.py``).
+
+    Same as :func:`build_detector`, with open episodes emitted every window
+    (``episode_status == "OPEN"``, no end time) so an incursion reaches the
+    detection table on entry and is updated in place until it closes. Replay
+    and the CLI keep using :func:`build_detector`, which only emits finished
+    episodes.
+    """
+    return build_detector(config_path, airspace_path, emit_open=True)
+
+
+__all__ = ["build_detector", "build_live_detector"]

@@ -55,7 +55,8 @@ of which ``types.Detection`` carries. Stream G must therefore put these into
 
 Optional: ``altitude_ft``, ``zone_id``, ``penetration_nm``, ``dwell_sec``.
 ``episode_start`` / ``episode_end`` (set by logic/episodes.py) become the time
-bounds; without them both bounds are ``observed_at``.
+bounds; without them both bounds are ``observed_at``. An episode with
+``episode_status == "OPEN"`` (still in progress) gets ``end_time = None``.
 
 Inputs / Outputs
 ----------------
@@ -131,7 +132,13 @@ def to_platform_detection(detection: Detection) -> PlatformDetection:
     lon = float(_require(extras, "lon"))
     altitude_ft = extras.get("altitude_ft")
     start_time = _as_datetime(extras.get("episode_start") or observed_at, "episode_start")
-    end_time = _as_datetime(extras.get("episode_end") or observed_at, "episode_end")
+    # An episode still in progress has no end yet; the contract's end_time is
+    # optional for exactly this ("open" findings).
+    end_time: datetime | None = (
+        None
+        if extras.get("episode_status") == "OPEN"
+        else _as_datetime(extras.get("episode_end") or observed_at, "episode_end")
+    )
     zone_id = extras.get("zone_id")
 
     provenance = ProvenanceRecord(
