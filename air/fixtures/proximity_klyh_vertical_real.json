@@ -1,0 +1,98 @@
+[
+  {
+    "icao24": "ad0698",
+    "observed_at": "2026-09-01T00:23:01.790000+00:00",
+    "latitude": 37.220981,
+    "longitude": -79.269821,
+    "altitude_ft": 2125.0,
+    "ground_speed_kt": 100.6,
+    "track_deg": 27.84000015258789,
+    "vertical_rate_fpm": -192.0,
+    "_geometric_altitude_ft": 2250.0,
+    "_source": "data/lynchburg_adsb.csv"
+  },
+  {
+    "icao24": "a98488",
+    "observed_at": "2026-09-01T00:23:05.411000+00:00",
+    "latitude": 37.322617,
+    "longitude": -79.248008,
+    "altitude_ft": 2250.0,
+    "ground_speed_kt": 103.2,
+    "track_deg": 238.47000122070312,
+    "vertical_rate_fpm": 192.0,
+    "_geometric_altitude_ft": 2425.0,
+    "_source": "data/lynchburg_adsb.csv"
+  },
+  {
+    "icao24": "ad0698",
+    "observed_at": "2026-09-01T00:23:08.265000+00:00",
+    "latitude": 37.223602,
+    "longitude": -79.268052,
+    "altitude_ft": 2150.0,
+    "ground_speed_kt": 98.0,
+    "track_deg": 28.65999984741211,
+    "vertical_rate_fpm": 512.0,
+    "_geometric_altitude_ft": 2275.0,
+    "_source": "data/lynchburg_adsb.csv"
+  },
+  {
+    "icao24": "a98488",
+    "observed_at": "2026-09-01T00:23:10.782000+00:00",
+    "latitude": 37.321289,
+    "longitude": -79.250871,
+    "altitude_ft": 2275.0,
+    "ground_speed_kt": 107.0,
+    "track_deg": 240.32000732421875,
+    "vertical_rate_fpm": 256.0,
+    "_geometric_altitude_ft": 2450.0,
+    "_source": "data/lynchburg_adsb.csv"
+  },
+  {
+    "icao24": "ad0698",
+    "observed_at": "2026-09-01T00:24:32.157000+00:00",
+    "latitude": 37.257059,
+    "longitude": -79.246833,
+    "altitude_ft": 2000.0,
+    "ground_speed_kt": 99.1,
+    "track_deg": 30.959999084472656,
+    "vertical_rate_fpm": -832.0,
+    "_geometric_altitude_ft": 2125.0,
+    "_source": "data/lynchburg_adsb.csv"
+  },
+  {
+    "icao24": "a98488",
+    "observed_at": "2026-09-01T00:24:36.095000+00:00",
+    "latitude": 37.302262,
+    "longitude": -79.296092,
+    "altitude_ft": 2975.0,
+    "ground_speed_kt": 103.1,
+    "track_deg": 239.6999969482422,
+    "vertical_rate_fpm": 384.0,
+    "_geometric_altitude_ft": 3200.0,
+    "_source": "data/lynchburg_adsb.csv"
+  },
+  {
+    "icao24": "ad0698",
+    "observed_at": "2026-09-01T00:24:38.570000+00:00",
+    "latitude": 37.259666,
+    "longitude": -79.244922,
+    "altitude_ft": 1950.0,
+    "ground_speed_kt": 100.7,
+    "track_deg": 29.110000610351562,
+    "vertical_rate_fpm": -640.0,
+    "_geometric_altitude_ft": 2050.0,
+    "_source": "data/lynchburg_adsb.csv"
+  },
+  {
+    "icao24": "a98488",
+    "observed_at": "2026-09-01T00:24:41.511000+00:00",
+    "latitude": 37.300958,
+    "longitude": -79.298839,
+    "altitude_ft": 3000.0,
+    "ground_speed_kt": 102.6,
+    "track_deg": 240.19000244140625,
+    "vertical_rate_fpm": 512.0,
+    "_geometric_altitude_ft": 3225.0,
+    "_source": "data/lynchburg_adsb.csv"
+  }
+]
