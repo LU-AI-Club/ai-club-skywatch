@@ -59,6 +59,13 @@ reaches into the hundreds, even >1000 kt.
 `physics.py` (`flag_speed_delta`), and `air/detectors/spoofing/config.py`.
 
 **Acceptance criteria.**
+- [ ] The speed-delta alert count on the Lynchburg hour drops to a level you can
+      *defend*, and the PR explains why that level is right.
+- [ ] A new fixture reproduces a benign short-interval case and asserts the
+      detector does **not** flag it.
+- [ ] A fixture proves a genuinely large, sustained speed contradiction *still*
+      fires (you didn't just mute the rule).
+- [ ] Root-cause note included.
 - [x] The speed-delta alert count on the Lynchburg hour drops to a level you can
       *defend*, and the PR explains why that level is right.
 - [x] A new fixture reproduces a benign short-interval case and asserts the

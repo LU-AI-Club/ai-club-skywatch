@@ -27,6 +27,10 @@ KT = M_PER_NM / 3600.0
 # Two irregular report schedules (seconds after T0) that never coincide.
 TIMES_A = [0.0, 2.3, 4.9, 7.6, 9.8, 12.4, 15.1, 17.7, 20.0]
 TIMES_B = [1.1, 3.4, 6.2, 8.7, 11.3, 13.9, 16.5, 19.2]
+# Same schedules shifted to 40-80 s, so the reports straddle T0 + 60 s
+# (00:31:00), which is a boundary of the runner's epoch-anchored 60 s windows.
+TIMES_A_EDGE = [40.0 + t * 2 for t in TIMES_A]
+TIMES_B_EDGE = [40.0 + t * 2 for t in TIMES_B]
 
 
 def _xy_to_latlon(x_m: float, y_m: float) -> tuple[float, float]:
@@ -109,6 +113,61 @@ SCENARIOS = {
             "bbb002", "TEST02", (2.0 / math.sqrt(2), 2.0 / math.sqrt(2)), 60, 300, 0, 30500, TIMES_B, "crossing_B"
         ),
     },
+    # PROX-5: ONE head-on encounter whose 40 s of reports cross the 00:31:00
+    # window edge. Closest approach at t=110 s, so it is converging and inside
+    # max_tcpa_s in BOTH 60 s windows. One encounter -> one detection, however
+    # the runner slices time.
+    "proximity_spans_window.json": {
+        "_expect": {"detections": 1, "severity": "HIGH", "window_edge_s": 60},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 110, 300, 90, 10000, TIMES_A_EDGE, "edge_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 110, 300, 270, 10200, TIMES_B_EDGE, "edge_B"),
+    },
+    # PROX-2: head-on at FL360/FL370, 0.2 nm apart laterally. They hold the
+    # standard 1000 ft vertical separation, reported 975 ft because baro
+    # altitudes jitter ~25 ft -> exactly as separated as ATC intends, no detection.
+    # 7.5 nm apart now, so the PROX-1 distance gate is not what keeps it quiet.
+    "proximity_standard_vertical.json": {
+        "_expect": {"detections": 0},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 30, 450, 90, 36000, TIMES_A, "standard_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 30, 450, 270, 36975, TIMES_B, "standard_B"),
+    },
+    # PROX-2 counterpart: same geometry at FL360 but only 650 ft apart vertically
+    # (well under standard) -> still fires, MEDIUM (inside 1.5 nm / 700 ft).
+    "proximity_small_vertical_gap.json": {
+        "_expect": {"detections": 1, "severity": "MEDIUM", "t_cpa_at_start_s": 30},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 30, 450, 90, 36000, TIMES_A, "gap_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 30, 450, 270, 36650, TIMES_B, "gap_B"),
+    },
+    # PROX-1: head-on and "converging" on paper (0.2 nm / 200 ft at closest
+    # approach, 112 s out), but ~25 nm apart right now at 400 kt each. A one
+    # degree track error moves each aircraft ~0.2 nm by then and real traffic
+    # drifts far more, so the prediction isn't trustworthy -> no detection.
+    "proximity_far_converging.json": {
+        "_expect": {"detections": 0},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 112, 400, 90, 10000, TIMES_A, "far_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 112, 400, 270, 10200, TIMES_B, "far_B"),
+    },
+    # PROX-1 counterpart: same geometry at closest approach, but only 5 nm
+    # apart now (30 s out). A genuine near-term close approach still fires.
+    "proximity_near_term.json": {
+        "_expect": {"detections": 1, "severity": "HIGH", "t_cpa_at_start_s": 30},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 30, 300, 90, 10000, TIMES_A, "near_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 30, 300, 270, 10200, TIMES_B, "near_B"),
+    },
+    # PROX-8: the head-on geometry exactly, but at 3,000 ft instead of 10,000.
+    # Terminal airspace: close traffic there is routine and our constant-track
+    # model does not hold, so the altitude floor suppresses it.
+    "proximity_terminal_altitude.json": {
+        "_expect": {"detections": 0},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 60, 300, 90, 3000, TIMES_A, "terminal_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 60, 300, 270, 3200, TIMES_B, "terminal_B"),
+    },
+    # PROX-8 counterpart: identical geometry just above the floor -> still HIGH.
+    "proximity_just_above_floor.json": {
+        "_expect": {"detections": 1, "severity": "HIGH", "t_cpa_at_start_s": 60},
+        "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 60, 300, 90, 5200, TIMES_A, "floor_A")
+        + _aircraft("bbb002", "TEST02", (0.0, 0.2), 60, 300, 270, 5400, TIMES_B, "floor_B"),
+    },
     # Two aircraft taxiing toward each other at Lynchburg (field elevation
     # 938 ft MSL). Metres apart, but on the ground -> no detection.
     "proximity_ground.json": {
@@ -116,6 +175,29 @@ SCENARIOS = {
         "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 60, 15, 90, 940, TIMES_A, "taxi_A")
         + _aircraft("bbb002", "TEST02", (0.0, 0.02), 60, 20, 270, 940, TIMES_B, "taxi_B"),
     },
+
+    # Regression: aircraft remain far apart at predicted closest approach.
+    "proximity_far_apart.json": {
+        "_expect": {"detections": 0},
+        "rows": _aircraft(
+            "aaa001", "TEST01", (0.0, 0.0), 60, 300, 90, 10000, TIMES_A, "far_A"
+        )
+        + _aircraft(
+            "bbb002", "TEST02", (0.0, 8.0), 60, 300, 270, 10200, TIMES_B, "far_B"
+        ),
+    },
+
+    # Regression: close horizontal geometry below the 5,000 ft threshold.
+    "proximity_below_5000ft.json": {
+        "_expect": {"detections": 0},
+        "rows": _aircraft(
+            "aaa001", "TEST01", (0.0, 0.0), 60, 300, 90, 4000, TIMES_A, "low_A"
+        )
+        + _aircraft(
+            "bbb002", "TEST02", (0.0, 0.2), 60, 300, 270, 4200, TIMES_B, "low_B"
+        ),
+    },
+
 }
 
 
