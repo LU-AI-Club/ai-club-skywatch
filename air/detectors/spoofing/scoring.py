@@ -17,22 +17,10 @@ from air.detectors.spoofing.records import SpoofingEvent
 from air.detectors.spoofing.severity_rules import severity_weight
 from contracts import SeverityLevel
 
-# Physics limits sit beyond what is possible, so a hit is a finding rather
-# than a judgement call. Residuals have innocent explanations. A single soft
-# indicator is weaker still.
-_SEVERITY_BY_GATE: dict[str, SeverityLevel] = {
-    "teleport_v1": SeverityLevel.HIGH,
-    "turn_rate_v1": SeverityLevel.HIGH,
-    "subterrain_v1": SeverityLevel.HIGH,
-    "coexistence_v1": SeverityLevel.HIGH,
-    "pingpong_v1": SeverityLevel.HIGH,
-    "reappear_v1": SeverityLevel.MEDIUM,
-    "speed_delta_v1": SeverityLevel.MEDIUM,
-    "vrate_delta_v1": SeverityLevel.MEDIUM,
-    "registry_mismatch_v1": SeverityLevel.MEDIUM,
-    "nic_floor_v1": SeverityLevel.LOW,
-    "identity_drift_v1": SeverityLevel.LOW,
-}
+# The fixed level-per-gate table that used to live here is gone: severity is
+# now the gate's weight times how far past its limit the hit went. Its
+# judgement was not thrown away -- each gate's standing was carried across
+# into SEVERITY_WEIGHTS, so nothing was silently re-rated.
 
 # What a gate with no number scores. It fired, so it is not zero; we simply
 # cannot say how far past the line it went.
