@@ -21,6 +21,25 @@ from air.detectors.spoofing.features import MPS_TO_KT
 from air.detectors.spoofing.records import SpoofingFeatureRecord
 from air.models.observation import AdsbObservation
 
+# NACp -> 95% horizontal position error bound (EPU), in metres.
+# Source: DO-260B table of NACp values -- verify against the spec before citing.
+# NACp 0 means "unknown" and is deliberately absent, so it contributes no
+# allowance (behaviour is unchanged when the feed does not say how good the
+# fix was).
+NACP_EPU_M: dict[int, float] = {
+    11: 3.0,
+    10: 10.0,
+    9: 30.0,
+    8: 93.0,
+    7: 185.0,
+    6: 556.0,
+    5: 926.0,
+    4: 1852.0,
+    3: 3704.0,
+    2: 7408.0,
+    1: 18520.0,
+}
+
 
 def flag_teleport(
     record: SpoofingFeatureRecord, cfg: SpoofingConfig
@@ -31,13 +50,16 @@ def flag_teleport(
     750-800 kt with a strong tailwind, so a limit near cruise speed would
     flag honest traffic all day; a fabricated position typically implies
     thousands of knots, so nothing real is lost by setting it at 1000.
+
+    The implied speed is first reduced by what the reports' own position
+    error could explain, so a poor fix is not mistaken for a fabricated one.
     """
     if record.implied_speed_kt is None:
         return None
     if record.dt_s < cfg.min_dt_s:
         # Timestamp error dominates at very short gaps.
         return None
-    if record.implied_speed_kt > cfg.teleport_kt:
+    if record.implied_speed_kt - speed_position_error_kt(record, cfg) > cfg.teleport_kt:
         return "TELEPORT"
     return None
 
@@ -49,10 +71,25 @@ def flag_turn_rate(
 
     Turn rate is signed in the record -- negative is a left turn -- so the
     comparison uses its magnitude. A standard rate turn is 3 deg/s.
+
+    Track comes from the velocity message, not the position fix, so NIC/NACp
+    deliberately play no part here.
+
+    Below ``cfg.turn_rate_min_speed_kt`` the rule abstains. Track is the
+    direction of travel, and an aircraft barely moving has almost none, so
+    its reported heading swings freely without the aircraft turning in any
+    sense this rule means. That is not a measurement we can interpret, and
+    abstaining is the honest answer -- on the real hour it was also our
+    largest single source of false alerts.
     """
     if record.turn_rate_dps is None:
         return None
     if record.dt_s < cfg.min_dt_s:
+        return None
+    if (
+        record.reported_speed_kt is None
+        or abs(record.reported_speed_kt) < cfg.turn_rate_min_speed_kt
+    ):
         return None
     if abs(record.turn_rate_dps) > cfg.turn_rate_dps:
         return "IMPOSSIBLE_TURN"
@@ -65,15 +102,41 @@ def speed_delta_limit_kt(
     """The effective speed-disagreement limit for this record.
 
     The larger of the fixed margin and a fraction of the reported speed, so
-    the rule works for a 90 kt trainer and a 500 kt jet alike, plus the
-    phantom speed position error alone can produce over this gap. Exposed
-    because the event records the limit that actually applied, not the
-    config constant.
+    the rule works for a 90 kt trainer and a 500 kt jet alike, plus the two
+    phantom speeds measurement error alone can produce over this gap: one
+    from position error, one from timing error. Exposed because the event
+    records the limit that actually applied, not the config constant.
     """
     if record.reported_speed_kt is None:
         return None
     base = max(cfg.speed_delta_kt, abs(record.reported_speed_kt) * cfg.speed_delta_frac)
-    return base + speed_position_error_kt(record, cfg)
+    return (
+        base
+        + speed_position_error_kt(record, cfg)
+        + speed_timing_error_kt(record, cfg)
+    )
+
+
+def speed_timing_error_kt(
+    record: SpoofingFeatureRecord, cfg: SpoofingConfig
+) -> float:
+    """How much apparent speed a timestamp slip alone can produce.
+
+    Implied speed is distance over the gap between two timestamps. If a
+    timestamp sits ``cfg.timing_error_s`` away from the fix it carries, the
+    gap is wrong by that much and the speed is wrong in proportion:
+
+        390 kt with 0.25 s of slip over 1.9 s  ->  51 kt
+
+    Unlike position error this scales with how fast the aircraft is going,
+    not with a distance, which is why it cannot be folded into the position
+    allowance. Both shrink as the gap grows.
+    """
+    if record.dt_s <= 0:
+        return float("inf")
+    if record.reported_speed_kt is None:
+        return 0.0
+    return abs(record.reported_speed_kt) * cfg.timing_error_s / record.dt_s
 
 
 def speed_position_error_kt(
@@ -81,19 +144,30 @@ def speed_position_error_kt(
 ) -> float:
     """How much apparent speed position error alone can produce.
 
-    Either endpoint can be off by the position error, so the distance can be
-    wrong by up to twice that, and dividing by a short gap produces a large
+    Either endpoint can be off by its own error bound, so the distance can be
+    wrong by the sum of the two, and dividing by a short gap produces a large
     phantom speed:
 
         2 x 30 m over 0.55 s  ->  212 kt, on an aircraft flying steadily
 
-    This returns that bound so the rule can allow for it. It shrinks as the
-    gap grows -- 23 kt at 5 s, 4 kt at 30 s -- so a real contradiction over a
+    Each endpoint contributes the error radius its NACp claims, floored at
+    ``cfg.position_error_m`` so an absent, unknown or optimistic NACp still
+    gets the slack a good fix deserves. A self-reported low NACp only buys
+    slack equal to the radius it claims; it does not make a gross teleport
+    invisible.
+
+    This is the single place position error is allowed for. Every rule that
+    needs the allowance calls this, and applies it once. It shrinks as the gap
+    grows -- 23 kt at 5 s, 4 kt at 30 s -- so a real contradiction over a
     longer gap is still caught at nearly the original limit.
     """
     if record.dt_s <= 0:
         return float("inf")
-    return 2.0 * cfg.position_error_m / record.dt_s * MPS_TO_KT
+    err_m = sum(
+        max(NACP_EPU_M.get(nacp, 0.0), cfg.position_error_m)
+        for nacp in (record.prev_nacp, record.nacp)
+    )
+    return err_m / record.dt_s * MPS_TO_KT
 
 
 def flag_speed_delta(
@@ -104,6 +178,11 @@ def flag_speed_delta(
     Aircraft broadcast velocity separately from position. When the two
     disagree by more than wind and sensor error explain, at least one of them
     is fabricated.
+
+    Implied speed comes from the two positions, so the limit already carries
+    what position error alone could produce (see ``speed_delta_limit_kt``).
+    The allowance is applied there and nowhere else -- subtracting it from the
+    measurement as well would grant it twice and hide real speed lies.
     """
     if record.speed_delta_kt is None:
         return None
@@ -122,19 +201,28 @@ def vrate_quantisation_fpm(
 ) -> float:
     """How much apparent climb rate the altitude step size alone can produce.
 
-    Altitude is reported in fixed steps -- 25 ft in this feed -- so a level
-    aircraft still appears to jump a whole step at a time. Either endpoint
-    can be rounded, so the error is up to two steps, and dividing that by a
-    short gap produces a large phantom rate:
+    Altitude is reported in fixed steps, so a level aircraft still appears to
+    jump a whole step at a time. Either endpoint can be rounded, so the error
+    is up to two steps, and dividing that by a short gap produces a large
+    phantom rate:
 
         25 ft over 0.55 s  ->  2,727 fpm, on an aircraft flying level
+
+    The step is the one this aircraft was observed using, falling back to
+    ``cfg.altitude_quantum_ft`` when its segment never moved enough to show
+    one. Transmitters differ -- 742 aircraft in one hour stepped by 25 ft and
+    31 by 100 ft -- and assuming the common value for a 100 ft reporter reads
+    an honest 1,500 fpm climb as 12,121 fpm.
 
     This returns that bound so the rule can ignore it. It shrinks as the gap
     grows, which is why a longer gap is more trustworthy here.
     """
     if record.dt_s <= 0:
         return float("inf")
-    return 2.0 * cfg.altitude_quantum_ft * 60.0 / record.dt_s
+    quantum_ft = record.altitude_quantum_ft
+    if quantum_ft is None:
+        quantum_ft = cfg.altitude_quantum_ft
+    return 2.0 * quantum_ft * 60.0 / record.dt_s
 
 
 def flag_vrate_delta(
@@ -151,10 +239,22 @@ def flag_vrate_delta(
     all of them level aircraft observed half a second apart. Subtracting the
     step-size artefact is the honest fix: widening the threshold instead
     would have hidden real disagreements at long gaps.
+
+    A reported rate beyond ``cfg.vrate_max_plausible_fpm`` is treated as a
+    field we failed to receive rather than a claim the aircraft made, and
+    the rule abstains. These were the rule's remaining alerts: aircraft
+    holding altitude exactly while broadcasting +9,920 or +18,176 fpm. The
+    altitude is not in doubt and the aircraft is not climbing; the rate
+    field is corrupt, and calling that a contradiction describes it wrongly.
     """
     if record.vrate_delta_fpm is None:
         return None
     if record.dt_s < cfg.min_dt_s:
+        return None
+    if (
+        record.reported_vrate_fpm is not None
+        and abs(record.reported_vrate_fpm) > cfg.vrate_max_plausible_fpm
+    ):
         return None
 
     disagreement = abs(record.vrate_delta_fpm) - vrate_quantisation_fpm(record, cfg)
@@ -244,5 +344,7 @@ __all__ = [
     "flag_subterrain",
     "speed_delta_limit_kt",
     "speed_position_error_kt",
+    "speed_timing_error_kt",
     "subterrain_depth_ft",
+    "NACP_EPU_M",
 ]

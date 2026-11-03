@@ -175,3 +175,17 @@ def test_trust_is_never_populated():
 def test_several_aircraft_for_an_identity_finding():
     detection = to_detection(event(icao24s=("a1b2c3", "d4e5f6")), CFG)
     assert len(detection.entities_involved) == 2
+
+
+def test_the_detection_carries_all_three_score_fields():
+    """confidence, anomaly_score and raw_model_confidence, per the contract.
+
+    raw_model_confidence is ours before anything downstream reweighs it, so
+    a later disagreement can be traced to whoever changed confidence. The
+    other detectors already carry it.
+    """
+    detection = to_detection(event(), CFG)
+    assert detection.confidence is not None
+    assert "anomaly_score" in detection.metadata
+    assert "raw_model_confidence" in detection.metadata
+    assert detection.metadata["raw_model_confidence"] == detection.confidence

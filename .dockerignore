@@ -1,0 +1,16 @@
+# Keep the runner image build context small and reproducible. The Dockerfile
+# only COPYs the dirs it needs, but trimming the context speeds every build and
+# keeps large/irrelevant files out.
+.git
+.venv
+**/__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+# Big recorded dataset — the runner reads the DB, not CSVs.
+data/
+# Not needed in the runner image.
+notebooks/
+tests/
+docs/

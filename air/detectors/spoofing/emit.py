@@ -179,7 +179,7 @@ def to_detection(event: SpoofingEvent, cfg: SpoofingConfig) -> Detection:
         detector_id=DETECTOR_ID,
         detector_version=DETECTOR_VERSION,
         detection_type=event.detection_type,
-        severity=severity_for(event.gate),
+        severity=severity_for(event.gate, score, cfg),
         confidence=confidence,
         temporal_bounds=TimeBounds(
             start_time=event.observed_from, end_time=event.observed_to
@@ -195,6 +195,12 @@ def to_detection(event: SpoofingEvent, cfg: SpoofingConfig) -> Detection:
             "gate": event.gate,
             "reason": event.reason,
             "anomaly_score": score,
+            # Our own number, recorded before anything downstream adjusts it.
+            # ``confidence`` on the Detection is the field TCE or CAATS may
+            # reweigh; this one stays as the detector left it, so a later
+            # disagreement can be traced to whoever changed it. The two are
+            # equal today because nothing downstream touches confidence yet.
+            "raw_model_confidence": confidence,
             "feature_schema_version": FEATURE_SCHEMA_VERSION,
             "baseline_or_model_version": f"physics-gates-{DETECTOR_VERSION}",
             "explanation_facts": facts,

@@ -285,3 +285,28 @@ Lynchburg hour. Deliver a proposal with before/after numbers.
 Pick the most clearly-benign cases from this run and commit them as **negative
 fixtures** (see the existing `air/fixtures/spoofing/neg_*`). They become the
 regression guard that stops a future change from re-introducing today's noise.
+
+---
+
+## Measured threshold costs
+
+The tickets above ask you to find "the right threshold". Stop reasoning about
+it and measure it:
+
+```bash
+python scripts/sweep_report.py            # every threshold, a few minutes
+python scripts/sweep_report.py --quick    # three values each, much faster
+python scripts/sweep_report.py --only turn_rate_dps
+```
+
+It writes [`CALIBRATION_SWEEP.md`](CALIBRATION_SWEEP.md): for each threshold,
+the alert count on the Lynchburg hour at every value tried, and whether the
+guard fixtures still fire. That file is generated — re-run the script rather
+than editing it.
+
+**Read the guard column before taking a recommendation.** `pos_guard_*.json`
+are the cases that must be caught at any setting: a 300 nm jump in ten
+seconds, a 390 kt speed lie measured over thirty. A value that silences one
+of those is not a candidate, however few alerts it produces. Loosening until
+the hour is quiet is easy and worthless; the guards are what make the number
+mean something.

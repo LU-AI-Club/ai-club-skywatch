@@ -38,3 +38,7 @@ proximity_solutions/
 /Main
 /Python_test.py
 build/
+
+# scratch replay dumps
+.a.json
+.b.json
