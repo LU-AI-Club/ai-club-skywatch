@@ -59,13 +59,97 @@ reaches into the hundreds, even >1000 kt.
 `physics.py` (`flag_speed_delta`), and `air/detectors/spoofing/config.py`.
 
 **Acceptance criteria.**
-- [ ] The speed-delta alert count on the Lynchburg hour drops to a level you can
+- [x] The speed-delta alert count on the Lynchburg hour drops to a level you can
       *defend*, and the PR explains why that level is right.
-- [ ] A new fixture reproduces a benign short-interval case and asserts the
+- [x] A new fixture reproduces a benign short-interval case and asserts the
       detector does **not** flag it.
-- [ ] A fixture proves a genuinely large, sustained speed contradiction *still*
+- [x] A fixture proves a genuinely large, sustained speed contradiction *still*
       fires (you didn't just mute the rule).
-- [ ] Root-cause note included.
+- [x] Root-cause note included.
+
+### Resolution
+
+**Result.** Speed-delta alerts on the Lynchburg hour: **595 → 77**. Total
+detections: **830 → 312**. No other rule's count changed.
+
+**Root cause.** Implied speed is `dist_m / dt_s` between two consecutive
+reports (`features.py`). Every ADS-B position carries some error, and that
+error divided by a short gap turns into speed the aircraft never flew. The
+firing pairs were overwhelmingly short gaps:
+
+| `dt_s` of firing pairs | before | after |
+|---|---|---|
+| 0.5–1 s | 473 | 2 |
+| 1–2 s | 60 | 56 |
+| 2–5 s | 53 | 12 |
+| 5–10 s | 5 | 4 |
+| 30–60 s | 4 | 3 |
+
+The median gap was 0.578 s, just past the existing `min_dt_s = 0.5` guard.
+At that gap, 15 m of error at each end is about 106 kt of phantom speed, which
+is more than the 50 kt / 30% limit allows. The ticket's example, `a92abb`,
+covered 44 m where its reported 228 kt predicts 65 m: about 20 m off, which is
+ordinary position error, not a spoof.
+
+**Fix.** The limit now includes the phantom speed that position error alone can
+produce over the gap (`physics.py`, `speed_position_error_kt`):
+
+```
+limit = max(50 kt, 30% of reported) + 2 × position_error_m / dt_s   (in kt)
+```
+
+The `2 ×` is because either endpoint can be off. `position_error_m = 30` is a
+new setting in `config.py`. 30 m is the NACp 9 bound (95% containment), typical
+of GPS-quality ADS-B. The allowance shrinks as the gap grows: about 212 kt at
+0.55 s, 23 kt at 5 s and 4 kt at 30 s. Because it is part of
+`speed_delta_limit_kt`, each detection records the limit that actually applied.
+This is the same approach `vrate_quantisation_fpm` uses for the 25 ft altitude
+step.
+
+**Why not just raise `min_dt_s`?** A hard cutoff throws away every pair under
+it, including a real spoof seen at short gaps, and most of this feed's pairs
+are under 2 s. The error allowance keeps those pairs and only discounts what
+noise can explain. The result also isn't sensitive to the exact 30 m:
+
+| `position_error_m` | 0 (old) | 10 | 20 | 30 | 50 |
+|---|---|---|---|---|---|
+| speed-delta alerts | 595 | 96 | 86 | 77 | 44 |
+
+**Trade-off.** At a 0.55 s gap, a single pair only fires if the claimed and
+implied speeds disagree by more than about 260 kt. A smaller lie is still
+caught at longer gaps, where the allowance is small, and a sustained spoof
+spans many pairs at mixed gaps. The existing `pos_speed_contradiction.json`
+(32% off at 5 s gaps) still fires.
+
+**Tests.**
+- `neg_short_interval_jitter.json`: steady 228 kt flight, reports every 0.55 s,
+  ±15 m along-track position error. It produced 39 alerts under the old rule
+  and **0** now.
+- `pos_speed_lie_short_interval.json`: the same cadence and error, with
+  positions implying ~450 kt while the aircraft claims 100 kt. It **still
+  fires** (19 of 39 pairs).
+- Unit tests in `test_spoofing_physics.py` cover the `a92abb` case, a real lie
+  at a short gap, the shrinking allowance, and a modest disagreement over a
+  long gap.
+- `test_spoofing_sweep_threshold.py`: expected counts updated for the two new
+  fixtures.
+
+**Left alone, deliberately.**
+- **The remaining 77, mostly a timestamp problem.** 58 of them covered almost
+  exactly one *extra second* of travel at their reported speed. For example,
+  `aa9bb8` covered 511 m in 1.12 s while claiming 452 kt, which is 2.2 s of
+  flight. That is a ~1 s offset between when a position was measured and the
+  timestamp it carries, which is a different cause from position error. It
+  needs its own ticket: find where in the feed or normalizer the position time
+  comes from, rather than widening this limit further.
+- **Per-aircraft accuracy.** The records carry `nacp`, so the error allowance
+  could use each aircraft's reported accuracy instead of a fixed 30 m. That is
+  SPOOF-4's question, so it was left for that ticket.
+- **Long gaps (30–60 s).** Implied speed uses straight-line distance, so an
+  aircraft that turns during a long gap looks slower than it was. 3 alerts;
+  separate cause.
+- **`min_dt_s` stays at 0.5.** Below that, timestamp error dominates and the
+  pair isn't worth scoring.
 
 ---
 

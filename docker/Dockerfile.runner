@@ -1,0 +1,37 @@
+# SkyWatch detector runner image — ONE image, every detector runs on it.
+#
+# A compose service per detector uses this same image and selects which detector
+# to run via its command (e.g. `--detector spoofing`). Modeled on the SENTINEL
+# platform's single ingest image + per-worker command pattern.
+
+FROM python:3.11-slim
+
+LABEL org.opencontainers.image.title="skywatch-runner" \
+      org.opencontainers.image.description="SkyWatch live detector runner: reads observations, runs a detector, persists detections"
+
+# psycopg's binary wheel needs libpq at runtime.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the code the runner needs, then install. `[db]` = psycopg + h3;
+# `[nfz]` = shapely + h3 + pyarrow — one image runs all three detectors, and the
+# no-fly-zone detector imports shapely/h3, so both extras are installed here.
+# Editable install keeps the repo layout intact so relative config/airspace
+# lookups resolve at runtime.
+COPY pyproject.toml ./
+COPY contracts/ ./contracts/
+COPY air/ ./air/
+COPY configs/ ./configs/
+COPY db/ ./db/
+COPY scripts/ ./scripts/
+RUN pip install --no-cache-dir -e ".[db,nfz]"
+
+ENV PYTHONUNBUFFERED=1
+
+# ENTRYPOINT fixes the interpreter + script; each compose service supplies the
+# detector (and any overrides) as the command, e.g. ["--detector", "spoofing"].
+ENTRYPOINT ["python", "scripts/run_live_detector.py"]
+CMD ["--help"]

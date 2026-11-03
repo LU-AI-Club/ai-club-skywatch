@@ -6,8 +6,10 @@ That is not a real spoofing rule, but it does change its answer as the limit
 moves, which is the thing sweep_threshold has to show.
 
 The fixtures' highest reported ground speeds are: 780 kt in
-neg_tailwind_cruise.json, 450 kt in all 8 pos_ files and 4 other negatives,
-and 320 kt or less in the remaining 4 negatives.
+neg_tailwind_cruise.json, 450 kt in 8 of the 9 pos_ files and 4 other
+negatives, and 320 kt or less in the remaining 5 negatives. The ninth
+positive, pos_speed_lie_short_interval.json, reports only 100 kt -- its lie
+is that it moves far faster than it claims -- so this fake never catches it.
 """
 
 from __future__ import annotations
@@ -48,8 +50,8 @@ def test_limit_above_every_speed_does_not_fire():
             "value": 1000,
             "tp": 0,
             "fp": 0,
-            "fn": 8,
-            "tn": 9,
+            "fn": 9,
+            "tn": 10,
             "precision": None,
             "recall": 0.0,
         }
@@ -59,16 +61,16 @@ def test_limit_above_every_speed_does_not_fire():
 def test_limit_just_under_the_tailwind_gives_one_false_alarm():
     table = sweep_threshold("limit_kt", [500], FIXTURES_DIR, make_fake_detector)
     row = table[0]
-    assert (row["tp"], row["fp"], row["fn"], row["tn"]) == (0, 1, 8, 8)
+    assert (row["tp"], row["fp"], row["fn"], row["tn"]) == (0, 1, 9, 9)
     assert (row["precision"], row["recall"]) == (0.0, 0.0)
 
 
 def test_low_limit_fires_on_every_positive_and_some_negatives():
     table = sweep_threshold("limit_kt", [400], FIXTURES_DIR, make_fake_detector)
     row = table[0]
-    assert (row["tp"], row["fp"], row["fn"], row["tn"]) == (8, 5, 0, 4)
+    assert (row["tp"], row["fp"], row["fn"], row["tn"]) == (8, 5, 1, 5)
     assert row["precision"] == 8 / 13
-    assert row["recall"] == 1.0
+    assert row["recall"] == 8 / 9
 
 
 def test_lowering_the_limit_never_lowers_recall():

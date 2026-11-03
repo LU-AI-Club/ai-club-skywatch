@@ -63,6 +63,7 @@ def test_every_positive_fixture_fires_its_gate(observations_from):
         "pos_teleport.json": "teleport_v1",
         "pos_impossible_turn.json": "turn_rate_v1",
         "pos_speed_contradiction.json": "speed_delta_v1",
+        "pos_speed_lie_short_interval.json": "speed_delta_v1",
         "pos_vrate_contradiction.json": "vrate_delta_v1",
         "pos_integrity_collapse.json": "nic_floor_v1",
     }
@@ -83,6 +84,7 @@ def test_every_negative_fixture_stays_quiet(observations_from):
         "neg_brief_nic_dip.json",
         "neg_ground_vehicle.json",
         "neg_sparse_track.json",
+        "neg_short_interval_jitter.json",
     ]
     detector = SpoofingDetector()
     for fixture in quiet:

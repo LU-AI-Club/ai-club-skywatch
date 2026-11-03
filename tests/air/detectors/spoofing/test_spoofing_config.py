@@ -14,6 +14,7 @@ def test_the_agreed_defaults():
     assert cfg.turn_rate_dps == 10.0
     assert cfg.speed_delta_kt == 50.0
     assert cfg.speed_delta_frac == 0.30
+    assert cfg.position_error_m == 30.0
     assert cfg.vrate_delta_fpm == 2000.0
     assert cfg.max_gap_s == 60.0
     assert cfg.nic_floor == 1
@@ -43,6 +44,11 @@ def test_a_non_positive_threshold_is_rejected(field):
 def test_speed_fraction_must_be_a_real_fraction(frac):
     with pytest.raises(ValueError, match="speed_delta_frac"):
         SpoofingConfig(speed_delta_frac=frac)
+
+
+def test_position_error_cannot_be_negative():
+    with pytest.raises(ValueError, match="position_error_m"):
+        SpoofingConfig(position_error_m=-1.0)
 
 
 def test_confidence_floor_must_be_a_probability():

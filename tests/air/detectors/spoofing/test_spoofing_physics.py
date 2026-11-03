@@ -19,6 +19,7 @@ from air.detectors.spoofing.physics import (
     flag_turn_rate,
     flag_vrate_delta,
     speed_delta_limit_kt,
+    speed_position_error_kt,
     subterrain_depth_ft,
     vrate_quantisation_fpm,
 )
@@ -109,12 +110,44 @@ def test_the_limit_scales_with_the_aircraft():
     """A fixed margin alone is wrong for both a trainer and a jet."""
     slow = record(reported_speed_kt=90.0)
     fast = record(reported_speed_kt=500.0)
-    assert speed_delta_limit_kt(slow, CFG) == 50.0        # the floor wins
-    assert speed_delta_limit_kt(fast, CFG) == 150.0       # 30% wins
+    allowance = speed_position_error_kt(slow, CFG)
+    assert speed_delta_limit_kt(slow, CFG) == 50.0 + allowance    # the floor wins
+    assert speed_delta_limit_kt(fast, CFG) == 150.0 + allowance   # 30% wins
 
 
 def test_speed_delta_abstains_without_a_reported_speed():
     assert flag_speed_delta(record(speed_delta_kt=None), CFG) is None
+
+
+def test_speed_delta_ignores_position_error_at_a_short_gap():
+    """SPOOF-1: a few metres of error over half a second is not a speed lie.
+
+    The real-data case "a92abb: 0.0 nm in 0.55 s" -- 44 m covered where 228 kt
+    predicts 65 m, so the positions imply 156 kt against a claimed 228.
+    """
+    jitter = record(dt_s=0.553, reported_speed_kt=228.0, speed_delta_kt=-72.0)
+    assert flag_speed_delta(jitter, CFG) is None
+
+
+def test_a_real_speed_lie_at_a_short_gap_still_fires():
+    """The allowance is bounded: claiming 100 kt while covering 450 kt fires."""
+    assert flag_speed_delta(
+        record(dt_s=0.55, reported_speed_kt=100.0, speed_delta_kt=350.0), CFG
+    ) is not None
+
+
+def test_the_speed_allowance_shrinks_as_the_gap_grows():
+    """2 x 30 m of position error, expressed as speed over the gap."""
+    assert speed_position_error_kt(record(dt_s=0.55), CFG) == pytest.approx(212.1, abs=0.1)
+    assert speed_position_error_kt(record(dt_s=5.0), CFG) == pytest.approx(23.3, abs=0.1)
+    assert speed_position_error_kt(record(dt_s=30.0), CFG) == pytest.approx(3.9, abs=0.1)
+
+
+def test_a_modest_speed_disagreement_over_a_long_gap_fires():
+    """A long gap makes position error negligible, so 32% off is caught."""
+    assert flag_speed_delta(
+        record(dt_s=10.0, reported_speed_kt=306.0, speed_delta_kt=144.0), CFG
+    ) is not None
 
 
 # --- flag_vrate_delta --------------------------------------------------------

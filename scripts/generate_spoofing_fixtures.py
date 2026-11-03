@@ -122,6 +122,22 @@ def make_clean_track(
     return rows
 
 
+def add_along_track_jitter(track, error_m: float = 15.0):
+    """Nudge alternate points forward and back along the track.
+
+    Real ADS-B positions carry tens of metres of error. Alternating the sign
+    is the worst case for implied speed: one pair looks too fast, the next
+    too slow. Deterministic, so the fixtures stay byte-identical.
+    """
+    rows = [dict(r) for r in track]
+    for i, row in enumerate(rows):
+        bearing = row["track_deg"] if i % 2 == 0 else (row["track_deg"] + 180.0) % 360.0
+        row["latitude"], row["longitude"] = destination(
+            row["latitude"], row["longitude"], bearing, error_m
+        )
+    return rows
+
+
 # --------------------------------------------------------------------------
 # positives — each must produce a detection
 # --------------------------------------------------------------------------
@@ -144,6 +160,23 @@ def inject_speed_contradiction(track, start: int = 10, end: int = 25, factor: fl
         row["ground_speed_kt"] = round(row["ground_speed_kt"] * factor, 1)
         row["_label"] = "positive:speed_delta_v1"
         row["_note"] = "reported speed disagrees with the positions by ~32%"
+    return rows
+
+
+def make_short_interval_speed_lie():
+    """A real speed lie at the feed's real cadence, under the same jitter.
+
+    Positions imply ~450 kt; the aircraft claims 100 kt. Even with the
+    allowance for position error at a 0.55 s gap, this still fires.
+    """
+    rows = add_along_track_jitter(make_clean_track(
+        icao24="a4f7d0", callsign="FDX902", speed_kt=450.0,
+        altitude_ft=17000.0, n_points=40, interval_s=0.55,
+        label="positive:speed_delta_v1",
+    ))
+    for row in rows:
+        row["ground_speed_kt"] = 100.0
+        row["_note"] = "positions imply ~450 kt at 0.55 s spacing; claims 100 kt"
     return rows
 
 
@@ -335,6 +368,23 @@ def make_ground_vehicle():
     return rows
 
 
+def make_short_interval_jitter():
+    """Reports every 0.55 s with ordinary position error — the SPOOF-1 case.
+
+    Steady 228 kt flight, but with +/-15 m of along-track error the implied
+    speed swings between ~122 and ~334 kt pair to pair. That is what the
+    real feed looks like, and it is not a speed contradiction.
+    """
+    rows = add_along_track_jitter(make_clean_track(
+        icao24="a92abb", callsign="ENY3521", speed_kt=228.0,
+        altitude_ft=8000.0, n_points=40, interval_s=0.55,
+        label="negative:speed_delta_v1",
+    ))
+    for row in rows:
+        row["_note"] = "15 m position error over 0.55 s gaps; not a speed lie"
+    return rows
+
+
 def make_sparse_track():
     """Only two messages, 4 s apart. Too little evidence — abstain."""
     rows = make_clean_track(
@@ -385,9 +435,11 @@ def main() -> None:
         "neg_brief_nic_dip.json": make_brief_nic_dip(),
         "neg_ground_vehicle.json": make_ground_vehicle(),
         "neg_sparse_track.json": make_sparse_track(),
+        "neg_short_interval_jitter.json": make_short_interval_jitter(),
         # positives
         "pos_teleport.json": inject_teleport(clean),
         "pos_speed_contradiction.json": inject_speed_contradiction(clean),
+        "pos_speed_lie_short_interval.json": make_short_interval_speed_lie(),
         "pos_vrate_contradiction.json": inject_vrate_contradiction(clean),
         "pos_impossible_turn.json": inject_impossible_turn(clean),
         "pos_impersonation.json": inject_impersonation(),
