@@ -113,12 +113,13 @@ SCENARIOS = {
             "bbb002", "TEST02", (2.0 / math.sqrt(2), 2.0 / math.sqrt(2)), 60, 300, 0, 30500, TIMES_B, "crossing_B"
         ),
     },
-    # PROX-5: ONE head-on encounter whose 40 s of reports cross the 00:31:00
-    # window edge. Closest approach at t=110 s, so it is converging and inside
-    # max_tcpa_s in BOTH 60 s windows. One encounter -> one detection, however
-    # the runner slices time.
+    # PROX-5: one head-on encounter whose 40 s of reports cross the 00:31:00
+    # boundary. Closest approach at t=110 s, so it is converging and inside
+    # max_tcpa_s throughout. It straddles a 60 s alert_cooldown_s period, so it
+    # alerts TWICE -- once per period, which the front end groups per pair --
+    # and crucially gives the same answer however the runner slices time.
     "proximity_spans_window.json": {
-        "_expect": {"detections": 1, "severity": "HIGH", "window_edge_s": 60},
+        "_expect": {"detections": 2, "severity": "HIGH", "window_edge_s": 60},
         "rows": _aircraft("aaa001", "TEST01", (0.0, 0.0), 110, 300, 90, 10000, TIMES_A_EDGE, "edge_A")
         + _aircraft("bbb002", "TEST02", (0.0, 0.2), 110, 300, 270, 10200, TIMES_B_EDGE, "edge_B"),
     },
