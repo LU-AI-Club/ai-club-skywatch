@@ -15,10 +15,12 @@ The signature below is FROZEN so the tests (A4b/A4c) and the mapper (A3a) can be
 written against it before the body exists. Do not change it without telling
 Henry, Christopher and Silas.
 """
-
 from __future__ import annotations
-
+import math
 from typing import Any, Mapping
+
+_ENTITY_PREFIX = "icao24:"
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 
 __all__ = ["unusable_reason", "REASONS"]
 
@@ -34,24 +36,46 @@ REASONS = {
     "BAD_POSITION": "latitude or longitude outside the valid range",
 }
 
+def _absent(value: Any) -> bool:
+    """None, blank string, or NaN: there is no value here.
+
+    0 and 0.0 are NOT absent. Zero is a real coordinate.
+    """
+    if value is None:
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    if isinstance(value, float) and math.isnan(value):
+        return True
+    return False
+
 
 def unusable_reason(row: Mapping[str, Any]) -> str | None:
-    """Return a key from ``REASONS`` if this row must be skipped, else ``None``.
+    # 1. Which aircraft is this?
+    entity_id = row.get("entity_id")
+    if _absent(entity_id):
+        return "MISSING_ENTITY"
+    if not isinstance(entity_id, str) or not entity_id.startswith(_ENTITY_PREFIX):
+        return "BAD_ENTITY"
+    hex_part = entity_id[len(_ENTITY_PREFIX):]
+    if not hex_part or not all(c in _HEX_DIGITS for c in hex_part):
+        return "BAD_ENTITY"
 
-    ``row`` is one record from the ``observations`` table as the reader selects
-    it: the typed columns (``entity_id``, ``observed_at``, ``domain``,
-    latitude/longitude pulled out of ``location``, ``sog``, ``cog``) plus the
-    ``payload`` JSON as a dict.
+    # 2. When was it seen?
+    if _absent(row.get("observed_at")):
+        return "MISSING_TIME"
 
-    Only the fields an ``AdsbObservation`` *requires* can make a row unusable:
-    icao24, observed_at, latitude, longitude. Everything else -- altitude,
-    speed, NIC, NACp, callsign -- is legitimately absent all the time, and a
-    missing optional field is data, not an error. Dropping those rows would
-    quietly delete most of the feed.
+    # 3. Where was it? Abstain over guess: no position is not (0, 0).
+    lat = row.get("latitude")
+    lon = row.get("longitude")
+    if _absent(lat) or _absent(lon):
+        return "MISSING_POSITION"
 
-    Returns the first reason found, so the caller gets one cause rather than a
-    list it has to rank.
-    """
-    raise NotImplementedError(
-        "A3b: Daniel — see docs/live_integration/TEAM_SPOOFING.md"
-    )
+    # 4. Is the position real?
+    for value in (lat, lon):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return "BAD_POSITION"
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        return "BAD_POSITION"  # also catches +/- infinity
+
+    return None

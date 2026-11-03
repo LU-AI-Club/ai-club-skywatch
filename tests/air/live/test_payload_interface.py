@@ -39,7 +39,7 @@ def test_the_reasons_are_named_not_prose():
 
 def test_stubs_raise_until_their_owners_implement_them():
     row = {"entity_id": "icao24:a1b2c3", "payload": {}}
-    with pytest.raises(NotImplementedError):
-        unusable_reason(row)
+    #with pytest.raises(NotImplementedError):
+    #    unusable_reason(row) #this was removed when I implemented this function
     with pytest.raises(NotImplementedError):
         observation_from_row(row)
