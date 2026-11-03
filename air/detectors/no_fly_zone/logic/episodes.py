@@ -42,8 +42,10 @@ limitations
 evidence_refs
     The ADS-B records of the entry, peak and exit reports, plus the zone.
 extras
-    The representative report's extras, plus ``episode_start``,
-    ``episode_end``, ``dwell_sec``, ``report_count``, ``peak_score_at``,
+    The representative report's extras, plus ``episode_status``
+    (``"CLOSED"``, or ``"OPEN"`` for a snapshot), ``episode_start``,
+    ``episode_end`` (``None`` while open), ``last_report_at``, ``dwell_sec``,
+    ``report_count``, ``peak_score_at``,
     ``entry_source_row_id``, ``exit_source_row_id`` and the episode's deepest
     ``penetration_nm``. emit.py turns ``episode_start``/``episode_end`` into
     the platform contract's time bounds.
@@ -76,6 +78,19 @@ Two ways to call it
 
 Both produce identical Detections for the same reports: ``group_episodes`` is
 a tracker fed everything, then flushed.
+
+Open episodes on a live stream
+------------------------------
+A closed episode is only known once the aircraft leaves, so a long loiter would
+reach the database long after entry. ``EpisodeTracker.snapshot_open()`` returns
+the open episodes that gained reports since the last snapshot, merged exactly
+as a closed one would be but marked ``extras["episode_status"] == "OPEN"``
+with ``episode_end`` left ``None``. The tracker keeps them open: a snapshot
+never closes or forgets anything, so it cannot split an episode the way calling
+``flush()`` every window would. Every snapshot of one episode, and its final
+CLOSED form, share ``episode_start``, so the platform dedup key (detector,
+type, aircraft, start time) is the same and a store that upserts on it updates
+one row in place. Closed episodes carry ``episode_status == "CLOSED"``.
 
 Failure causes
 --------------
@@ -127,6 +142,9 @@ class EpisodeTracker:
         self._max_gap_sec = float(cfg["sampling"]["max_gap_sec"])
         self._open: dict[str, dict[str, _OpenEpisode]] = {}
         self._last_seen: dict[str, datetime] = {}
+        # (aircraft, zone) episodes that gained a report since the last
+        # snapshot_open(); only these are re-emitted while still open.
+        self._changed: set[tuple[str, str]] = set()
 
     @property
     def open_count(self) -> int:
@@ -168,7 +186,26 @@ class EpisodeTracker:
                 episode = episodes.setdefault(zone_id, _OpenEpisode())
                 episode.hits.append((report.timestamp, det))
                 episode.clear_streak = 0
+                self._changed.add((aircraft, zone_id))
         return closed
+
+    def snapshot_open(self) -> list[Detection]:
+        """Merge the open episodes that gained reports since the last snapshot.
+
+        Each is built like a closed episode but marked
+        ``episode_status == "OPEN"`` with no ``episode_end``. Nothing is closed
+        or forgotten: the episodes stay open and keep growing, so a later
+        snapshot, ``feed`` close, ``close_silent`` or ``flush`` emits the same
+        episode again with the same ``episode_start``. Episodes with no new
+        report since the last snapshot are not repeated.
+        """
+        snapshots: list[Detection] = []
+        for aircraft, zone_id in sorted(self._changed):
+            episode = self._open.get(aircraft, {}).get(zone_id)
+            if episode is not None and episode.hits:
+                snapshots.append(_merge(episode.hits, still_open=True))
+        self._changed.clear()
+        return snapshots
 
     def close_silent(self, now: datetime) -> list[Detection]:
         """Close episodes of aircraft silent for more than ``max_gap_sec`` before ``now``.
@@ -194,6 +231,7 @@ class EpisodeTracker:
             for episode in episodes.values()
         ]
         self._open.clear()
+        self._changed.clear()
         return closed
 
 
@@ -216,8 +254,12 @@ def _zone_id(det: Detection) -> str:
     return str(zone_id)
 
 
-def _merge(hits: list[tuple[datetime, Detection]]) -> Detection:
-    """Collapse one episode's per-report detections into a single Detection."""
+def _merge(hits: list[tuple[datetime, Detection]], *, still_open: bool = False) -> Detection:
+    """Collapse one episode's per-report detections into a single Detection.
+
+    ``still_open`` marks a snapshot of an episode in progress: ``episode_end``
+    is ``None`` and ``last_report_at`` says how far it has got.
+    """
     first_at, first = hits[0]
     last_at, last = hits[-1]
     peak_at, peak = max(hits, key=lambda h: h[1].anomaly_score)
@@ -226,14 +268,23 @@ def _merge(hits: list[tuple[datetime, Detection]]) -> Detection:
     zone_id = _zone_id(rep)
     dwell_sec = (last_at - first_at).total_seconds()
     zone_label = _zone_label(rep, zone_id)
+    reports = f"{len(hits)} report{'s' if len(hits) != 1 else ''}"
 
-    facts = [
-        f"Aircraft {_aircraft(rep)} was in zone {zone_label} for {dwell_sec:.0f} s "
-        f"across {len(hits)} report{'s' if len(hits) != 1 else ''}, "
-        f"{first_at:%H:%M:%S}-{last_at:%H:%M:%S} UTC; peak anomaly score "
-        f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}.",
-        *rep.explanation_facts,
-    ]
+    if still_open:
+        summary = (
+            f"Aircraft {_aircraft(rep)} has been in zone {zone_label} for {dwell_sec:.0f} s "
+            f"and is still inside, across {reports} since {first_at:%H:%M:%S} UTC "
+            f"(latest {last_at:%H:%M:%S}); peak anomaly score "
+            f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}."
+        )
+    else:
+        summary = (
+            f"Aircraft {_aircraft(rep)} was in zone {zone_label} for {dwell_sec:.0f} s "
+            f"across {reports}, "
+            f"{first_at:%H:%M:%S}-{last_at:%H:%M:%S} UTC; peak anomaly score "
+            f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}."
+        )
+    facts = [summary, *rep.explanation_facts]
     # Context signals that showed up elsewhere in the episode, with first sighting.
     rep_signals = set(rep.extras.get("signal_facts", ()))
     first_seen: dict[str, datetime] = {}
@@ -262,8 +313,10 @@ def _merge(hits: list[tuple[datetime, Detection]]) -> Detection:
     ]
     extras: dict[str, Any] = dict(rep.extras)
     extras.update(
+        episode_status="OPEN" if still_open else "CLOSED",
         episode_start=first_at,
-        episode_end=last_at,
+        episode_end=None if still_open else last_at,
+        last_report_at=last_at,
         dwell_sec=dwell_sec,
         report_count=len(hits),
         peak_score_at=peak_at,

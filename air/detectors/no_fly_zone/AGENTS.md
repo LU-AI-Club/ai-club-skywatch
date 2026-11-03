@@ -61,8 +61,8 @@ Each stage records an ExitReason when a state leaves without a detection.
 | J | dashboard/app.py | streamlit run air/detectors/no_fly_zone/dashboard/app.py |
 | Lead | logic/detector.py | run(states, zones, cfg, *, exit_counts, per_report) — wiring only |
 | Lead | emit.py | to_platform_detection(detection) -> contracts.Detection |
-| Lead | adapter.py | NoFlyZoneDetector.detect_observations(list[AdsbObservation]) -> list[contracts.Detection]; flush() at end of stream |
-| Lead | `__init__.py` | build_detector(config_path=None, airspace_path=None) -> NoFlyZoneDetector |
+| Lead | adapter.py | NoFlyZoneDetector.detect_observations(list[AdsbObservation]) -> list[contracts.Detection]; flush() at end of stream; emit_open=True also returns open episodes (OPEN, no end time) |
+| Lead | `__init__.py` | build_detector(config_path=None, airspace_path=None, *, emit_open=False) -> NoFlyZoneDetector; build_live_detector(...) = emit_open=True, used by scripts/run_live_detector.py |
 
 ## Input data
 Two routes in, one pipeline. They must give identical detections (test_nfz_adapter.py

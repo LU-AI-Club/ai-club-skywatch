@@ -59,7 +59,9 @@ RUNNERS: dict[str, RunnerSpec] = {
         window_s=120, step_s=30, poll_interval_s=30,
     ),
     "no_fly_zone": RunnerSpec(
-        "air.detectors.no_fly_zone", "build_detector", "no_fly_zone_detections",
+        # build_live_detector: also emits incursions still in progress (OPEN),
+        # so a row appears on entry and is upserted in place until exit.
+        "air.detectors.no_fly_zone", "build_live_detector", "no_fly_zone_detections",
         window_s=300, step_s=30, poll_interval_s=30,
     ),
 }
