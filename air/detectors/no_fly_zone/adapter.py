@@ -73,6 +73,11 @@ span a window edge. The detector therefore keeps one
 * :meth:`NoFlyZoneDetector.flush` emits what is still open at the end of the
   stream. The shared runner calls it after the last window; ``detect`` calls
   it when ``context.parameters["flush"]`` is true.
+* with ``emit_open=True`` (the live runner, via
+  :func:`air.detectors.no_fly_zone.build_live_detector`) each call also returns
+  the open episodes that grew in that window, marked OPEN with no end time.
+  Their start time never changes, so the live store upserts one row per
+  incursion from entry onward instead of learning about it only on exit.
 
 Fed the same rows, the windowed route and the CLI route give identical
 Detections at any window size. Zones and config are loaded once, by
@@ -157,9 +162,16 @@ class NoFlyZoneDetector(BaseDetector):
     domain = DOMAIN
     implementation_type = DetectorImplementationType.RULE_BASED
 
-    def __init__(self, cfg: Config, zones: Sequence[AirspaceZone]) -> None:
+    def __init__(
+        self, cfg: Config, zones: Sequence[AirspaceZone], *, emit_open: bool = False
+    ) -> None:
         super().__init__()
         self.cfg = cfg
+        # Live mode: also return open episodes that grew this window, marked
+        # OPEN with no end time, so an incursion is stored on entry and updated
+        # in place (same dedup key) until it closes. Off by default so replay
+        # and the CLI keep returning only finished episodes.
+        self.emit_open = emit_open
         self.zones: list[AirspaceZone] = list(zones)
         # Instance values from config win over the class-level registry identity.
         self.detector_id = str(cfg["detector"]["id"])
@@ -189,7 +201,11 @@ class NoFlyZoneDetector(BaseDetector):
         return self._episodes.open_count
 
     def detect_observations(self, observations: Iterable[Any]) -> list[PlatformDetection]:
-        """Run one window of ``AdsbObservation``; return the episodes it closed."""
+        """Run one window of ``AdsbObservation``; return the episodes it closed.
+
+        With ``emit_open`` set, also return a snapshot of every open episode
+        that gained reports in this window (``episode_status == "OPEN"``).
+        """
         fresh: list[AircraftState] = []
         newest = self._watermark
         for obs in observations:
@@ -208,6 +224,8 @@ class NoFlyZoneDetector(BaseDetector):
         if newest is not None:
             self._watermark = newest
             closed += self._episodes.close_silent(newest)
+        if self.emit_open:
+            closed += self._episodes.snapshot_open()
         return [to_platform_detection(detection) for detection in closed]
 
     def flush(self) -> list[PlatformDetection]:
