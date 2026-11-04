@@ -4,12 +4,12 @@ One image, one script, every detector: ``--detector {spoofing,proximity,no_fly_z
 selects which one. The compose runner services pass different ``--detector``
 values (and may override the window/step/poll). This is **Tech-Lead-owned
 scaffolding**: it wires the CLI/env to ``air.live.run_live``. The detector logic,
-the observations reader, the persistence layer, and ``run_live`` itself are built
-by the teams (see ``docs/live_integration/``).
+observations reader, and persistence layer follow their shared interfaces in
+``docs/live_integration/``.
 
-Until the spine bodies in ``air/live/`` are implemented, this exits with
-``NotImplementedError`` naming the owning team — that is expected. The image and
-compose wiring are ready for when A, B and C land.
+The runner is implemented; until components A and B land, their stubs raise
+``NotImplementedError`` when the runner calls them. The image and compose
+wiring are ready for integration.
 
 Run:
     python scripts/run_live_detector.py --detector proximity --once

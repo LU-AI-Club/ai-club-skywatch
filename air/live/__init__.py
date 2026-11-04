@@ -1,9 +1,8 @@
 """air.live — live-integration spine (shared infrastructure).
 
 Three components, one owned by each detector team, that connect the detectors to
-the live ADS-B stream. Build against these frozen signatures; the owning team
-fills in each body. See docs/live_integration/SPINE_PLAN.md and the per-team
-guides.
+the live ADS-B stream. Each component follows its frozen signature. See
+docs/live_integration/SPINE_PLAN.md and the per-team guides.
 
     A  observations_reader.read_window   read a window of observations   (Spoofing)
     B  persistence.persist / dedup_key   upsert detections, run heartbeat (Proximity)

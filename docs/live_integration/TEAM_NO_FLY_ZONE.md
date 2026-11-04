@@ -57,21 +57,24 @@ def run_live(
 ```
 
 **Behaviors to build:**
-- **Cursor / watermark.** Track the latest `observed_at` processed; each tick read
-  `[cursor - window_s, now]` via `observations_reader.read_window` so work is
-  proportional to new data plus a bounded lookback tail — never the whole history.
-  The cursor survives restarts (persist it via `detector_runs` or a small record).
+- **Cursor / watermark.** Restore the latest successful `window_end` and advance
+  it by `step_s` (capped at now); read one `window_s` lookback ending at that
+  boundary via `observations_reader.read_window`. Work remains bounded to the
+  lookback and forward step. The cursor survives restarts via `detector_runs`.
 - **Rolling window + dedup.** Consecutive windows overlap by `window_s - step_s`;
   `persistence.persist` collapses the overlap on `dedup_key` — you don't dedup
   yourself, you just pass detections through.
 - **Stateful detectors (the reason this is your team's):** when the detector
-  exposes `flush()`, call it appropriately so an incursion spanning a window edge
-  is **one** episode, not two. Getting this right once, here, is the whole point.
+  exposes `flush()`, call it at end-of-stream (`once=True` or graceful shutdown),
+  never at each window boundary, so an incursion spanning windows remains **one**
+  episode.
 - **Resilience.** Survive a DB hiccup or a bad window without dying; one
   structured log line per tick (counts, lag); clean shutdown on SIGTERM.
 - **`once=True`** runs a single tick — this is what every team's end-to-end test
   calls.
 - Wrap each run in `persistence.start_run` / `finish_run` for the heartbeat.
+- Restore the next window boundary from the most recent successful
+  `detector_runs.window_end`; failed ticks do not advance the watermark.
 
 **Done when:** `run_live(..., once=True)` takes a seeded `observations` table
 through read → detect → persist in one pass (the reference end-to-end other teams
