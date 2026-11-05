@@ -37,9 +37,12 @@ def test_the_reasons_are_named_not_prose():
     assert all(isinstance(k, str) and isinstance(v, str) for k, v in REASONS.items())
 
 
-def test_stubs_raise_until_their_owners_implement_them():
+def test_row_validation_stub_still_raises():
     row = {"entity_id": "icao24:a1b2c3", "payload": {}}
     with pytest.raises(NotImplementedError):
         unusable_reason(row)
-    with pytest.raises(NotImplementedError):
-        observation_from_row(row)
+
+
+def test_observation_from_row_abstains_on_incomplete_rows():
+    row = {"entity_id": "icao24:a1b2c3", "payload": {}}
+    assert observation_from_row(row) is None

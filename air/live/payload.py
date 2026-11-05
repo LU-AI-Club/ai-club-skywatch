@@ -51,11 +51,57 @@ Noah.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Mapping
 
 from air.models.observation import AdsbObservation
 
 __all__ = ["observation_from_row"]
+
+
+def _opt_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _opt_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _opt_int(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return int(float(text))
+    except (TypeError, ValueError):
+        return None
+
+
+def _opt_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    text = _opt_str(value)
+    if text is None:
+        return None
+    lowered = text.lower()
+    if lowered in {"true", "1"}:
+        return True
+    if lowered in {"false", "0"}:
+        return False
+    return None
 
 
 def observation_from_row(row: Mapping[str, Any]) -> AdsbObservation | None:
@@ -74,6 +120,49 @@ def observation_from_row(row: Mapping[str, Any]) -> AdsbObservation | None:
     Must not raise on a malformed row. The live reader sees whatever the feed
     produced, and one bad record cannot be allowed to kill a window.
     """
-    raise NotImplementedError(
-        "A3a: Henry — see docs/live_integration/TEAM_SPOOFING.md"
-    )
+    payload = row.get("payload")
+    if not isinstance(payload, Mapping):
+        payload = {}
+
+    entity_id = _opt_str(row.get("entity_id"))
+    if entity_id is None:
+        return None
+
+    prefix = "icao24:"
+    if not entity_id.lower().startswith(prefix):
+        return None
+    icao24 = _opt_str(entity_id[len(prefix):])
+    if icao24 is None:
+        return None
+
+    observed_at = row.get("observed_at")
+    if observed_at is None or not isinstance(observed_at, datetime | str):
+        return None
+
+    latitude = _opt_float(row.get("latitude"))
+    longitude = _opt_float(row.get("longitude"))
+    if latitude is None or longitude is None:
+        return None
+
+    try:
+        return AdsbObservation(
+            icao24=icao24,
+            observed_at=observed_at,
+            latitude=latitude,
+            longitude=longitude,
+            altitude_ft=_opt_float(payload.get("altitude_ft")),
+            ground_speed_kt=_opt_float(row.get("sog")),
+            track_deg=_opt_float(row.get("cog")),
+            vertical_rate_fpm=_opt_float(payload.get("vertical_rate_fpm")),
+            nic=_opt_int(payload.get("nic")),
+            nacp=_opt_int(payload.get("nacp")),
+            squawk=_opt_str(payload.get("squawk")),
+            callsign=_opt_str(payload.get("callsign")),
+            receiver_id=_opt_str(payload.get("receiver_id")),
+            alt_geom_ft=_opt_float(payload.get("alt_geom_ft")),
+            on_ground=_opt_bool(payload.get("on_ground")),
+            emitter_category=_opt_str(payload.get("emitter_category")),
+            source_row_id=_opt_str(row.get("raw_record_ref")),
+        )
+    except (TypeError, ValueError):
+        return None
