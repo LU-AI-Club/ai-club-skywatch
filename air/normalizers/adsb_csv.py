@@ -110,6 +110,29 @@ def _opt_bool(value: Any) -> bool | None:
     return None
 
 
+# A real Mode S address is exactly six hex digits. readsb and tar1090 mark
+# everything else by prefixing the address with "~": TIS-B relays, ADS-R
+# rebroadcasts and anonymised targets all arrive that way.
+#
+# We drop those, for a reason specific to this detector rather than tidiness.
+# Every physics rule here compares consecutive reports *of one aircraft*, and
+# the identity rules ask whether an address matches its callsign and registry
+# block. A "~" address supports neither question: it is assigned by the ground
+# station, is not registered to anything, and -- the part that actually bites
+# -- is reused, so two aircraft can share one. Consecutive reports would then
+# hop between airframes and read as impossible speed and position jumps. Those
+# would be our own false positives, not spoofing.
+#
+# air/live/row_validation.py drops the same addresses as NON_ICAO_ADDRESS, so
+# the CSV path and the database path agree; the A4d parity test is what holds
+# the two to each other.
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
+
+def _is_icao_address(value: str) -> bool:
+    return len(value) == 6 and all(c in _HEX_DIGITS for c in value)
+
+
 def normalize_row(
     row: Mapping[str, Any],
     *,
@@ -126,6 +149,8 @@ def normalize_row(
     icao24 = _opt_str(row.get(COL_ICAO24))
     if icao24 is None:
         return None  # no identity -> nothing a detector can attribute
+    if not _is_icao_address(icao24):
+        return None  # not a real ICAO address -> see _is_icao_address
 
     latitude = _opt_float(row.get(COL_LAT))
     longitude = _opt_float(row.get(COL_LON))
