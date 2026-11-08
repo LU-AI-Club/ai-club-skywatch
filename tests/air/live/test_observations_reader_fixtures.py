@@ -170,6 +170,9 @@ def test_every_payload_field_survives_the_mapping():
     assert observation.callsign == "N123AB"
     assert observation.emitter_category == "A1"
     assert observation.on_ground is False
+    # receiver_id too: it is in payload rather than a column, and the
+    # receiver-health work keys on it, so losing it costs another team.
+    assert observation.receiver_id == "lynchburg"
 
 
 def test_a_field_only_in_payload_is_kept_when_the_typed_column_is_empty():
