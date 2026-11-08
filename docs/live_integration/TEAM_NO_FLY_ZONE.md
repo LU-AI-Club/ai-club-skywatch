@@ -57,10 +57,14 @@ def run_live(
 ```
 
 **Behaviors to build:**
-- **Cursor / watermark.** Track the latest `observed_at` processed; each tick read
-  `[cursor - window_s, now]` via `observations_reader.read_window` so work is
-  proportional to new data plus a bounded lookback tail — never the whole history.
-  The cursor survives restarts (persist it via `detector_runs` or a small record).
+- **Cursor / watermark.** Track the latest successfully processed window end;
+  each tick reads a rolling window via `observations_reader.read_window`. On the
+  first tick, end at `now`; thereafter, advance the previous successful window
+  end by at most `step_s`, capped at `now`. Start each window `window_s` before
+  its end. This bounds each read during catch-up and keeps the overlap at
+  `window_s - step_s`. The cursor survives restarts in
+  `public.detector_cursors`, keyed by `detector_id`. Save the window end only
+  after the tick succeeds.
 - **Rolling window + dedup.** Consecutive windows overlap by `window_s - step_s`;
   `persistence.persist` collapses the overlap on `dedup_key` — you don't dedup
   yourself, you just pass detections through.
@@ -86,7 +90,8 @@ env/params contract (detector name, `table`, `window_s`, `step_s`,
 **Suggested tickets:**
 - `C1` Define & document the `run_live` signature; stub + interface test; agree the env/param contract with the Lead.
 - `C2` Loop skeleton + `poll_interval_s` timer + `once=True` single-pass path.
-- `C3` Cursor/watermark: compute the window, advance, persist/restore across restarts.
+- `C3` Cursor/watermark: compute the window and persist/restore through
+  `db/schema/005_detector_cursors.sql`.
 - `C4` Wire in A (`read_window`) and B (`persist`, run heartbeat) — against stubs until they land.
 - `C5` `flush()` handling for stateful detectors (episodes across windows).
 - `C6` Resilience: error isolation per tick, structured logging, SIGTERM shutdown.

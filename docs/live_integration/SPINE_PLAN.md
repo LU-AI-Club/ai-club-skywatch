@@ -171,10 +171,12 @@ def run_live(
 ```
 
 **Key behaviors.**
-- **Cursor / watermark.** Tracks the latest `observed_at` processed; each tick
-  reads `[cursor - window_s, now]` so work is proportional to new data plus a
-  bounded lookback tail, never the whole history. The cursor survives restarts
-  (persisted via `detector_runs` or a small cursor record).
+- **Cursor / watermark.** Tracks the end of the last successful window. The
+  first window ends at `now`; subsequent windows advance by at most `step_s`
+  (capped at `now`) and start `window_s` before their end. This keeps reads
+  bounded during catch-up and gives an overlap of `window_s - step_s`. The
+  cursor survives restarts in the runner-owned `public.detector_cursors` table,
+  keyed by `detector_id`, and is saved only after a tick succeeds.
 - **Rolling window + dedup.** Consecutive windows overlap by `window_s - step_s`;
   `persistence` collapses the re-processed overlap on `dedup_key`.
 - **Stateful detectors.** Calls `flush()` when the detector exposes it (NFZ keeps
