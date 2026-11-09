@@ -19,6 +19,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Protocol, runtime_checkable
 
+from air.live.observations_reader import read_window
+from air.live.persistence import finish_run, persist, start_run
 from air.models.observation import AdsbObservation
 from contracts import Detection
 
@@ -110,8 +112,55 @@ def _tick(
     extra_columns: Callable[[Detection], dict[str, Any]] | None,
     domain: str,
 ) -> None:
-    """Run one read -> detect -> persist pass; wired in by C4 and C5."""
-    raise NotImplementedError("Spine C: _tick is not implemented yet (tickets C4 and C5)")
+    """Run one read -> detect -> persist pass over the next rolling window.
+
+    Opens a connection, advances the cursor by at most one step, reads that
+    window via component A (``read_window``), runs the detector (plus
+    ``flush()`` if it exposes one), and persists via component B (``persist``).
+    On success the detections, the advanced cursor, and the SUCCESS heartbeat
+    commit together; on failure the window's writes roll back — so the cursor is
+    not advanced and the window is retried next tick — and the run is marked
+    FAILED. ``psycopg`` is imported here so ``air.live`` stays importable without
+    the ``db`` extra.
+    """
+    import psycopg
+
+    detector_id = detector.detector_id
+    detector_version = getattr(detector, "detector_version", "") or "unknown"
+
+    with psycopg.connect(dsn) as conn:
+        cursor_at = _load_cursor(conn, detector_id)
+        start, end = _window_bounds(
+            cursor_at=cursor_at,
+            now=datetime.now(UTC),
+            window_s=window_s,
+            step_s=step_s,
+        )
+        run_id = start_run(conn, detector_id, detector_version, window=(start, end))
+        try:
+            observations = read_window(conn, start=start, end=end, domain=domain)
+            detections = list(detector.detect_observations(observations))
+            flush = getattr(detector, "flush", None)
+            if callable(flush):
+                detections.extend(flush())
+            result = persist(conn, table, detections, run_id=run_id, extra_columns=extra_columns)
+            _save_cursor(conn, detector_id, end)
+            finish_run(
+                conn,
+                run_id,
+                status="SUCCESS",
+                counts={
+                    "observations": len(observations),
+                    "detections": len(detections),
+                    "inserted": result.inserted,
+                    "updated": result.updated,
+                    "skipped": result.skipped,
+                },
+            )
+        except Exception as exc:
+            conn.rollback()
+            finish_run(conn, run_id, status="FAILED", counts={"error": str(exc)})
+            raise
 
 
 def run_live(
