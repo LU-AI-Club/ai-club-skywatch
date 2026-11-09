@@ -83,5 +83,33 @@ services:
     container_name: skywatch-no-fly-zone-runner
     command: ["--detector", "no_fly_zone"]
 
+  # Live feed poller (profile: poller). Polls the SENTINEL ADS-B positions feed
+  # and upserts each aircraft's latest position into observations (domain='air'),
+  # so the local table mirrors the cloud. Reuses the runner image; only the
+  # entrypoint differs. Needs a whitelisted network (hostname is in public DNS)
+  # and the SENTINEL CA file mounted read-only — the cert is NOT baked into the
+  # image. Start it with:  docker compose --profile poller up -d adsb-poller
+  adsb-poller:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.runner
+    image: skywatch/runner:local        # same image the detector runners use
+    container_name: skywatch-adsb-poller
+    profiles: ["poller"]
+    entrypoint: ["python", "scripts/poll_adsb_feed.py"]
+    command: []                          # drop the image's default `--help`
+    environment:
+      # `db` is the compose service hostname on the shared network (not localhost).
+      SKYWATCH_DB_DSN: ${SKYWATCH_DB_DSN:-postgresql://skywatch:skywatch@db:5432/skywatch}
+      SKYWATCH_ADSB_URL: ${SKYWATCH_ADSB_URL:-https://adsb-ingest.sentinel.xenithsolutions.com/v1/adsb/positions.geojson}
+      SKYWATCH_ADSB_CA: /certs/sentinel-ca.crt
+      SKYWATCH_ADSB_POLL_SECONDS: ${SKYWATCH_ADSB_POLL_SECONDS:-10}
+    volumes:
+      - ${SKYWATCH_ADSB_CA_FILE:-./sentinel-ca.crt}:/certs/sentinel-ca.crt:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata:
