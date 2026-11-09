@@ -41,7 +41,7 @@ set is checked by name.
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -373,13 +373,12 @@ def test_nothing_was_committed() -> None:
     above had committed, the rows it wrote would be visible here.
     """
     psycopg = pytest.importorskip("psycopg")
-    with psycopg.connect(DSN) as connection:
-        with connection.cursor() as cur:
-            cur.execute(
-                "SELECT to_regclass(%s) IS NOT NULL", (f"public.{TABLE}",)
-            )
-            if not cur.fetchone()[0]:
-                return  # no table outside the transactions: nothing leaked
-            cur.execute(f"SELECT count(*) FROM public.{TABLE} WHERE detector_id = %s",
-                        ("skywatch.spoofing",))
-            assert cur.fetchone()[0] == 0, "a test leaked rows into the real table"
+    with psycopg.connect(DSN) as connection, connection.cursor() as cur:
+        cur.execute(
+            "SELECT to_regclass(%s) IS NOT NULL", (f"public.{TABLE}",)
+        )
+        if not cur.fetchone()[0]:
+            return  # no table outside the transactions: nothing leaked
+        cur.execute(f"SELECT count(*) FROM public.{TABLE} WHERE detector_id = %s",
+                    ("skywatch.spoofing",))
+        assert cur.fetchone()[0] == 0, "a test leaked rows into the real table"
