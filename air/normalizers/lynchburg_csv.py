@@ -1,14 +1,30 @@
-"""Read raw Lynchburg ADS-B rows into ``AdsbObservation`` records.
+"""SUPERSEDED -- read raw Lynchburg ADS-B rows into ``AdsbObservation`` records.
 
-The raw CSV carries 53 terse columns; every detector consumes the shared
-``AdsbObservation`` contract. This module is the bridge, and it is the only
-place where column names and units are interpreted.
+**Do not use this in new code. Use ``air/normalizers/adsb_csv.py``.**
 
-Usage::
+This was the week-1 spoofing-only reader, written before the shared normalizer
+existed. ``adsb_csv.py`` is now the single path: ``scripts/replay_csv.py``, the
+database loader, the live reader and the A4d parity test all go through it, and
+nothing imports this module any more.
 
-    from air.normalizers.lynchburg_csv import load_csv
+Kept rather than deleted because ``docs/spoofing/`` documents its functions
+individually (``load_csv``, ``rc_to_nic``, ``is_direct_adsb``,
+``row_to_observation``) and that write-up is a deliverable in its own right.
+The code stays so the docs keep describing something real.
 
-    observations = load_csv("data/lynchburg_adsb.csv")
+Why this matters beyond tidiness: two normalizers over one file disagree about
+which rows survive, and that is not hypothetical. ``scripts/alert_breakdown.py``
+read this module while every other path read ``adsb_csv.py``, and it reported
+160 alerts where the real figure was 52 -- the two scripts were not summarizing
+the same observations. A second reader is not a spare, it is a way for one
+capture to have two different answers.
+
+Usage, for the historical record only::
+
+    from air.normalizers.adsb_csv import iter_observations  # <- use this
+
+    observations = list(iter_observations("data/lynchburg_adsb.csv",
+                                         receiver_id="lynchburg"))
 """
 
 from __future__ import annotations
