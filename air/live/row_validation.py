@@ -15,10 +15,12 @@ The signature below is FROZEN so the tests (A4b/A4c) and the mapper (A3a) can be
 written against it before the body exists. Do not change it without telling
 Henry, Christopher and Silas.
 """
-
 from __future__ import annotations
-
+import math
 from typing import Any, Mapping
+
+_ENTITY_PREFIX = "icao24:"
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
 
 __all__ = ["unusable_reason", "REASONS"]
 
@@ -29,29 +31,69 @@ __all__ = ["unusable_reason", "REASONS"]
 REASONS = {
     "MISSING_ENTITY": "no entity_id, so we cannot say which aircraft this is",
     "BAD_ENTITY": "entity_id is not in the expected 'icao24:<hex>' form",
+    "NON_ICAO_ADDRESS": "address is not a real ICAO 24-bit address (TIS-B, ADS-R or anonymised)",
     "MISSING_TIME": "no observed_at, so it cannot be placed in a window",
     "MISSING_POSITION": "no location, so there is nothing to compare",
     "BAD_POSITION": "latitude or longitude outside the valid range",
 }
 
+def _absent(value: Any) -> bool:
+    """None, blank string, or NaN: there is no value here.
+
+    0 and 0.0 are NOT absent. Zero is a real coordinate.
+    """
+    if value is None:
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    if isinstance(value, float) and math.isnan(value):
+        return True
+    return False
+
 
 def unusable_reason(row: Mapping[str, Any]) -> str | None:
-    """Return a key from ``REASONS`` if this row must be skipped, else ``None``.
+    # 1. Which aircraft is this?
+    entity_id = row.get("entity_id")
+    if _absent(entity_id):
+        return "MISSING_ENTITY"
+    if not isinstance(entity_id, str) or not entity_id.startswith(_ENTITY_PREFIX):
+        return "BAD_ENTITY"
+    hex_part = entity_id[len(_ENTITY_PREFIX):]
+    if not hex_part:
+        return "BAD_ENTITY"
+    # readsb and tar1090 prefix a non-ICAO address with "~": TIS-B relays,
+    # ADS-R rebroadcasts and anonymised targets. Separated from BAD_ENTITY
+    # because it is not malformed input -- the feed is telling us plainly that
+    # this address is not an airframe's. It gets its own reason so the live
+    # counters distinguish "the feed sent us something we cannot parse" from
+    # "the feed sent us a target we deliberately do not track".
+    #
+    # We skip them: a "~" address is assigned by the ground station and is
+    # reused, so two aircraft can share one. Keying our pairwise physics rules
+    # on it would make consecutive reports hop between airframes and read as
+    # impossible jumps -- our own false positives. air/normalizers/adsb_csv.py
+    # drops the same addresses, and the A4d parity test holds the two paths to
+    # each other.
+    if hex_part.startswith("~"):
+        return "NON_ICAO_ADDRESS"
+    if len(hex_part) != 6 or not all(c in _HEX_DIGITS for c in hex_part):
+        return "BAD_ENTITY"
 
-    ``row`` is one record from the ``observations`` table as the reader selects
-    it: the typed columns (``entity_id``, ``observed_at``, ``domain``,
-    latitude/longitude pulled out of ``location``, ``sog``, ``cog``) plus the
-    ``payload`` JSON as a dict.
+    # 2. When was it seen?
+    if _absent(row.get("observed_at")):
+        return "MISSING_TIME"
 
-    Only the fields an ``AdsbObservation`` *requires* can make a row unusable:
-    icao24, observed_at, latitude, longitude. Everything else -- altitude,
-    speed, NIC, NACp, callsign -- is legitimately absent all the time, and a
-    missing optional field is data, not an error. Dropping those rows would
-    quietly delete most of the feed.
+    # 3. Where was it? Abstain over guess: no position is not (0, 0).
+    lat = row.get("latitude")
+    lon = row.get("longitude")
+    if _absent(lat) or _absent(lon):
+        return "MISSING_POSITION"
 
-    Returns the first reason found, so the caller gets one cause rather than a
-    list it has to rank.
-    """
-    raise NotImplementedError(
-        "A3b: Daniel — see docs/live_integration/TEAM_SPOOFING.md"
-    )
+    # 4. Is the position real?
+    for value in (lat, lon):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return "BAD_POSITION"
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+        return "BAD_POSITION"  # also catches +/- infinity
+
+    return None
