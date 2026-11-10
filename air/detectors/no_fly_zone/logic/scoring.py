@@ -45,7 +45,9 @@ SENTINEL contract, which requires a timestamp and provenance that
 
 Also populate ``altitude_ft``, ``zone_id`` and ``penetration_nm`` when known -
 they become the platform record's geospatial context. ``zone_type`` and
-``signal_facts`` feed episode grouping (logic/episodes.py).
+``signal_facts`` feed episode grouping (logic/episodes.py). ``zone_id``,
+``zone_name`` and ``zone_type`` also fill the live table's zone columns
+(see ``live.py``).
 
 Failure causes
 --------------
@@ -167,6 +169,8 @@ def build_detection(
         "lon": state.lon,
         "zone_id": zone.zone_id,
         "zone_type": zone.zone_type.value,
+        # For the live table's zone_name column (nullable; some SUA/TFR have none).
+        "zone_name": zone.name or None,
         # The signal facts on their own, so episode grouping can say when a
         # signal (e.g. a squawk) first appeared during a crossing.
         "signal_facts": [signal.fact for signal in signals],
