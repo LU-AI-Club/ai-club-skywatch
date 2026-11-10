@@ -45,7 +45,9 @@ class Detector(Protocol):
 
     Every SkyWatch detector satisfies this. A detector MAY also expose
     ``flush() -> list[Detection]`` for state held across windows (no-fly-zone
-    keeps incursion episodes open); the runner calls it when present.
+    keeps incursion episodes open). The runner calls it only at the end of a
+    stream - a ``once`` run - never between ticks of the continuous loop, where
+    it would close every open finding and split it across rows.
     """
 
     detector_id: str
@@ -111,12 +113,14 @@ def _tick(
     step_s: float,
     extra_columns: Callable[[Detection], dict[str, Any]] | None,
     domain: str,
+    flush: bool,
 ) -> None:
     """Run one read -> detect -> persist pass over the next rolling window.
 
     Opens a connection, advances the cursor by at most one step, reads that
     window via component A (``read_window``), runs the detector (plus
-    ``flush()`` if it exposes one), and persists via component B (``persist``).
+    ``flush()`` if it exposes one and ``flush`` is true - the last tick of a
+    stream), and persists via component B (``persist``).
     On success the detections, the advanced cursor, and the SUCCESS heartbeat
     commit together; on failure the window's writes roll back — so the cursor is
     not advanced and the window is retried next tick — and the run is marked
@@ -140,9 +144,12 @@ def _tick(
         try:
             observations = read_window(conn, start=start, end=end, domain=domain)
             detections = list(detector.detect_observations(observations))
-            flush = getattr(detector, "flush", None)
-            if callable(flush):
-                detections.extend(flush())
+            # Only at the end of a stream. Between ticks the detector must keep
+            # its state: NFZ's flush() closes every open incursion, so flushing
+            # each tick would end it and restart it as a new row next tick.
+            detector_flush = getattr(detector, "flush", None)
+            if flush and callable(detector_flush):
+                detections.extend(detector_flush())
             result = persist(conn, table, detections, run_id=run_id, extra_columns=extra_columns)
             _save_cursor(conn, detector_id, end)
             finish_run(
@@ -204,8 +211,9 @@ def run_live(
       ``observations_reader.read_window``; survive restarts.
     * Pass detections to ``persistence.persist`` (which dedups on ``dedup_key``);
       wrap each run in ``persistence.start_run`` / ``finish_run``.
-    * Call ``detector.flush()`` when present so a finding spanning a window edge
-      is one row, not two.
+    * Keep one detector instance across ticks so a finding spanning a window
+      edge is one row, not two; call ``detector.flush()`` (when present) only
+      when the stream ends, i.e. on a ``once`` run.
     * Be resilient: isolate errors per tick, log one structured line per tick,
       shut down cleanly on SIGTERM.
     """
@@ -227,6 +235,7 @@ def run_live(
             step_s=step_s,
             extra_columns=extra_columns,
             domain=domain,
+            flush=once,
         )
         if once:
             return
