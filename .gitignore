@@ -42,3 +42,9 @@ build/
 # scratch replay dumps
 .a.json
 .b.json
+
+# Detector output. Regenerate with scripts/replay_csv.py --out; never committed --
+# a stale copy reads as the current alert set and misleads whoever finds it.
+*.jsonl
+!tests/**/*.jsonl
+!air/**/fixtures/**/*.jsonl

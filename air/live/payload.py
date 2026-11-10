@@ -51,11 +51,54 @@ Noah.
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+import json
+import logging
+from collections.abc import Mapping
+from typing import Any
 
+from air.live.row_validation import unusable_reason
 from air.models.observation import AdsbObservation
 
 __all__ = ["observation_from_row"]
+
+_log = logging.getLogger(__name__)
+
+# The ADS-B fields that live inside ``payload`` rather than in typed columns.
+# Each name is the same on both sides: the loader writes
+# ``payload["altitude_ft"] = obs.altitude_ft``, so we read it straight back.
+_PAYLOAD_FIELDS = (
+    "altitude_ft",
+    "alt_geom_ft",
+    "vertical_rate_fpm",
+    "nic",
+    "nacp",
+    "squawk",
+    "callsign",
+    "emitter_category",
+    "on_ground",
+    "receiver_id",
+)
+
+_ENTITY_PREFIX = "icao24:"
+
+
+def _payload_dict(raw: Any) -> Mapping[str, Any]:
+    """The payload as a dict. Absent or unreadable means "no optional fields".
+
+    psycopg hands JSONB back as a dict already; a JSON string is accepted too so
+    a fixture or a different driver does not break the mapping. Nothing required
+    lives in ``payload``, so a bad payload costs the optional fields only --
+    they stay ``None`` rather than being guessed.
+    """
+    if isinstance(raw, Mapping):
+        return raw
+    if isinstance(raw, (str, bytes, bytearray)):
+        try:
+            parsed = json.loads(raw)
+        except ValueError:
+            return {}
+        return parsed if isinstance(parsed, Mapping) else {}
+    return {}
 
 
 def observation_from_row(row: Mapping[str, Any]) -> AdsbObservation | None:
@@ -74,6 +117,21 @@ def observation_from_row(row: Mapping[str, Any]) -> AdsbObservation | None:
     Must not raise on a malformed row. The live reader sees whatever the feed
     produced, and one bad record cannot be allowed to kill a window.
     """
-    raise NotImplementedError(
-        "A3a: Henry — see docs/live_integration/TEAM_SPOOFING.md"
-    )
+    try:
+        if unusable_reason(row) is not None:
+            return None
+
+        payload = _payload_dict(row.get("payload"))
+        return AdsbObservation(
+            icao24=str(row["entity_id"]).removeprefix(_ENTITY_PREFIX),
+            observed_at=row["observed_at"],
+            latitude=float(row["latitude"]),
+            longitude=float(row["longitude"]),
+            ground_speed_kt=row.get("sog"),
+            track_deg=row.get("cog"),
+            source_row_id=row.get("raw_record_ref"),
+            **{name: payload.get(name) for name in _PAYLOAD_FIELDS},
+        )
+    except Exception:  # noqa: BLE001 -- one bad row must not kill a window
+        _log.debug("skipping observations row that could not be mapped", exc_info=True)
+        return None

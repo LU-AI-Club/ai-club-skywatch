@@ -15,6 +15,7 @@ from air.live import (
     PersistResult,
     dedup_key,
     read_window,
+    run_live,
 )
 
 
@@ -55,3 +56,28 @@ def test_read_window_keeps_its_frozen_signature() -> None:
     assert parameters["start"].kind is inspect.Parameter.KEYWORD_ONLY
     assert parameters["end"].kind is inspect.Parameter.KEYWORD_ONLY
     assert parameters["domain"].default == "air"
+
+
+def test_stubs_raise_until_owning_teams_implement_them() -> None:
+    # read_window is deliberately absent: Spine A is implemented now
+    # (Spoofing, tickets A2/A3). Its tests live alongside it in
+    # tests/air/live/ and run against rows, not a stub.
+    with pytest.raises(NotImplementedError):
+        persist(None, "spoofing_detections", [])
+    with pytest.raises(NotImplementedError):
+        start_run(None, "skywatch.spoofing", "0.1.0")
+    with pytest.raises(NotImplementedError):
+        finish_run(None, "run-1", status="SUCCESS", counts={})
+    now = datetime.now(timezone.utc)
+    with pytest.raises(NotImplementedError):
+        read_window(None, start=now, end=now)
+    # persist is implemented; see tests/air/live/test_persistence.py.
+    with pytest.raises(NotImplementedError):
+        run_live(
+            detector=SimpleNamespace(detector_id="skywatch.spoofing"),
+            table="spoofing_detections",
+            dsn="postgresql://x",
+            window_s=120,
+            step_s=30,
+            poll_interval_s=30,
+        )

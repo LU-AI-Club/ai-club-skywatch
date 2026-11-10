@@ -12,7 +12,6 @@ OWNER: CalebG (is_airborne, candidate_pairs). cell_of is done.
 from __future__ import annotations
 
 import math
-from itertools import combinations
 
 from air.detectors.proximity.config import ProximityConfig
 from air.models.observation import AdsbObservation
@@ -97,7 +96,10 @@ def candidate_pairs(
             for b in nearby:
                 if a.icao24 == b.icao24:
                     continue
-                if abs(a.altitude_ft - b.altitude_ft) > cfg.max_vertical_prefilter_ft:
+                alt_a, alt_b = a.altitude_ft, b.altitude_ft
+                if alt_a is None or alt_b is None:  # is_airborne already excludes these
+                    continue
+                if abs(alt_a - alt_b) > cfg.max_vertical_prefilter_ft:
                     continue
                 lo, hi = (a, b) if a.icao24 < b.icao24 else (b, a)
                 pairs.add((lo, hi))

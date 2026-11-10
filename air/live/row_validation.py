@@ -31,6 +31,7 @@ __all__ = ["unusable_reason", "REASONS"]
 REASONS = {
     "MISSING_ENTITY": "no entity_id, so we cannot say which aircraft this is",
     "BAD_ENTITY": "entity_id is not in the expected 'icao24:<hex>' form",
+    "NON_ICAO_ADDRESS": "address is not a real ICAO 24-bit address (TIS-B, ADS-R or anonymised)",
     "MISSING_TIME": "no observed_at, so it cannot be placed in a window",
     "MISSING_POSITION": "no location, so there is nothing to compare",
     "BAD_POSITION": "latitude or longitude outside the valid range",
@@ -58,7 +59,24 @@ def unusable_reason(row: Mapping[str, Any]) -> str | None:
     if not isinstance(entity_id, str) or not entity_id.startswith(_ENTITY_PREFIX):
         return "BAD_ENTITY"
     hex_part = entity_id[len(_ENTITY_PREFIX):]
-    if not hex_part or not all(c in _HEX_DIGITS for c in hex_part):
+    if not hex_part:
+        return "BAD_ENTITY"
+    # readsb and tar1090 prefix a non-ICAO address with "~": TIS-B relays,
+    # ADS-R rebroadcasts and anonymised targets. Separated from BAD_ENTITY
+    # because it is not malformed input -- the feed is telling us plainly that
+    # this address is not an airframe's. It gets its own reason so the live
+    # counters distinguish "the feed sent us something we cannot parse" from
+    # "the feed sent us a target we deliberately do not track".
+    #
+    # We skip them: a "~" address is assigned by the ground station and is
+    # reused, so two aircraft can share one. Keying our pairwise physics rules
+    # on it would make consecutive reports hop between airframes and read as
+    # impossible jumps -- our own false positives. air/normalizers/adsb_csv.py
+    # drops the same addresses, and the A4d parity test holds the two paths to
+    # each other.
+    if hex_part.startswith("~"):
+        return "NON_ICAO_ADDRESS"
+    if len(hex_part) != 6 or not all(c in _HEX_DIGITS for c in hex_part):
         return "BAD_ENTITY"
 
     # 2. When was it seen?
