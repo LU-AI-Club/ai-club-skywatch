@@ -55,6 +55,7 @@ def test_once_runs_one_tick_and_does_not_sleep(monkeypatch: pytest.MonkeyPatch) 
 
     assert len(ticks) == 1
     assert sleeps == []
+    assert ticks[0]["flush"] is True  # a single pass is a whole stream
 
 
 class _StopLoop(Exception):
@@ -81,6 +82,8 @@ def test_continuous_mode_keeps_ticking_and_sleeps_between_ticks(
     assert len(ticks) == 2
     assert sleeps == [30, 30]
     assert ticks[0]["table"] == "test_detections"
+    # Never between ticks: flushing would close open findings every tick.
+    assert [tick["flush"] for tick in ticks] == [False, False]
 
 
 @pytest.mark.parametrize(

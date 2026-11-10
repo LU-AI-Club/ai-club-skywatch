@@ -344,6 +344,46 @@ def test_overlapping_windows_never_feed_a_report_twice(detector: NoFlyZoneDetect
     assert episode.metadata["extras"]["report_count"] == 1
 
 
+def _outside(icao24: str, seconds: int) -> AdsbObservation:
+    return make_obs(icao24=icao24, latitude=36.0, longitude=-81.0,
+                    observed_at=_TS + timedelta(seconds=seconds),
+                    source_row_id=f"test.csv:{icao24}{seconds}")
+
+
+def _inside(icao24: str, seconds: int) -> AdsbObservation:
+    return make_obs(icao24=icao24, observed_at=_TS + timedelta(seconds=seconds),
+                    source_row_id=f"test.csv:{icao24}{seconds}")
+
+
+def test_late_reports_from_another_aircraft_are_not_dropped(detector: NoFlyZoneDetector) -> None:
+    # NFZ-12B. The live feed returns each aircraft's latest position, often
+    # seconds old, so B's reports can reach the DB after a window has already
+    # processed a newer report from A. One shared watermark skipped all of B's.
+    detector.detect_observations([_outside("aaaaaa", 9), _outside("aaaaaa", 10)])
+    late = [_inside("bbbbbb", s) for s in range(4, 9)]
+    detector.detect_observations([_outside("aaaaaa", 9), _outside("aaaaaa", 10), *late])
+    assert detector.skipped_reports == 2  # only A's re-read overlap
+    [incursion] = detector.flush()
+    assert incursion.entities_involved[0].entity_id == "aircraft:bbbbbb"
+    assert incursion.metadata["extras"]["report_count"] == 5
+
+
+def test_overlap_is_still_skipped_per_aircraft(detector: NoFlyZoneDetector) -> None:
+    first = [_inside("bbbbbb", 0), _inside("bbbbbb", 1)]
+    detector.detect_observations(first)
+    detector.detect_observations([*first, _inside("bbbbbb", 2)])
+    assert detector.skipped_reports == 2
+    [incursion] = detector.flush()
+    assert incursion.metadata["extras"]["report_count"] == 3
+
+
+def test_quiet_aircraft_are_forgotten_after_the_retention(detector: NoFlyZoneDetector) -> None:
+    retention = int(detector.cfg["sampling"]["seen_retention_sec"])
+    detector.detect_observations([_outside("aaaaaa", 0)])
+    detector.detect_observations([_outside("cccccc", retention + 1)])
+    assert set(detector._seen) == {"cccccc"}  # memory stays bounded on a long run
+
+
 def test_replay_runner_flushes_nfz_after_the_last_window(tmp_path: Path) -> None:
     """scripts/replay_csv.py emits episodes still open when the data ends."""
     rows = CROSSINGS_FILE.read_text().splitlines()

@@ -19,6 +19,8 @@ sampling:
   target_hz: 1.0
   max_gap_sec: 30         # silence longer than this closes an incursion episode
                           # (logic/episodes.py); small planes may report every 5-10 s
+  seen_retention_sec: 3600  # adapter forgets an aircraft's last-processed time after
+                          # this much silence; must exceed the live runner's window_s
 
 airspace:
   # Relative to air/detectors/no_fly_zone/ (the CLI resolves it there), not to this file.
