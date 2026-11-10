@@ -15,9 +15,9 @@
 #   docker compose --profile runners up --build
 #
 # db/schema/*.sql runs in alphabetical order ON FIRST BOOT (empty data volume).
-# Ships with 001_observations.sql; each team adds its detection table migration
-# (002_spoofing_detections.sql, 003_proximity_detections.sql,
-# 004_no_fly_zone_detections.sql). After adding/changing a migration run
+# Ships with 001_observations.sql; detector tables and the runner cursor are
+# added in their ordered migrations (002-004 detector tables,
+# 005_detector_cursors.sql). After adding/changing a migration run
 # `docker compose down -v` to re-initialise.
 #
 # Connect from your host (detectors, psql, a dashboard):
