@@ -44,12 +44,19 @@ class PersistResult:
 def dedup_key(detection: Detection) -> str:
     """Stable string identity for a detection — the upsert conflict target.
 
-    Wraps ``air.windowing.detection_dedup_key`` (which keys on detector
-    id/version, detection type, the sorted involved entity ids, and the
-    temporal start) and serializes it to a deterministic string so it can be a
-    ``TEXT UNIQUE`` column. Two detections that are "the same finding about the
-    same entities at the same time" produce the same key, so the overlap a
-    rolling window creates collapses to one row.
+    Wraps ``air.windowing.detection_dedup_key`` (detector id/version,
+    detection type, the sorted involved entity ids, and -- for a finding that
+    happened at a moment -- the temporal start) and serializes it to a
+    deterministic string so it can be a ``TEXT UNIQUE`` column. Two detections
+    that are the same finding about the same entities produce the same key, so
+    the overlap a rolling window creates collapses to one row.
+
+    Whether the start is included is the detection's own
+    ``metadata["dedup_scope"]``; see ``detection_dedup_key`` for why. It
+    matters here because this is the conflict target: a finding that describes
+    an ongoing *condition* has no fixed start -- its first report moves with
+    the window -- so including one would give the same condition a new key
+    every tick and defeat the upsert below.
     """
     return json.dumps(detection_dedup_key(detection), default=str, separators=(",", ":"))
 
