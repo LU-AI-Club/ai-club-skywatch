@@ -156,23 +156,42 @@ docker exec -it skywatch-db psql -U skywatch -d skywatch
 
 ## 5. Take it down
 
-Stop and remove the containers but **keep the data** (the DB volume persists):
+> `down` removes the containers and the network (the data volume is **kept**);
+> `stop` just pauses them (resume with `start`); only `down -v` wipes the data.
+> **Services behind a profile (`poller`, `runners`) are only torn down when you
+> name that profile** — a bare `docker compose down` leaves them running and
+> holding the network (`Resource is still in use`).
+
+Stop and remove everything, **keep the data** (the usual teardown):
 
 ```bash
 docker compose --profile poller --profile runners down
 ```
 
-Stop **and wipe the database** (removes the volume; the schema reloads fresh on
-the next `up`). Use this to reset, or after changing anything in `db/schema/`:
+Pause everything without removing the containers, **keep the data** (fastest to
+resume, with `docker compose --profile poller --profile runners start`):
 
 ```bash
-docker compose down -v
+docker compose --profile poller --profile runners stop
 ```
 
-Stop a single continuous runner without touching the rest:
+Bring down just the detector runners (leaves `db` + `adsb-poller` running):
+
+```bash
+docker compose --profile runners down
+```
+
+Stop a single runner without touching the rest:
 
 ```bash
 docker compose stop proximity-runner
+```
+
+Reset — stop **and wipe the database** (removes the volume; the schema reloads
+fresh on the next `up`). Use after changing anything in `db/schema/`:
+
+```bash
+docker compose down -v
 ```
 
 ---
