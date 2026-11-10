@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import logging
 import os
 import sys
 import time
@@ -108,6 +109,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    # The runner logs one line per tick; without a handler only warnings
+    # would reach `docker logs`.
+    logging.basicConfig(
+        level=logging.INFO, stream=sys.stderr,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
     spec = RUNNERS[args.detector]
     window_s = spec.window_s if args.window_s is None else args.window_s
     step_s = spec.step_s if args.step_s is None else args.step_s
