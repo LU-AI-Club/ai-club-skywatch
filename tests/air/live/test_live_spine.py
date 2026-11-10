@@ -58,20 +58,18 @@ def test_read_window_keeps_its_frozen_signature() -> None:
     assert parameters["domain"].default == "air"
 
 
-def test_stubs_raise_until_owning_teams_implement_them() -> None:
-    # read_window is deliberately absent: Spine A is implemented now
-    # (Spoofing, tickets A2/A3). Its tests live alongside it in
-    # tests/air/live/ and run against rows, not a stub.
-    with pytest.raises(NotImplementedError):
-        persist(None, "spoofing_detections", [])
-    with pytest.raises(NotImplementedError):
-        start_run(None, "skywatch.spoofing", "0.1.0")
-    with pytest.raises(NotImplementedError):
-        finish_run(None, "run-1", status="SUCCESS", counts={})
-    now = datetime.now(timezone.utc)
-    with pytest.raises(NotImplementedError):
-        read_window(None, start=now, end=now)
-    # persist is implemented; see tests/air/live/test_persistence.py.
+def test_only_spine_c_is_still_a_stub() -> None:
+    """What remains unimplemented, stated positively.
+
+    Spine A (read_window) is ours and implemented -- tests/air/live/.
+    Spine B (persist, start_run, finish_run) landed with Proximity's PR #113
+    -- tests/air/live/test_persistence.py and test_detector_runs.py.
+    Spine C (run_live) is No-Fly-Zone's and is the last piece.
+
+    This file is the one place that says which parts of the spine exist, so it
+    is worth keeping exact: a stale entry here reads as "that team has not
+    started" when they have.
+    """
     with pytest.raises(NotImplementedError):
         run_live(
             detector=SimpleNamespace(detector_id="skywatch.spoofing"),
@@ -81,3 +79,30 @@ def test_stubs_raise_until_owning_teams_implement_them() -> None:
             step_s=30,
             poll_interval_s=30,
         )
+
+
+def test_the_implemented_spine_pieces_do_not_raise() -> None:
+    """The other half of the claim above, so it cannot rot unnoticed.
+
+    read_window is called with a fake connection returning no rows: an empty
+    window is a quiet minute, not an error.
+    """
+    now = datetime.now(timezone.utc)
+
+    class _Cursor:
+        description = [SimpleNamespace(name="entity_id")]
+
+        def execute(self, *args, **kwargs) -> None:
+            return None
+
+        def fetchall(self) -> list:
+            return []
+
+        def __enter__(self) -> "_Cursor":
+            return self
+
+        def __exit__(self, *exc: object) -> None:
+            return None
+
+    connection = SimpleNamespace(cursor=lambda: _Cursor())
+    assert read_window(connection, start=now, end=now) == []

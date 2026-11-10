@@ -17,6 +17,7 @@ from __future__ import annotations
 from air.detectors.spoofing.config import SpoofingConfig
 from air.detectors.spoofing.records import SpoofingEvent
 from air.detectors.spoofing.scoring import confidence_for, score_for, severity_for
+from air.windowing import DEDUP_SCOPE_ENTITY, DEDUP_SCOPE_EVENT
 from contracts import (
     Detection,
     EntityRef,
@@ -47,6 +48,34 @@ _GATE_PHRASE: dict[str, str] = {
     "registry_mismatch_v1": "performance contradicts the registered aircraft",
     "identity_drift_v1": "one identity carried more than one callsign",
 }
+
+
+# Which gates describe a condition the aircraft is *in* rather than a thing
+# that happened at a moment. See air.windowing.detection_dedup_key: an
+# "entity"-scoped finding is deduplicated without its start time.
+#
+# The distinction is not stylistic. Every gate here reports over whatever
+# history the window happened to contain, so its ``observed_from`` is the
+# aircraft's first report inside that window and slides forward as the window
+# does. Keyed on a sliding start, each one produced a new row every tick --
+# measured at the live 3600 s / 300 s settings, 82 rows for 62 findings and
+# climbing. There is no instant to anchor them to instead: "integrity has been
+# at the floor" and "this address has carried two callsigns" are states, and
+# the window only ever shows part of them.
+#
+# Every other gate is pair-anchored -- it fires on two specific reports, whose
+# timestamps do not move between windows -- so it keeps the default "event"
+# scope and two findings about one aircraft at different times stay two
+# findings. `reappear_v1` is deliberately not in this set: it is about one
+# specific gap, and anchors to that gap's own timestamps.
+ENTITY_SCOPED_GATES = frozenset(
+    {
+        "nic_floor_v1",
+        "coexistence_v1",
+        "pingpong_v1",
+        "identity_drift_v1",
+    }
+)
 
 
 def explanation_facts(event: SpoofingEvent) -> list[str]:
@@ -194,6 +223,13 @@ def to_detection(event: SpoofingEvent, cfg: SpoofingConfig) -> Detection:
         metadata={
             "gate": event.gate,
             "reason": event.reason,
+            # Read by air.windowing.detection_dedup_key. See
+            # ENTITY_SCOPED_GATES above for why these two differ.
+            "dedup_scope": (
+                DEDUP_SCOPE_ENTITY
+                if event.gate in ENTITY_SCOPED_GATES
+                else DEDUP_SCOPE_EVENT
+            ),
             "anomaly_score": score,
             # Our own number, recorded before anything downstream adjusts it.
             # ``confidence`` on the Detection is the field TCE or CAATS may

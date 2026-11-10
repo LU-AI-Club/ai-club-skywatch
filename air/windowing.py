@@ -107,22 +107,78 @@ def iter_windows(
         start += step_s
 
 
+# How a detection wants to be deduplicated, declared in its own
+# ``metadata["dedup_scope"]``. A detector that says nothing gets "event",
+# which is the behaviour this function has always had.
+DEDUP_SCOPE_EVENT = "event"
+DEDUP_SCOPE_ENTITY = "entity"
+DEDUP_SCOPES = (DEDUP_SCOPE_EVENT, DEDUP_SCOPE_ENTITY)
+
+
 def detection_dedup_key(detection: Any) -> tuple:
     """A stable identity for a detection, for collapsing duplicates produced by
     overlapping (sliding) windows.
 
-    Keyed on the fields that identify *the same finding about the same entities
-    at the same time*: detector id/version, detection type, the sorted set of
-    involved entity ids, and the start of the temporal bounds. Deliberately
-    ignores volatile fields (confidence, evidence ordering, the random
-    ``detection_id``) so the same event seen in two windows collapses to one.
+    Keyed on the fields that identify *the same finding about the same
+    entities*: detector id/version, detection type, and the sorted set of
+    involved entity ids. Volatile fields -- confidence, evidence ordering, the
+    random ``detection_id`` -- are deliberately ignored, so the same finding
+    seen in two windows collapses to one.
+
+    Whether the time belongs in that identity depends on what the finding *is*,
+    and only the detector knows. It declares this in
+    ``metadata["dedup_scope"]``:
+
+    ``"event"`` (the default, and the behaviour before this existed)
+        The finding is a thing that happened at a moment: a pair of reports
+        that disagree, an encounter, a zone entry. ``temporal_bounds.start_time``
+        is part of its identity, and two of them about one aircraft at
+        different times are two findings.
+
+        **This requires the detector to anchor ``start_time`` to the finding
+        itself, not to the window it was evaluated in.** A pair-based rule gets
+        this for free, because the pair's own timestamps do not move. A
+        computed instant needs rounding -- see the CPA anchoring in
+        ``air/detectors/proximity/detector.py``, which rounds to the second so
+        every window agrees.
+
+    ``"entity"``
+        The finding is a condition the entity is *in*: degraded navigation
+        integrity, a callsign that does not match its registry block, an
+        address two transmitters appear to share. There is no instant it
+        happened at; it holds over whatever history the window contained, so
+        its start slides forward with the window and is not identity-bearing.
+        Keyed without the time, and recency is carried by the table's
+        ``last_detected_at`` instead.
+
+    Getting this wrong is not a cosmetic problem. Spoofing runs a 3600 s window
+    stepping 300 s, so a state-like finding keyed on a sliding start produced a
+    fresh key every tick: 82 rows for 62 findings on one capture, growing
+    without bound for as long as the runner ran. The upsert cannot help, because
+    the keys differ.
+
+    An unrecognised scope raises rather than guessing -- a typo silently
+    disabling deduplication is exactly the failure above.
     """
     entities = tuple(
         sorted(getattr(e, "entity_id", "") for e in (getattr(detection, "entities_involved", None) or []))
     )
-    bounds = getattr(detection, "temporal_bounds", None)
-    start = getattr(bounds, "start_time", None)
-    start_key = start.isoformat() if start is not None else None
+
+    metadata = getattr(detection, "metadata", None) or {}
+    scope = DEDUP_SCOPE_EVENT
+    if hasattr(metadata, "get"):
+        scope = metadata.get("dedup_scope", DEDUP_SCOPE_EVENT)
+    if scope not in DEDUP_SCOPES:
+        raise ValueError(
+            f"unknown dedup_scope {scope!r}; expected one of {DEDUP_SCOPES}"
+        )
+
+    start_key = None
+    if scope == DEDUP_SCOPE_EVENT:
+        bounds = getattr(detection, "temporal_bounds", None)
+        start = getattr(bounds, "start_time", None)
+        start_key = start.isoformat() if start is not None else None
+
     return (
         getattr(detection, "detector_id", None),
         getattr(detection, "detector_version", None),
