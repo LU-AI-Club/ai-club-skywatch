@@ -73,6 +73,19 @@ docker exec skywatch-db psql -U skywatch -d skywatch -tAc "SELECT jsonb_pretty(p
 Detectors: `proximity`, `spoofing`, `no_fly_zone`. Each runner is the same image
 with a different `--detector`.
 
+**No-fly-zone zones** are committed: 15 real FAA zones in
+`air/detectors/no_fly_zone/fixtures/airspace/klyh-local-faa.geojson`, i.e. the
+Lynchburg area (within 65 nm of KLYH: Farmville, Evers and Barfoot MOAs, and
+Fort Pickett's restricted area R-6602) plus P-56 over Washington, DC. Nothing to
+generate. Expect few detections: MOAs are legal to fly through and score LOW/INFO,
+and in a one-hour replay of real traffic only Evers South MOA fired.
+
+Refresh them each FAA cycle (8 weeks; needs internet) and commit the result:
+
+```bash
+python scripts/make_faa_airspace.py --radius-nm 65 --also "P-56" --out air/detectors/no_fly_zone/fixtures/airspace/klyh-local-faa.geojson
+```
+
 ### One-shot (recommended for testing)
 
 Run a single read→detect→persist pass and exit. Add `--build` on the first run so
@@ -186,10 +199,9 @@ docker compose stop proximity-runner
   `docker exec -i skywatch-db psql -U skywatch -d skywatch < db/schema/00X_xxx.sql`.
 - **Rebuild after code changes.** Edits under `air/` or `scripts/` only take
   effect in the containers after `--build`.
-- **No-Fly-Zone** zones come from `airspace.fixture_path` in
-  `configs/detectors/no_fly_zone.yaml`, which still points at three hand-built
-  test zones. Real FAA airspace is ticket NFZ-12C in
-  [`no_fly_zone/WEEK12_TICKETS.md`](no_fly_zone/WEEK12_TICKETS.md).
+- **No-Fly-Zone on test zones?** `docker logs skywatch-no-fly-zone-runner` shows
+  `using TEST zones` if the committed zone file is missing from the image.
+  Detections with `zone_id` P-901, TFR-6/1234 or LYNCHBURG-MOA are test zones.
 - **Zero detections is not always a quiet sky.** If the observations reach a
   detector without altitude (see NFZ-12A / SPOOF-12C), no-fly-zone abstains on
   every aircraft and still reports `SUCCESS`.
