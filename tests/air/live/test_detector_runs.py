@@ -19,7 +19,7 @@ from air.detectors.proximity import ProximityDetector
 from air.live import finish_run, start_run
 from tests.conftest import load_observations
 
-MIGRATION = Path(__file__).resolve().parents[3] / "db" / "schema" / "005_detector_runs.sql"
+MIGRATION = Path(__file__).resolve().parents[3] / "db" / "schema" / "006_detector_runs.sql"
 T0 = datetime(2026, 9, 1, 0, 0, tzinfo=UTC)
 T1 = datetime(2026, 9, 1, 0, 1, tzinfo=UTC)
 
@@ -146,7 +146,7 @@ def test_running_the_detector_leaves_one_detector_runs_row() -> None:
 
 
 def test_sql_only_uses_columns_the_migration_creates() -> None:
-    """Guard against the code and db/schema/005 drifting apart (no live DB needed)."""
+    """Guard against the code and db/schema/006 drifting apart (no live DB needed)."""
     ddl = MIGRATION.read_text(encoding="utf-8")
     body = re.search(r"CREATE TABLE IF NOT EXISTS public\.detector_runs \((.*?)\n\);", ddl, re.S)
     assert body is not None

@@ -11,8 +11,6 @@ import inspect
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-import pytest
-
 from air.live import (
     PersistResult,
     dedup_key,

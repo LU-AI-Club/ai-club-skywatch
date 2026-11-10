@@ -53,13 +53,28 @@ place instead of duplicating them.
 
 ## Populate `observations`
 
-Two routes, same normalizer underneath:
+Three routes, same `observations` shape underneath:
 
 1. **Direct CSV → Postgres (local dev).** A small loader reads a recorded
    `aircraft.json`/`data/lynchburg_adsb.csv` and inserts rows with `domain = 'air'`.
    No Kafka needed. Inserts must fill the `NOT NULL` columns `location`,
    `h3_index_res7/9` (compute with the `h3` library) and `provenance_id`.
-2. **Full pipeline (mirrors production).** antenna → gateway → `adsb.raw` Kafka →
+   (`scripts/load_observations_csv.py`.)
+2. **Live feed poller (mirrors the cloud).** `scripts/poll_adsb_feed.py` polls the
+   SENTINEL ADS-B positions feed on a timer and upserts each aircraft's latest
+   position, so the local table tracks the cloud. The feed returns
+   observation-ready records (typed columns + the full envelope in `payload`); the
+   poller only adds the two H3 indices and sets `domain='air'`. Idempotent on the
+   envelope `event_id` (→ `raw_record_ref`). As a container:
+
+   ```bash
+   docker compose --profile poller up -d adsb-poller   # reuses the runner image
+   ```
+
+   Needs a whitelisted network (hostname is in public DNS) and the SENTINEL
+   `sentinel-ca.crt` mounted read-only — never disable certificate verification.
+   See [`docs/ADSB_POSITIONS_FEED_GUIDE.md`](../docs/ADSB_POSITIONS_FEED_GUIDE.md).
+3. **Full pipeline (mirrors production).** antenna → gateway → `adsb.raw` Kafka →
    the `adsb-loader` → `observations`. Heavier; the Tech Lead runs this.
 
 See [`docs/live_integration/`](../docs/live_integration/) for how this fits the
