@@ -291,9 +291,10 @@ by config. **Done when:** a test where removing `MOA` drops the MOA zones.
 
 ---
 
-Not ours, but noticed (Tech Lead): `db/schema/005_detector_runs.sql` and
-`006_detector_runs.sql` are identical, and `005` is used twice (the spoofing team
-flagged this too in #117). Also, if `sentinel-ca.crt` is ever missing, Docker
-mounts an empty *folder* in its place and the poller fails TLS confusingly.
+Not ours, but noticed: if `sentinel-ca.crt` is ever missing, Docker mounts an
+empty *folder* in its place and the poller fails TLS confusingly. Nate's
+`docs/WEEK12_TODO.md` lists the runner resilience and catch-up items (12I) and
+two more Spine C ones worth taking: fail fast on a missing table or mapper, and a
+single-instance guard.
 Restart still loses NFZ's in-memory state after a *crash* (12I covers clean stops
 and DB errors); persisting open episodes is a future option.
