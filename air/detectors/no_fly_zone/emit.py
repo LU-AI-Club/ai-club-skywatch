@@ -24,7 +24,8 @@ detection_type               detection_type
 severity                     severity          (by name)
 raw_model_confidence         confidence
 anomaly_score                metadata["anomaly_score"]   (*)
-entity_ids                   entities_involved[].entity_id
+entity_ids                   entities_involved[].entity_id   (aircraft, first)
+extras["zone_id"]            entities_involved[-1] = "zone:<zone_id>"
 evidence_refs                evidence[].source_ref
 explanation_facts            evidence[0].summary + metadata
 limitations                  metadata["limitations"]
@@ -55,7 +56,8 @@ of which ``types.Detection`` carries. Stream G must therefore put these into
 
 Optional: ``altitude_ft``, ``zone_id``, ``penetration_nm``, ``dwell_sec``.
 ``episode_start`` / ``episode_end`` (set by logic/episodes.py) become the time
-bounds; without them both bounds are ``observed_at``.
+bounds; without them both bounds are ``observed_at``. An episode with
+``episode_status == "OPEN"`` (still in progress) gets ``end_time = None``.
 
 Inputs / Outputs
 ----------------
@@ -121,6 +123,20 @@ def _as_datetime(value: Any, field_name: str) -> datetime:
     raise ValueError(f"{field_name} must be a datetime or ISO-8601 string")
 
 
+def _zone_entities(zone_id: Any) -> list[EntityRef]:
+    """The zone as an involved entity, listed after the aircraft.
+
+    It is what makes the dedup key (which keys on the involved entity ids) tell
+    apart one aircraft's simultaneous incursions into two overlapping zones;
+    without it they share a key and an upsert keeps only one row. Appended, so
+    ``entities_involved[0]`` stays the aircraft for the ``entity_id`` column
+    and the dashboard.
+    """
+    if zone_id is None:
+        return []
+    return [EntityRef(entity_id=f"zone:{zone_id}", entity_type="airspace_zone", domain=DOMAIN)]
+
+
 def to_platform_detection(detection: Detection) -> PlatformDetection:
     """Convert an internal Detection into the vendored SENTINEL contract."""
     extras = dict(detection.extras)
@@ -131,7 +147,13 @@ def to_platform_detection(detection: Detection) -> PlatformDetection:
     lon = float(_require(extras, "lon"))
     altitude_ft = extras.get("altitude_ft")
     start_time = _as_datetime(extras.get("episode_start") or observed_at, "episode_start")
-    end_time = _as_datetime(extras.get("episode_end") or observed_at, "episode_end")
+    # An episode still in progress has no end yet; the contract's end_time is
+    # optional for exactly this ("open" findings).
+    end_time: datetime | None = (
+        None
+        if extras.get("episode_status") == "OPEN"
+        else _as_datetime(extras.get("episode_end") or observed_at, "episode_end")
+    )
     zone_id = extras.get("zone_id")
 
     provenance = ProvenanceRecord(
@@ -187,7 +209,7 @@ def to_platform_detection(detection: Detection) -> PlatformDetection:
         entities_involved=[
             EntityRef(entity_id=eid, entity_type="aircraft", domain=DOMAIN)
             for eid in detection.entity_ids
-        ],
+        ] + _zone_entities(zone_id),
         evidence=evidence,
         geospatial_context=geo,
         metadata={

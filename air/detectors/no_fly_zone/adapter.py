@@ -67,12 +67,23 @@ span a window edge. The detector therefore keeps one
 * each call feeds its reports to the tracker and returns only the episodes
   that closed (two clear reports, or ``sampling.max_gap_sec`` of silence,
   measured against the newest report seen so far);
-* reports at or before the newest timestamp already processed are skipped
-  (counted in ``skipped_reports``), so sliding windows that overlap do not
-  feed the same report twice;
+* a report at or before the newest one already processed **for the same
+  aircraft** is skipped (counted in ``skipped_reports``), so sliding windows
+  that overlap do not feed the same report twice. The check is per aircraft,
+  not one clock for everyone: the live feed hands back each aircraft's latest
+  position, often seconds to minutes old, so one aircraft's report routinely
+  lands after a newer report from another. A single watermark dropped those
+  late reports, and with them whole incursions (NFZ-12B). Aircraft not heard
+  from in ``sampling.seen_retention_sec`` are forgotten so the map stays small;
+  that must exceed the runner's lookback window;
 * :meth:`NoFlyZoneDetector.flush` emits what is still open at the end of the
   stream. The shared runner calls it after the last window; ``detect`` calls
   it when ``context.parameters["flush"]`` is true.
+* with ``emit_open=True`` (the live runner, via
+  :func:`air.detectors.no_fly_zone.build_live_detector`) each call also returns
+  the open episodes that grew in that window, marked OPEN with no end time.
+  Their start time never changes, so the live store upserts one row per
+  incursion from entry onward instead of learning about it only on exit.
 
 Fed the same rows, the windowed route and the CLI route give identical
 Detections at any window size. Zones and config are loaded once, by
@@ -86,7 +97,7 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -116,6 +127,15 @@ def configured_airspace_path(cfg: Config) -> Path:
     """
     configured = Path(cfg["airspace"]["fixture_path"])
     return configured if configured.is_absolute() else _PACKAGE_DIR / configured
+
+
+def live_airspace_path(cfg: Config) -> Path | None:
+    """Resolve ``airspace.live_path`` like ``fixture_path``; None if not configured."""
+    configured = cfg["airspace"].get("live_path")
+    if not configured:
+        return None
+    path = Path(configured)
+    return path if path.is_absolute() else _PACKAGE_DIR / path
 
 
 def observation_to_state(obs: Any) -> AircraftState:
@@ -157,9 +177,16 @@ class NoFlyZoneDetector(BaseDetector):
     domain = DOMAIN
     implementation_type = DetectorImplementationType.RULE_BASED
 
-    def __init__(self, cfg: Config, zones: Sequence[AirspaceZone]) -> None:
+    def __init__(
+        self, cfg: Config, zones: Sequence[AirspaceZone], *, emit_open: bool = False
+    ) -> None:
         super().__init__()
         self.cfg = cfg
+        # Live mode: also return open episodes that grew this window, marked
+        # OPEN with no end time, so an incursion is stored on entry and updated
+        # in place (same dedup key) until it closes. Off by default so replay
+        # and the CLI keep returning only finished episodes.
+        self.emit_open = emit_open
         self.zones: list[AirspaceZone] = list(zones)
         # Instance values from config win over the class-level registry identity.
         self.detector_id = str(cfg["detector"]["id"])
@@ -170,9 +197,15 @@ class NoFlyZoneDetector(BaseDetector):
         self.exit_counts: Counter[ExitReason] = Counter()
         # Episodes stay open across windows; see the module docstring.
         self._episodes = EpisodeTracker(cfg)
-        self._watermark: datetime | None = None
-        # Reports skipped because a newer report had already been processed
-        # (the overlap of sliding windows, or a late arrival).
+        # Newest report processed per aircraft (icao24 -> timestamp), and the
+        # newest report overall, which is the "now" episodes go silent against.
+        self._seen: dict[str, datetime] = {}
+        self._clock: datetime | None = None
+        self._seen_retention = timedelta(
+            seconds=float(cfg["sampling"]["seen_retention_sec"])
+        )
+        # Reports skipped because that aircraft's report at or after the same
+        # time had already been processed (the overlap of sliding windows).
         self.skipped_reports = 0
 
     def get_required_data(self) -> DataRequirements:
@@ -189,26 +222,41 @@ class NoFlyZoneDetector(BaseDetector):
         return self._episodes.open_count
 
     def detect_observations(self, observations: Iterable[Any]) -> list[PlatformDetection]:
-        """Run one window of ``AdsbObservation``; return the episodes it closed."""
+        """Run one window of ``AdsbObservation``; return the episodes it closed.
+
+        With ``emit_open`` set, also return a snapshot of every open episode
+        that gained reports in this window (``episode_status == "OPEN"``).
+        """
         fresh: list[AircraftState] = []
-        newest = self._watermark
+        seen_before = dict(self._seen)  # judge every report against prior windows only
         for obs in observations:
             state = observation_to_state(obs)
-            if self._watermark is not None and state.timestamp <= self._watermark:
+            last = seen_before.get(state.icao24)
+            if last is not None and state.timestamp <= last:
                 self.skipped_reports += 1
                 continue
             fresh.append(state)
-            if newest is None or state.timestamp > newest:
-                newest = state.timestamp
+            if state.icao24 not in self._seen or state.timestamp > self._seen[state.icao24]:
+                self._seen[state.icao24] = state.timestamp
+            if self._clock is None or state.timestamp > self._clock:
+                self._clock = state.timestamp
 
         reports = pipeline.evaluate_reports(
             fresh, self.zones, self.cfg, exit_counts=self.exit_counts
         )
         closed: list[Detection] = self._episodes.feed(reports)
-        if newest is not None:
-            self._watermark = newest
-            closed += self._episodes.close_silent(newest)
+        if fresh and self._clock is not None:
+            closed += self._episodes.close_silent(self._clock)
+            self._forget_quiet_aircraft(self._clock)
+        if self.emit_open:
+            closed += self._episodes.snapshot_open()
         return [to_platform_detection(detection) for detection in closed]
+
+    def _forget_quiet_aircraft(self, now: datetime) -> None:
+        """Drop per-aircraft marks older than the retention, so memory stays bounded."""
+        cutoff = now - self._seen_retention
+        for icao24 in [k for k, ts in self._seen.items() if ts < cutoff]:
+            del self._seen[icao24]
 
     def flush(self) -> list[PlatformDetection]:
         """Emit every episode still open. Call once at the end of a stream."""

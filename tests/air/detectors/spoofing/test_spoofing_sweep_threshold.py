@@ -5,11 +5,17 @@ it fires on a fixture if any row reports a ground speed over `limit_kt`.
 That is not a real spoofing rule, but it does change its answer as the limit
 moves, which is the thing sweep_threshold has to show.
 
-The fixtures' highest reported ground speeds are: 780 kt in
-neg_tailwind_cruise.json, 450 kt in 8 of the 9 pos_ files and 4 other
-negatives, and 320 kt or less in the remaining 5 negatives. The ninth
-positive, pos_speed_lie_short_interval.json, reports only 100 kt -- its lie
-is that it moves far faster than it claims -- so this fake never catches it.
+There are 15 positives (9 pos_* plus 6 pos_guard_*) and 10 negatives. The
+highest reported ground speeds are: 780 kt in neg_tailwind_cruise.json,
+over 400 kt in 13 of the 15 positives and 4 negatives, and 320 kt or less
+in the remaining 5 negatives. The two positives this fake never catches
+report only 100 kt and 90 kt -- pos_speed_lie_short_interval.json and
+pos_guard_speed_lie_long_gap.json, whose lie is that they move far faster
+than they claim.
+
+The counts below are tied to what is on disk, so adding a fixture will fail
+these. That is deliberate: it forces whoever adds one to say which column it
+belongs in.
 """
 
 from __future__ import annotations
@@ -50,7 +56,7 @@ def test_limit_above_every_speed_does_not_fire():
             "value": 1000,
             "tp": 0,
             "fp": 0,
-            "fn": 9,
+            "fn": 15,
             "tn": 10,
             "precision": None,
             "recall": 0.0,
@@ -61,16 +67,16 @@ def test_limit_above_every_speed_does_not_fire():
 def test_limit_just_under_the_tailwind_gives_one_false_alarm():
     table = sweep_threshold("limit_kt", [500], FIXTURES_DIR, make_fake_detector)
     row = table[0]
-    assert (row["tp"], row["fp"], row["fn"], row["tn"]) == (0, 1, 9, 9)
+    assert (row["tp"], row["fp"], row["fn"], row["tn"]) == (0, 1, 15, 9)
     assert (row["precision"], row["recall"]) == (0.0, 0.0)
 
 
 def test_low_limit_fires_on_every_positive_and_some_negatives():
     table = sweep_threshold("limit_kt", [400], FIXTURES_DIR, make_fake_detector)
     row = table[0]
-    assert (row["tp"], row["fp"], row["fn"], row["tn"]) == (8, 5, 1, 5)
-    assert row["precision"] == 8 / 13
-    assert row["recall"] == 8 / 9
+    assert (row["tp"], row["fp"], row["fn"], row["tn"]) == (13, 5, 2, 5)
+    assert row["precision"] == 13 / 18
+    assert row["recall"] == 13 / 15
 
 
 def test_lowering_the_limit_never_lowers_recall():

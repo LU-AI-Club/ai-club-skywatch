@@ -146,7 +146,7 @@ def test_fires_inside_zone_and_emits_platform_detection(detector: NoFlyZoneDetec
     assert detector.open_episodes == 0
     assert detection.geospatial_context.risk_zone_ids == ["P-901"]
     assert detection.provenance.raw_source_ref == "test.csv:7"
-    assert [e.entity_id for e in detection.entities_involved] == ["aircraft:a1b2c3"]
+    assert [e.entity_id for e in detection.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]
     assert detection.temporal_bounds.start_time == _TS
 
 
@@ -320,7 +320,7 @@ def test_silence_closes_an_episode_in_a_later_window(detector: NoFlyZoneDetector
         observed_at=_TS + timedelta(seconds=max_gap + 1),
     )
     [closed] = detector.detect_observations([later])
-    assert [e.entity_id for e in closed.entities_involved] == ["aircraft:a1b2c3"]
+    assert [e.entity_id for e in closed.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]
     assert detector.open_episodes == 0
 
 
@@ -342,6 +342,46 @@ def test_overlapping_windows_never_feed_a_report_twice(detector: NoFlyZoneDetect
     assert detector.skipped_reports == 1
     [episode] = detector.flush()
     assert episode.metadata["extras"]["report_count"] == 1
+
+
+def _outside(icao24: str, seconds: int) -> AdsbObservation:
+    return make_obs(icao24=icao24, latitude=36.0, longitude=-81.0,
+                    observed_at=_TS + timedelta(seconds=seconds),
+                    source_row_id=f"test.csv:{icao24}{seconds}")
+
+
+def _inside(icao24: str, seconds: int) -> AdsbObservation:
+    return make_obs(icao24=icao24, observed_at=_TS + timedelta(seconds=seconds),
+                    source_row_id=f"test.csv:{icao24}{seconds}")
+
+
+def test_late_reports_from_another_aircraft_are_not_dropped(detector: NoFlyZoneDetector) -> None:
+    # NFZ-12B. The live feed returns each aircraft's latest position, often
+    # seconds old, so B's reports can reach the DB after a window has already
+    # processed a newer report from A. One shared watermark skipped all of B's.
+    detector.detect_observations([_outside("aaaaaa", 9), _outside("aaaaaa", 10)])
+    late = [_inside("bbbbbb", s) for s in range(4, 9)]
+    detector.detect_observations([_outside("aaaaaa", 9), _outside("aaaaaa", 10), *late])
+    assert detector.skipped_reports == 2  # only A's re-read overlap
+    [incursion] = detector.flush()
+    assert incursion.entities_involved[0].entity_id == "aircraft:bbbbbb"
+    assert incursion.metadata["extras"]["report_count"] == 5
+
+
+def test_overlap_is_still_skipped_per_aircraft(detector: NoFlyZoneDetector) -> None:
+    first = [_inside("bbbbbb", 0), _inside("bbbbbb", 1)]
+    detector.detect_observations(first)
+    detector.detect_observations([*first, _inside("bbbbbb", 2)])
+    assert detector.skipped_reports == 2
+    [incursion] = detector.flush()
+    assert incursion.metadata["extras"]["report_count"] == 3
+
+
+def test_quiet_aircraft_are_forgotten_after_the_retention(detector: NoFlyZoneDetector) -> None:
+    retention = int(detector.cfg["sampling"]["seen_retention_sec"])
+    detector.detect_observations([_outside("aaaaaa", 0)])
+    detector.detect_observations([_outside("cccccc", retention + 1)])
+    assert set(detector._seen) == {"cccccc"}  # memory stays bounded on a long run
 
 
 def test_replay_runner_flushes_nfz_after_the_last_window(tmp_path: Path) -> None:
@@ -368,4 +408,4 @@ def test_run_detectors_flushes_after_the_last_window(detector: NoFlyZoneDetector
     from air.windowing import run_detectors
 
     [episode] = list(run_detectors([[make_obs()]], [detector]))
-    assert [e.entity_id for e in episode.entities_involved] == ["aircraft:a1b2c3"]
+    assert [e.entity_id for e in episode.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]

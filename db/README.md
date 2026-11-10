@@ -1,14 +1,14 @@
 # Local SkyWatch database
 
 A one-container Postgres (TimescaleDB + PostGIS) with the canonical
-`observations` table and the three air detection tables. This is what lets you
-populate observations on your own machine, run the detectors against a real
-database, and host a front end locally — **without** the full SENTINEL platform
-and **without** the company-confidential platform repo.
+`observations` table. This is what lets you populate observations on your own
+machine, run the detectors against a real database, and host a front end
+locally — **without** the full SENTINEL platform and **without** the
+company-confidential platform repo. Each detector team adds its own detection
+table on top (see below).
 
-It mirrors the shape of the real platform (`observations` is vendored faithfully;
-the detection tables are the air analogues of the maritime ones), so code written
-against this local DB moves to production unchanged.
+It mirrors the shape of the real platform (`observations` is vendored faithfully),
+so code written against this local DB moves to production unchanged.
 
 ## Start it
 
@@ -42,28 +42,43 @@ docker compose down -v && docker compose up -d db
 | Object | Purpose |
 | --- | --- |
 | `observations` | Canonical input. ADS-B rows have `domain = 'air'`, `entity_id = 'icao24:<hex>'`, position in `location`, speed/track in `sog`/`cog`; **altitude, callsign, squawk, NIC, NACp live in the `payload` JSON**. Vendored copy of the platform table — keep in sync. |
-| `adsb_spoof_detections` | `skywatch.spoofing` output. |
-| `adsb_proximity_detections` | `skywatch.proximity` output (one row per aircraft pair). |
-| `airspace_violation_detections` | `skywatch.no_fly_zone` output (one row per incursion episode). |
-| `detector_runs` | Optional heartbeat: one row per detector run. |
 
-Each detection table shares one base column set and is upserted on `dedup_key`
-(the string form of `air.windowing.detection_dedup_key`), so re-running a detector
-over the same data updates rows in place instead of duplicating them.
+The local DB ships with `observations` only. Each detector team adds **its own**
+detection table (and the shared `detector_runs` heartbeat) as a
+`db/schema/0NN_*.sql` migration — the common columns and a copy-paste template are
+in [`docs/live_integration/DETECTION_TABLE_COLUMNS.md`](../docs/live_integration/DETECTION_TABLE_COLUMNS.md).
+Every detection table is upserted on `dedup_key` (the string form of
+`air.windowing.detection_dedup_key`), so re-running a detector updates rows in
+place instead of duplicating them.
 
 ## Populate `observations`
 
-Two routes, same normalizer underneath:
+Three routes, same `observations` shape underneath:
 
 1. **Direct CSV → Postgres (local dev).** A small loader reads a recorded
    `aircraft.json`/`data/lynchburg_adsb.csv` and inserts rows with `domain = 'air'`.
    No Kafka needed. Inserts must fill the `NOT NULL` columns `location`,
    `h3_index_res7/9` (compute with the `h3` library) and `provenance_id`.
-2. **Full pipeline (mirrors production).** antenna → gateway → `adsb.raw` Kafka →
+   (`scripts/load_observations_csv.py`.)
+2. **Live feed poller (mirrors the cloud).** `scripts/poll_adsb_feed.py` polls the
+   SENTINEL ADS-B positions feed on a timer and upserts each aircraft's latest
+   position, so the local table tracks the cloud. The feed returns
+   observation-ready records (typed columns + the full envelope in `payload`); the
+   poller only adds the two H3 indices and sets `domain='air'`. Idempotent on the
+   envelope `event_id` (→ `raw_record_ref`). As a container:
+
+   ```bash
+   docker compose --profile poller up -d adsb-poller   # reuses the runner image
+   ```
+
+   Needs a whitelisted network (hostname is in public DNS) and the SENTINEL
+   `sentinel-ca.crt` mounted read-only — never disable certificate verification.
+   See [`docs/ADSB_POSITIONS_FEED_GUIDE.md`](../docs/ADSB_POSITIONS_FEED_GUIDE.md).
+3. **Full pipeline (mirrors production).** antenna → gateway → `adsb.raw` Kafka →
    the `adsb-loader` → `observations`. Heavier; the Tech Lead runs this.
 
-See [`docs/SENTINEL_INTEGRATION_PLAN.md`](../docs/SENTINEL_INTEGRATION_PLAN.md) for
-how this fits the whole integration and the 6-week plan.
+See [`docs/live_integration/`](../docs/live_integration/) for how this fits the
+whole live-integration plan (the spine and the per-team guides).
 
 ## Notes
 

@@ -38,41 +38,41 @@ Everything you need is in
 ### Real conflict
 Two aircraft genuinely close, and nothing on this list explains it away.
 
-*How to recognize it:* **← write this**
+The aircraft are converging, and their predicted horizontal and vertical separation fall within the detector's thresholds. Their tracks do not match an identifiable pattern such as landing in sequence, approaching parallel runways, flying in formation, or taxiing on the ground.
 
 ### Landing queue
 Aircraft lined up to land on the same runway. They're 3 miles apart on purpose.
 This will be the most common one.
 
-*How to recognize it:* **← write this**
+Both aircraft are near the same airport, descending, and traveling in roughly the same direction along the same runway heading. Their positions show one aircraft following the other toward the runway, with approximately 3 nautical miles between them.
 
 ### Parallel runways
 Big airports have runways side by side. Aircraft land on them at the same time,
 about 1 mile apart, completely normally.
 
-*How to recognize it:* **← write this**
+Both aircraft are approaching an airport on nearly parallel tracks, with each aligned with a different parallel runway. Their lateral separation is approximately 1 nautical mile, and their paths show a parallel approach rather than a direct convergence.
 
 ### Stacked
 Aircraft directly above one another, 1000 ft apart. That's the standard safe
 spacing, not a problem.
 
-*How to recognize it:* **← write this**
+The aircraft occupy nearly the same horizontal position but have approximately 1,000 feet of vertical separation. Their positions and altitude readings show that most of the separation is vertical rather than horizontal.
 
 ### Formation flight
 Military or training aircraft flying deliberately close together.
 
-*How to recognize it:* **← write this**
+The aircraft maintain very close spacing while traveling in the same direction, with similar headings, speeds, and altitudes over multiple observations. Their tracks remain together instead of showing the changing relative positions expected from two independently moving aircraft.
 
 ### Ground traffic
 Aircraft taxiing at an airport, parked metres apart.
 
-*How to recognize it:* **← write this**
+The aircraft are on or near an airport surface, moving at low speeds or remaining stationary, with very little distance between them. Check the reported on-ground status along with altitude and speed, since the on-ground field may not always be accurate.
 
 ### Can't tell
 Not enough information to decide. **This is a real answer — use it.** Guessing
 is worse than admitting you don't know.
 
-*How to recognize it:* **← write this**
+The available positions, timestamps, altitude readings, or aircraft tracks are incomplete, inconsistent, or insufficient to match the pair to a recognizable pattern. For example, conflicting altitude information or an unclear approach path may prevent a reliable verdict.
 
 ---
 
@@ -82,11 +82,11 @@ is worse than admitting you don't know.
 start to finish. Imagine someone who has never seen this sheet sits down with a
 list of flagged pairs. What do they do first? Then what?
 
-1. **← write this**
-2.
-3.
-4.
-5.
+1. Review the flagged pair. Record the aircraft IDs, detection time, severity, predicted distance, predicted altitude gap, and seconds until closest approach.
+2. Check the aircraft data. Examine their positions, headings, speeds, altitude readings, and recent tracks to determine whether they are converging and how their separation changes over time.
+3. Look for normal flight patterns. Check whether the aircraft are near an airport or runway, descending in a landing queue, approaching parallel runways, vertically stacked, flying in formation, or moving on the ground.
+4. Choose the best-fitting verdict. Select a category based on the available evidence. If none of the normal patterns explains the predicted proximity, choose Real conflict. If the evidence is insufficient or inconsistent, choose Can't tell.
+5. Write a one-sentence explanation. Describe the specific evidence supporting the verdict, such as the aircraft's direction, altitude difference, predicted distance, or alignment with a runway. Record observable facts rather than claiming that an event was dangerous or that a violation occurred.
 
 ---
 

@@ -22,9 +22,11 @@ the repo rule: abstain rather than guess.
 from __future__ import annotations
 
 from air.detectors.spoofing.config import SpoofingConfig
+from air.detectors.spoofing.episodes import consolidate_episodes
 from air.detectors.spoofing.emit import to_detection
 from air.detectors.spoofing.features import (
     build_pair_features,
+    infer_altitude_quantum_ft,
     haversine_m,
     group_by_aircraft,
     split_segments,
@@ -138,6 +140,12 @@ class SpoofingDetector(BaseDetector):
                 events.extend(self._segment_events(segment, segment_id, cfg))
             events.extend(self._identity_events(track, segments, cfg))
 
+        # One finding per episode, not one per pair: a rule testing
+        # consecutive reports fires repeatedly for a single stretch of
+        # behaviour, and a queue of twelve identical rows reads as twelve
+        # aircraft rather than one.
+        events = consolidate_episodes(events, cfg)
+
         detections: list[Detection] = []
         for event in events:
             score = score_for(event, cfg)
@@ -163,14 +171,25 @@ class SpoofingDetector(BaseDetector):
         details = {"segment_id": -1, "observation_count": len(track)}
 
         def event(gate: str, detection_type: str, reason: str, **kwargs) -> SpoofingEvent:
+            """Build a track-wide event, with every default overridable.
+
+            The time bounds default to the aircraft's whole appearance in this
+            window, which is right for a gate describing a condition it is in
+            and wrong for one describing a single moment. A caller that has
+            the moment -- ``reappear_v1`` has the two reports either side of
+            the gap -- passes its own bounds, and they survive deduplication
+            across sliding windows because they do not move. The track-wide
+            default does move, which is why the gates that keep it are
+            entity-scoped in ``air/detectors/spoofing/emit.py``.
+            """
             kwargs.setdefault("details", details)
+            kwargs.setdefault("observed_from", track[0].observed_at)
+            kwargs.setdefault("observed_to", track[-1].observed_at)
             return SpoofingEvent(
                 gate=gate,
                 detection_type=detection_type,
                 reason=reason,
                 icao24s=(icao24,),
-                observed_from=track[0].observed_at,
-                observed_to=track[-1].observed_at,
                 latitude=track[-1].latitude,
                 longitude=track[-1].longitude,
                 altitude_ft=track[-1].altitude_ft,
@@ -225,6 +244,19 @@ class SpoofingDetector(BaseDetector):
                     measured=distance_nm,
                     threshold=reachable_nm,
                     unit="nm",
+                    # Anchored to the gap, not to the track. `event()` would
+                    # otherwise span the aircraft's whole appearance in this
+                    # window, which slides forward every tick and would give
+                    # the same reappearance a new dedup key each time. These
+                    # two reports are the finding, and their timestamps do not
+                    # move between windows -- the same reasoning as the CPA
+                    # anchoring in air/detectors/proximity/detector.py.
+                    #
+                    # Anchored rather than entity-scoped because an aircraft
+                    # can reappear impossibly more than once, and those are
+                    # genuinely separate findings.
+                    observed_from=last.observed_at,
+                    observed_to=first.observed_at,
                     details={
                         **details,
                         "gap_s": gap_s,
@@ -296,8 +328,18 @@ class SpoofingDetector(BaseDetector):
         """Run every physics rule over one unbroken stretch of a track."""
         events: list[SpoofingEvent] = []
 
+        # Read once per segment: a single pair cannot show the resolution
+        # this aircraft reports altitude in.
+        quantum_ft = infer_altitude_quantum_ft(
+            segment,
+            cfg.altitude_quantum_min_samples,
+            cfg.altitude_quantum_max_ft,
+        )
+
         for previous, current in zip(segment, segment[1:]):
-            record = build_pair_features(previous, current, segment_id)
+            record = build_pair_features(
+                previous, current, segment_id, quantum_ft
+            )
             if record is None:
                 continue
             events.extend(self._pair_events(record, segment, cfg))

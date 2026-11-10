@@ -100,7 +100,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     step = args.step if args.step is not None else args.window
-    dedup = step < args.window  # overlapping windows would otherwise double-count
+    # Overlapping windows evaluate the same moment twice, which is a genuine
+    # duplicate. Consecutive windows evaluate different moments, and repeated
+    # alerts about an ongoing encounter are wanted -- the front end groups them
+    # per pair. The detector's own alert_cooldown_s stops them being too
+    # frequent; see docs/proximity/PROX-5_dedup.md.
+    dedup = step < args.window
 
     # --- Build the requested detectors; skip (with a note) any not built yet.
     requested = args.detector or sorted(DETECTORS)

@@ -1,23 +1,47 @@
-# SkyWatch local-dev database — minimal, single service.
+# SkyWatch local dev — database + per-detector runner services.
 #
-# Brings up ONE container: Postgres with TimescaleDB + PostGIS, pre-loaded with
-# the canonical `observations` table and the three air detection tables. This is
-# all a student needs to populate observations locally, run the detectors against
-# a real database, and host a front end — WITHOUT the full SENTINEL platform
-# (no Kafka, NiFi, Neo4j, MinIO) and WITHOUT the company-confidential repo.
+# The `db` service is all a student needs to populate observations locally, run
+# the detectors against a real database, and host a front end — WITHOUT the full
+# SENTINEL platform (no Kafka, NiFi, Neo4j, MinIO) and WITHOUT the
+# company-confidential repo. The runner services (profile: runners) run each
+# detector continuously against that DB.
 #
-#   docker compose up -d db      # start it (first run also creates the schema)
-#   docker compose down          # stop it (keeps data)
-#   docker compose down -v        # stop AND wipe data (forces a fresh schema load)
+#   # Database only (the common case):
+#   docker compose up -d db          # start it (first run also creates the schema)
+#   docker compose down              # stop it (keeps data)
+#   docker compose down -v           # stop AND wipe data (forces a fresh schema load)
 #
-# The schema in ./db/schema is mounted into the image's init directory, so every
-# .sql there runs automatically ON FIRST BOOT (i.e. on an empty data volume). If
-# you change the schema, run `docker compose down -v` to re-initialise.
+#   # Runners (one container per detector), once the air/live spine is implemented:
+#   docker compose --profile runners up --build
+#
+# db/schema/*.sql runs in alphabetical order ON FIRST BOOT (empty data volume).
+# Ships with 001_observations.sql; detector tables and the runner cursor are
+# added in their ordered migrations (002-004 detector tables,
+# 005_detector_cursors.sql). After adding/changing a migration run
+# `docker compose down -v` to re-initialise.
 #
 # Connect from your host (detectors, psql, a dashboard):
 #   postgresql://skywatch:skywatch@localhost:5432/skywatch
 
 name: skywatch
+
+# Shared config for the three runner services: same image, same wiring, only the
+# `command` (which detector) differs. NOTE: the runners depend on the air/live
+# spine (reader + persistence + run_live). Until those bodies are implemented the
+# containers exit with NotImplementedError; the image and wiring are ready now.
+x-runner: &runner
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.runner
+  image: skywatch/runner:local       # built once, reused by all three services
+  profiles: ["runners"]
+  environment:
+    # `db` is the compose service hostname on the shared network (not localhost).
+    SKYWATCH_DB_DSN: ${SKYWATCH_DB_DSN:-postgresql://skywatch:skywatch@db:5432/skywatch}
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
 
 services:
   db:
@@ -33,8 +57,6 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/home/postgres/pgdata
-      # Every *.sql here runs in alphabetical order on first init. 001 creates
-      # observations; 002 creates the air detection tables.
       - ./db/schema:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -42,6 +64,52 @@ services:
       timeout: 5s
       start_period: 20s
       retries: 20
+
+  # One runner per detector. All three share the image above; each sets its
+  # detector via `command` (args to the Dockerfile ENTRYPOINT). Override
+  # window/step/poll by appending flags, e.g. ["--detector","proximity","--window-s","180"].
+  spoofing-runner:
+    <<: *runner
+    container_name: skywatch-spoofing-runner
+    command: ["--detector", "spoofing"]
+
+  proximity-runner:
+    <<: *runner
+    container_name: skywatch-proximity-runner
+    command: ["--detector", "proximity"]
+
+  no-fly-zone-runner:
+    <<: *runner
+    container_name: skywatch-no-fly-zone-runner
+    command: ["--detector", "no_fly_zone"]
+
+  # Live feed poller (profile: poller). Polls the SENTINEL ADS-B positions feed
+  # and upserts each aircraft's latest position into observations (domain='air'),
+  # so the local table mirrors the cloud. Reuses the runner image; only the
+  # entrypoint differs. Needs a whitelisted network (hostname is in public DNS)
+  # and the SENTINEL CA file mounted read-only — the cert is NOT baked into the
+  # image. Start it with:  docker compose --profile poller up -d adsb-poller
+  adsb-poller:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.runner
+    image: skywatch/runner:local        # same image the detector runners use
+    container_name: skywatch-adsb-poller
+    profiles: ["poller"]
+    entrypoint: ["python", "scripts/poll_adsb_feed.py"]
+    command: []                          # drop the image's default `--help`
+    environment:
+      # `db` is the compose service hostname on the shared network (not localhost).
+      SKYWATCH_DB_DSN: ${SKYWATCH_DB_DSN:-postgresql://skywatch:skywatch@db:5432/skywatch}
+      SKYWATCH_ADSB_URL: ${SKYWATCH_ADSB_URL:-https://adsb-ingest.sentinel.xenithsolutions.com/v1/adsb/positions.geojson}
+      SKYWATCH_ADSB_CA: /certs/sentinel-ca.crt
+      SKYWATCH_ADSB_POLL_SECONDS: ${SKYWATCH_ADSB_POLL_SECONDS:-10}
+    volumes:
+      - ${SKYWATCH_ADSB_CA_FILE:-./sentinel-ca.crt}:/certs/sentinel-ca.crt:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pgdata:

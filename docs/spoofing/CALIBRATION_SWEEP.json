@@ -1,0 +1,732 @@
+{
+  "turn_rate_dps": [
+    {
+      "setting": "turn_rate_dps",
+      "value": 6.0,
+      "alerts": 70,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 9.7
+    },
+    {
+      "setting": "turn_rate_dps",
+      "value": 8.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.1
+    },
+    {
+      "setting": "turn_rate_dps",
+      "value": 10.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.0
+    },
+    {
+      "setting": "turn_rate_dps",
+      "value": 15.0,
+      "alerts": 49,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.7
+    },
+    {
+      "setting": "turn_rate_dps",
+      "value": 20.0,
+      "alerts": 45,
+      "guards_held": 5,
+      "guards_total": 6,
+      "positives_fired": 12,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [
+        "pos_guard_turn_at_cruise.json"
+      ],
+      "seconds": 12.2
+    },
+    {
+      "setting": "turn_rate_dps",
+      "value": 30.0,
+      "alerts": 44,
+      "guards_held": 5,
+      "guards_total": 6,
+      "positives_fired": 12,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [
+        "pos_guard_turn_at_cruise.json"
+      ],
+      "seconds": 11.7
+    },
+    {
+      "setting": "turn_rate_dps",
+      "value": 45.0,
+      "alerts": 43,
+      "guards_held": 5,
+      "guards_total": 6,
+      "positives_fired": 12,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [
+        "pos_guard_turn_at_cruise.json"
+      ],
+      "seconds": 12.6
+    }
+  ],
+  "speed_delta_kt": [
+    {
+      "setting": "speed_delta_kt",
+      "value": 25.0,
+      "alerts": 58,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.5
+    },
+    {
+      "setting": "speed_delta_kt",
+      "value": 50.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 13.4
+    },
+    {
+      "setting": "speed_delta_kt",
+      "value": 75.0,
+      "alerts": 49,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 12.6
+    },
+    {
+      "setting": "speed_delta_kt",
+      "value": 100.0,
+      "alerts": 48,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 13.9
+    },
+    {
+      "setting": "speed_delta_kt",
+      "value": 150.0,
+      "alerts": 33,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 13.6
+    },
+    {
+      "setting": "speed_delta_kt",
+      "value": 200.0,
+      "alerts": 23,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 12,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 14.2
+    }
+  ],
+  "speed_delta_frac": [
+    {
+      "setting": "speed_delta_frac",
+      "value": 0.15,
+      "alerts": 93,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 14.4
+    },
+    {
+      "setting": "speed_delta_frac",
+      "value": 0.3,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 13.9
+    },
+    {
+      "setting": "speed_delta_frac",
+      "value": 0.45,
+      "alerts": 28,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 12.5
+    },
+    {
+      "setting": "speed_delta_frac",
+      "value": 0.6,
+      "alerts": 22,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.0
+    },
+    {
+      "setting": "speed_delta_frac",
+      "value": 0.8,
+      "alerts": 21,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.3
+    }
+  ],
+  "vrate_delta_fpm": [
+    {
+      "setting": "vrate_delta_fpm",
+      "value": 1000.0,
+      "alerts": 67,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.2
+    },
+    {
+      "setting": "vrate_delta_fpm",
+      "value": 2000.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.0
+    },
+    {
+      "setting": "vrate_delta_fpm",
+      "value": 4000.0,
+      "alerts": 46,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.6
+    },
+    {
+      "setting": "vrate_delta_fpm",
+      "value": 6000.0,
+      "alerts": 45,
+      "guards_held": 5,
+      "guards_total": 6,
+      "positives_fired": 12,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [
+        "pos_guard_vrate_lie_at_cruise.json"
+      ],
+      "seconds": 11.3
+    },
+    {
+      "setting": "vrate_delta_fpm",
+      "value": 9000.0,
+      "alerts": 45,
+      "guards_held": 5,
+      "guards_total": 6,
+      "positives_fired": 12,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [
+        "pos_guard_vrate_lie_at_cruise.json"
+      ],
+      "seconds": 11.1
+    },
+    {
+      "setting": "vrate_delta_fpm",
+      "value": 12000.0,
+      "alerts": 45,
+      "guards_held": 5,
+      "guards_total": 6,
+      "positives_fired": 12,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [
+        "pos_guard_vrate_lie_at_cruise.json"
+      ],
+      "seconds": 11.0
+    }
+  ],
+  "position_error_m": [
+    {
+      "setting": "position_error_m",
+      "value": 10.0,
+      "alerts": 75,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.8
+    },
+    {
+      "setting": "position_error_m",
+      "value": 30.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.8
+    },
+    {
+      "setting": "position_error_m",
+      "value": 60.0,
+      "alerts": 23,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 12,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.7
+    },
+    {
+      "setting": "position_error_m",
+      "value": 100.0,
+      "alerts": 20,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 12,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.2
+    },
+    {
+      "setting": "position_error_m",
+      "value": 200.0,
+      "alerts": 19,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 12,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.2
+    }
+  ],
+  "altitude_quantum_ft": [
+    {
+      "setting": "altitude_quantum_ft",
+      "value": 25.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.2
+    },
+    {
+      "setting": "altitude_quantum_ft",
+      "value": 50.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.7
+    },
+    {
+      "setting": "altitude_quantum_ft",
+      "value": 100.0,
+      "alerts": 51,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.8
+    },
+    {
+      "setting": "altitude_quantum_ft",
+      "value": 200.0,
+      "alerts": 48,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.2
+    }
+  ],
+  "teleport_kt": [
+    {
+      "setting": "teleport_kt",
+      "value": 600.0,
+      "alerts": 77,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 9,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 9.9
+    },
+    {
+      "setting": "teleport_kt",
+      "value": 800.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.2
+    },
+    {
+      "setting": "teleport_kt",
+      "value": 1000.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.2
+    },
+    {
+      "setting": "teleport_kt",
+      "value": 1500.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.0
+    },
+    {
+      "setting": "teleport_kt",
+      "value": 3000.0,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.5
+    }
+  ],
+  "min_dt_s": [
+    {
+      "setting": "min_dt_s",
+      "value": 0.5,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.7
+    },
+    {
+      "setting": "min_dt_s",
+      "value": 1.0,
+      "alerts": 46,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.4
+    },
+    {
+      "setting": "min_dt_s",
+      "value": 2.0,
+      "alerts": 20,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.5
+    },
+    {
+      "setting": "min_dt_s",
+      "value": 3.0,
+      "alerts": 14,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.2
+    },
+    {
+      "setting": "min_dt_s",
+      "value": 5.0,
+      "alerts": 14,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 13,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.8
+    }
+  ],
+  "min_confidence": [
+    {
+      "setting": "min_confidence",
+      "value": 0.2,
+      "alerts": 53,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.8
+    },
+    {
+      "setting": "min_confidence",
+      "value": 0.35,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.1
+    },
+    {
+      "setting": "min_confidence",
+      "value": 0.5,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 9.8
+    },
+    {
+      "setting": "min_confidence",
+      "value": 0.65,
+      "alerts": 43,
+      "guards_held": 5,
+      "guards_total": 6,
+      "positives_fired": 11,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [
+        "pos_guard_impersonation.json"
+      ],
+      "seconds": 10.0
+    },
+    {
+      "setting": "min_confidence",
+      "value": 0.8,
+      "alerts": 1,
+      "guards_held": 0,
+      "guards_total": 6,
+      "positives_fired": 0,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [
+        "pos_guard_impersonation.json",
+        "pos_guard_integrity_collapse.json",
+        "pos_guard_speed_lie_long_gap.json",
+        "pos_guard_teleport.json",
+        "pos_guard_turn_at_cruise.json",
+        "pos_guard_vrate_lie_at_cruise.json"
+      ],
+      "seconds": 11.5
+    }
+  ],
+  "min_segment_observations": [
+    {
+      "setting": "min_segment_observations",
+      "value": 2,
+      "alerts": 53,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 10.3
+    },
+    {
+      "setting": "min_segment_observations",
+      "value": 3,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 13.4
+    },
+    {
+      "setting": "min_segment_observations",
+      "value": 5,
+      "alerts": 52,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.2
+    },
+    {
+      "setting": "min_segment_observations",
+      "value": 8,
+      "alerts": 50,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.0
+    },
+    {
+      "setting": "min_segment_observations",
+      "value": 12,
+      "alerts": 50,
+      "guards_held": 6,
+      "guards_total": 6,
+      "positives_fired": 14,
+      "positives_total": 15,
+      "negatives_quiet": 10,
+      "negatives_total": 10,
+      "missed_guards": [],
+      "seconds": 11.4
+    }
+  ]
+}

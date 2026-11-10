@@ -3,7 +3,10 @@
 from air.detectors.proximity.config import ProximityConfig, SeverityTier, load_config
 from air.detectors.proximity.detector import (
     ProximityDetector,
+    anomaly_score_for,
     confidence_for,
+    position_quality,
+    raw_model_confidence_for,
     explanation_facts,
     to_detection,
 )
@@ -25,7 +28,10 @@ __all__ = [
     "ProximityDetector",
     "SeverityTier",
     "build_detector",
+    "anomaly_score_for",
     "confidence_for",
+    "position_quality",
+    "raw_model_confidence_for",
     "explanation_facts",
     "flag_pair",
     "load_config",

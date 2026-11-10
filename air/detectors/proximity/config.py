@@ -52,6 +52,9 @@ class ProximityConfig:
     ground_speed_kt: float = 50.0
 
     max_tcpa_s: float = 120.0
+    max_current_separation_nm: float = 10.0
+    min_altitude_ft: float = 5000.0
+    alert_cooldown_s: float = 60.0
 
     tiers: tuple[SeverityTier, ...] = field(default_factory=tuple)
 
@@ -60,6 +63,12 @@ class ProximityConfig:
             raise ValueError("grid_step_s must be positive")
         if self.max_tcpa_s <= 0:
             raise ValueError("max_tcpa_s must be positive")
+        if self.max_current_separation_nm <= 0:
+            raise ValueError("max_current_separation_nm must be positive")
+        if self.min_altitude_ft < 0:
+            raise ValueError("min_altitude_ft must not be negative")
+        if self.alert_cooldown_s < 0:
+            raise ValueError("alert_cooldown_s must not be negative")
         tiers = tuple(
             t if isinstance(t, SeverityTier) else SeverityTier(**t) for t in self.tiers
         )
