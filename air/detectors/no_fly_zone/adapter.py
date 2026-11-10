@@ -129,6 +129,15 @@ def configured_airspace_path(cfg: Config) -> Path:
     return configured if configured.is_absolute() else _PACKAGE_DIR / configured
 
 
+def live_airspace_path(cfg: Config) -> Path | None:
+    """Resolve ``airspace.live_path`` like ``fixture_path``; None if not configured."""
+    configured = cfg["airspace"].get("live_path")
+    if not configured:
+        return None
+    path = Path(configured)
+    return path if path.is_absolute() else _PACKAGE_DIR / path
+
+
 def observation_to_state(obs: Any) -> AircraftState:
     """Convert one shared ``AdsbObservation`` into an NFZ ``AircraftState``.
 

@@ -75,3 +75,30 @@ def test_rejects_missing_geometry_section(cfg: Config) -> None:
     raw = {k: v for k, v in cfg.raw.items() if k != "geometry"}
     with pytest.raises(ValueError, match="h3_resolution"):
         candidate_zone_ids(make_state(), ZONES, Config(raw))
+
+
+def test_zone_cells_are_cached_per_geometry_and_dropped_when_it_is_freed() -> None:
+    # The cache is keyed on the geometry object, not its serialized outline
+    # (serializing every zone on every report was 85% of run time). An entry
+    # must leave with its geometry so a reused id never gets another zone's cells.
+    import gc
+
+    from air.detectors.no_fly_zone.geo import zone_index
+
+    zone = make_zone("TEMP", -79.3, 37.3, -79.1, 37.5)
+    first = zone_index._zone_cells(zone, 7)
+    assert zone_index._zone_cells(zone, 7) is first          # served from the cache
+    key = (id(zone.geometry), 7)
+    assert key in zone_index._CELLS_BY_GEOMETRY
+
+    del zone, first
+    gc.collect()
+    assert key not in zone_index._CELLS_BY_GEOMETRY
+
+
+def test_different_geometries_never_share_cells() -> None:
+    from air.detectors.no_fly_zone.geo import zone_index
+
+    near = make_zone("NEAR", -79.3, 37.3, -79.1, 37.5)
+    far = make_zone("FAR", -76.2, 38.0, -76.0, 38.2)
+    assert not zone_index._zone_cells(near, 7) & zone_index._zone_cells(far, 7)

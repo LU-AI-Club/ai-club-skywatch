@@ -28,6 +28,10 @@ pytest.importorskip("shapely")
 pytest.importorskip("h3")
 
 from air.detectors.no_fly_zone import build_detector, build_live_detector  # noqa: E402
+
+# Unit tests pin the hand-built zones; the live default is the real FAA file.
+FIXTURE_ZONES = (Path(__file__).resolve().parents[4]
+                 / "air/detectors/no_fly_zone/fixtures/airspace/klyh-150nm.geojson")
 from air.detectors.no_fly_zone.adapter import NoFlyZoneDetector  # noqa: E402
 from air.models.observation import AdsbObservation  # noqa: E402
 from air.windowing import detection_dedup_key  # noqa: E402
@@ -75,11 +79,11 @@ def inside(seconds: int) -> AdsbObservation:
 
 @pytest.fixture
 def live() -> NoFlyZoneDetector:
-    return build_live_detector()
+    return build_live_detector(airspace_path=FIXTURE_ZONES)
 
 
 def test_live_factory_turns_on_open_episodes() -> None:
-    assert build_live_detector().emit_open is True
+    assert build_live_detector(airspace_path=FIXTURE_ZONES).emit_open is True
     assert build_detector().emit_open is False
 
 

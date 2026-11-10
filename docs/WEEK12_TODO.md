@@ -5,14 +5,14 @@ Live-pipeline work. Each ticket is short; add more below in the same shape
 
 ## Tickets
 
-- [ ] **Loop resilience in the runner** — `air/live/runner.py` (`run_live`) · No-Fly-Zone (Spine C)
+- [x] **Loop resilience in the runner** — `air/live/runner.py` (`run_live`) · No-Fly-Zone (Spine C) · **done in #122**
   `_tick` runs one pass and marks its run FAILED on error, but the exception still
   propagates and kills the loop. In continuous mode: isolate errors per tick (log
   and keep going), emit one structured log line per tick (window bounds + counts),
   and shut down cleanly on SIGTERM. The poller (`poll_adsb_feed.py`) already does
   this — mirror it.
 
-- [ ] **Runner never catches up after downtime** — `air/live/runner.py` (`_window_bounds`) · No-Fly-Zone (Spine C)
+- [x] **Runner never catches up after downtime** — `air/live/runner.py` (`_window_bounds`) · No-Fly-Zone (Spine C) · **done in #122**
   The cursor advances by `step_s` per tick while real time advances `poll_interval_s`.
   With the defaults (`step_s == poll_interval_s`), the lag after any gap stays
   constant forever — the pipeline runs permanently N seconds behind (N = downtime)
@@ -25,7 +25,7 @@ Live-pipeline work. Each ticket is short; add more below in the same shape
   the cause of the missing-table failures in testing. Add an idempotent
   apply-on-boot (or a real migration step) so a running DB stays current.
 
-- [ ] **Runner should fail-fast on misconfiguration** — `air/live/runner.py` + `scripts/run_live_detector.py` · Tech Lead / Spine C
+- [ ] **Runner should fail-fast on misconfiguration** — `air/live/runner.py` + `scripts/run_live_detector.py` · Tech Lead / Spine C · *ticketed as NFZ-12Q*
   A detector whose table is missing reports SUCCESS while it finds 0 detections,
   then crashes on the first real one; `load_extra_columns` silently returns None
   if the module/function name is wrong (drops that detector's columns). Validate at
@@ -46,7 +46,7 @@ Live-pipeline work. Each ticket is short; add more below in the same shape
   report reliably for multi-row `ON CONFLICT` — so the `inserted`/`duplicates` log
   counts can be wrong. Logging-only, but misleading when checking the feed.
 
-- [ ] **No single-instance guard on a runner** — `air/live/runner.py` · Spine C / Tech Lead
+- [ ] **No single-instance guard on a runner** — `air/live/runner.py` · Spine C / Tech Lead · *ticketed as NFZ-12R*
   Two instances of one detector (crash-loop overlap, or a tick outliving its
   interval) can run concurrently; cursor `GREATEST` + dedup keep results correct but
   waste work and can contend. A Postgres advisory lock (the maritime pattern) would

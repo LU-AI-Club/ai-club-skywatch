@@ -25,6 +25,12 @@ sampling:
 airspace:
   # Relative to air/detectors/no_fly_zone/ (the CLI resolves it there), not to this file.
   fixture_path: fixtures/airspace/klyh-150nm.geojson
+  # Real FAA zones for the LIVE runner only (build_live_detector): the Lynchburg
+  # area (within 65 nm of KLYH) plus P-56, Washington DC, as an always-active
+  # prohibited area. Committed so every machine runs the same 15 zones. Rebuild
+  # it each FAA cycle with the command in docs/RUN_PIPELINE.md.
+  # Tests, replay and the CLI always use fixture_path.
+  live_path: fixtures/airspace/klyh-local-faa.geojson
   source_asof: "2026-08-07"   # SUA publication cycle; update with the file
   include_types: [PROHIBITED, RESTRICTED, TFR, WARNING, ALERT, MOA]
   # Community-reported U.S. DoD block; heuristic, not authoritative identity proof.

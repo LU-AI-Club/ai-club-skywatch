@@ -64,8 +64,16 @@ __all__ = ["observation_from_row"]
 _log = logging.getLogger(__name__)
 
 # The ADS-B fields that live inside ``payload`` rather than in typed columns.
-# Each name is the same on both sides: the loader writes
-# ``payload["altitude_ft"] = obs.altitude_ft``, so we read it straight back.
+#
+# Two feeds write this column and they do not agree, so both shapes are read.
+#
+# ``scripts/load_observations_csv.py`` writes our own names flat:
+# ``payload["altitude_ft"] = obs.altitude_ft``, read straight back.
+#
+# ``scripts/poll_adsb_feed.py`` -- the live Xenith feed -- writes the SENTINEL
+# envelope verbatim: ``{"key", "source", "payload": {...raw readsb...}}``. The
+# fields we want are one level down AND under readsb's own names, so neither
+# half of that matches what the CSV path produces.
 _PAYLOAD_FIELDS = (
     "altitude_ft",
     "alt_geom_ft",
@@ -78,6 +86,27 @@ _PAYLOAD_FIELDS = (
     "on_ground",
     "receiver_id",
 )
+
+# readsb's name -> ours. Only the fields a detector reads; the envelope carries
+# plenty more (rssi, messages, nav_modes) that nothing consumes.
+#
+# vertical rate prefers barometric and falls back to geometric, matching
+# air/normalizers/adsb_csv.py, so the two paths agree on which one they mean.
+_READSB_FIELDS = {
+    "alt_baro": "altitude_ft",
+    "alt_geom": "alt_geom_ft",
+    "baro_rate": "vertical_rate_fpm",
+    "nic": "nic",
+    "nac_p": "nacp",
+    "squawk": "squawk",
+    "flight": "callsign",
+    "category": "emitter_category",
+}
+_READSB_VRATE_FALLBACK = "geom_rate"
+
+# readsb reports an aircraft on the ground by sending the string "ground" in
+# place of a numeric altitude, rather than with a boolean field of its own.
+_READSB_GROUND = "ground"
 
 _ENTITY_PREFIX = "icao24:"
 
@@ -99,6 +128,53 @@ def _payload_dict(raw: Any) -> Mapping[str, Any]:
             return {}
         return parsed if isinstance(parsed, Mapping) else {}
     return {}
+
+
+def _optional_fields(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Pull the optional ADS-B fields, whichever of the two shapes this is.
+
+    Our own flat payload is read directly. A SENTINEL envelope -- the live feed
+    -- is unwrapped and translated from readsb's names.
+
+    Detected by structure rather than by a flag: an envelope has a nested
+    ``payload`` mapping, and ours never does. A flag would have to be written
+    by both producers and would be wrong the first time a third one appeared.
+
+    Why this matters more than it looks: every field here is optional, so
+    failing to find one is indistinguishable from the aircraft not reporting
+    it. Before this translation existed the reader returned live observations
+    with all nine fields ``None`` and no error -- a detector with no altitude,
+    no NIC and no callsign looks exactly like a quiet sky. It is not only ours:
+    ``squawk`` carries the 7500/7600/7700 emergency codes the no-fly-zone
+    detector reads.
+    """
+    inner = payload.get("payload")
+    if not isinstance(inner, Mapping):
+        return {name: payload.get(name) for name in _PAYLOAD_FIELDS}
+
+    fields: dict[str, Any] = dict.fromkeys(_PAYLOAD_FIELDS)
+    for source, target in _READSB_FIELDS.items():
+        value = inner.get(source)
+        if value is not None:
+            fields[target] = value
+
+    if fields["vertical_rate_fpm"] is None:
+        fields["vertical_rate_fpm"] = inner.get(_READSB_VRATE_FALLBACK)
+
+    # "ground" where an altitude should be is readsb saying the aircraft is on
+    # the ground. Taken as the on_ground flag, and not left in altitude_ft,
+    # where a non-numeric value would fail the dataclass's own validation and
+    # cost us the whole observation.
+    if isinstance(fields["altitude_ft"], str):
+        on_ground = fields["altitude_ft"].strip().lower() == _READSB_GROUND
+        fields["altitude_ft"] = None
+        fields["on_ground"] = on_ground
+
+    # readsb pads the callsign to eight characters.
+    if isinstance(fields["callsign"], str):
+        fields["callsign"] = fields["callsign"].strip() or None
+
+    return fields
 
 
 def observation_from_row(row: Mapping[str, Any]) -> AdsbObservation | None:
@@ -130,7 +206,7 @@ def observation_from_row(row: Mapping[str, Any]) -> AdsbObservation | None:
             ground_speed_kt=row.get("sog"),
             track_deg=row.get("cog"),
             source_row_id=row.get("raw_record_ref"),
-            **{name: payload.get(name) for name in _PAYLOAD_FIELDS},
+            **_optional_fields(payload),
         )
     except Exception:  # noqa: BLE001 -- one bad row must not kill a window
         _log.debug("skipping observations row that could not be mapped", exc_info=True)

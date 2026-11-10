@@ -1,191 +1,304 @@
-# No-Fly-Zone — Week 12 tickets
+# No-Fly-Zone — Week 12 team handout
 
-Per Nate's Week 12 email: get the live pipeline running, then improve detectors
-for **false positives** and **inefficiencies**. These came out of running the
-no-fly-zone lane end to end (reader → detector → `no_fly_zone_detections`) and
-reading what the live path actually does, not from looking for things to change.
+The live pipeline runs for no-fly-zone. This page is what is left, split so each
+person can take one ticket and work without waiting on anyone else.
 
-Branch off `main`, PR into `main`. Every ticket finishes with a fixture test
-(`docs/DETECTOR_PLAYBOOK.md`); no live services in tests.
+**How to take a ticket**
 
-**Already fixed in the PR that adds this file** (not tickets):
-
-- `air/detectors/no_fly_zone/live.py` fills `zone_id`, `zone_name` and `zone_type`,
-  so NFZ detections can be stored at all (`zone_id` and `zone_type` are NOT NULL).
-- The live runner called `flush()` every tick. For NFZ that closed each incursion
-  every 30 s and restarted it as a new row, so one crossing became one row per
-  tick. `flush()` now runs only at the end of a stream (`--once`). Spine C is ours,
-  so this was ours to fix.
-- `docs/RUN_PIPELINE.md` now counts and shows `no_fly_zone_detections`.
-
-| Ticket | What | Kind | Size | Needs live data |
-|---|---|---|---|---|
-| NFZ-12A | Confirm the live payload carries altitude | Blocking check | S | Yes |
-| NFZ-12B | Late-arriving reports are dropped | Missed incursions | M | No |
-| NFZ-12C | Real FAA airspace in the live runner | Coverage | M | No |
-| NFZ-12D | 46 of 52 real zones have UNKNOWN activation | Precision | M | No |
-| NFZ-12E | 17 of 52 real zones can never fire (AGL floors) | Coverage | M | No |
-| NFZ-12F | Measure episodes and cost at the live rate | Tuning / efficiency | M | Yes |
-| NFZ-12G | Fix the stale spine test so `main` is green | Hygiene | S | No |
-| NFZ-12H | Point the dashboard at the live table | Demo | M | No |
+1. Put your name next to it in the [ticket list](#ticket-list) (edit this file in your PR).
+2. Branch off `main`, PR into `main`. One ticket per PR.
+3. Every ticket ends with a fixture test, no live services in tests
+   (`docs/DETECTOR_PLAYBOOK.md`). Ticket IDs go in the PR title (`NFZ-12D: …`).
+4. Read `air/detectors/no_fly_zone/AGENTS.md` first: `types.py` and
+   `configs/detectors/no_fly_zone.yaml` are lead-owned, so ask Tim before changing them.
 
 ---
 
-## NFZ-12A — Does the live payload reach us with altitude? *(check first)*
+## Where things stand
 
-**Owner:** ___ · same question as the spoofing team's SPOOF-12C; do it once, together.
+| Piece | State |
+|---|---|
+| Detector, table, mapper (`live.py`) | ✅ Working; one row per incursion, opened on entry, closed on exit |
+| Live runner (Spine C, ours) | ✅ Keeps up with live time, survives DB errors, stops cleanly, logs every tick (#122) |
+| Zones | ✅ 15 real FAA zones committed: the Lynchburg area (within 65 nm of KLYH) plus P-56 over Washington DC (#120) |
+| Live feed → `observations` | ✅ Poller works from an allowlisted machine |
+| Live feed fields (altitude, squawk, NIC…) | ✅ The reader translates the feed's nested fields, so NFZ sees altitude on live data (#121, Will). Rebuild with `--build` after pulling |
+| `main` test suite | ✅ Passing: 1067 passed, 0 failed (the stale spine test was fixed in #116, Will) |
 
-`scripts/poll_adsb_feed.py` stores the SENTINEL envelope verbatim, and
-`docs/RUN_PIPELINE.md` says the readsb fields sit nested under `payload.payload`.
-`air/live/payload.py` reads them flat (`payload["altitude_ft"]`), the shape the
-CSV loader writes. If both are true, every live observation reaches us with
-`altitude_ft = alt_geom_ft = None`.
+**What the zones are.** Fort Pickett **R-6602A/B/C** (restricted) and **P-56**
+(prohibited, always active) are the real "violation" zones. The 10 local MOAs
+(Farmville, Evers, Barfoot) are military training airspace that civilian pilots
+may legally fly through, so NFZ scores them LOW/INFO: context, not violations.
 
-For no-fly-zone that is total: `geo/altitude.py` abstains with `BAD_INPUT` when
-both altitudes are missing, so **every** aircraft exits before scoring, every run
-reports `SUCCESS` with 0 detections, and it looks exactly like a quiet sky.
-Squawk, callsign and NIC/NACp go too, which silences the context signals.
+**Expect few detections.** Replaying one real hour of Lynchburg traffic over the
+15 zones gave 2 detections (Evers South MOA, both LOW). The tickets below are
+mostly about making the nearby zones *able* to fire and fire at the right
+severity.
 
-**Do:** with the poller running, check one real row:
+---
+
+## Ticket list
+
+| Track | Ticket | What | Size | Needs live data | Owner |
+|---|---|---|---|---|---|
+| **A · Detection quality** | [NFZ-12D](#nfz-12d--parse-the-local-zones-schedules) | Parse the local zones' schedules | M | No | |
+| | [NFZ-12E](#nfz-12e--let-agl-floor-zones-fire) | Let AGL-floor zones fire (7 of 13 local zones can't) | M | No | |
+| | [NFZ-12L](#nfz-12l--grade-confidence-instead-of-0-or-1) | Grade confidence instead of 0 or 1 | M | No | |
+| | [NFZ-12M](#nfz-12m--apply-airspaceinclude_types) | Apply `airspace.include_types` | S | No | |
+| **B · Live validation** | [NFZ-12N](#nfz-12n--end-to-end-tests-in-the-repo-e1e2) | End-to-end tests in the repo (E1/E2) | M | No | |
+| | [NFZ-12O](#nfz-12o--live-smoke-test-and-behaviour-note-e3e4) | Live smoke test + behaviour note (E3/E4) | M | **Yes** | |
+| | [NFZ-12P](#nfz-12p--run-the-database-tests-in-ci) | Run the database tests in CI | S | No | |
+| **C · Runner (Spine C)** | [NFZ-12K](#nfz-12k--skip-reasons-in-the-heartbeat) | Skip reasons in the heartbeat ("fail safely") | S | No | |
+| | [NFZ-12Q](#nfz-12q--fail-fast-on-misconfiguration) | Fail fast on misconfiguration | S | No | |
+| | [NFZ-12R](#nfz-12r--one-runner-per-detector) | One runner per detector (advisory lock) | S | No | |
+| **D · Demo** | [NFZ-12H](#nfz-12h--live-incursions-on-the-dashboard) | Live incursions on the dashboard | M | No | |
+
+Tracks don't depend on each other. Inside track A, 12D and 12E touch different
+files (`logic/activation.py` vs `geo/altitude.py`) and can run in parallel.
+12Q and 12R come from Nate's `docs/WEEK12_TODO.md` (tagged Spine C / Tech Lead),
+so tell him when you pick one up.
+
+---
+
+## Track A · Detection quality
+
+### NFZ-12D — Parse the local zones' schedules
+
+**Files:** `scripts/make_faa_airspace.py`, `logic/activation.py`, `fixtures/airspace/klyh-local-faa.geojson`
+
+**Why.** FAA "times of use" is free text, and only `CONTINUOUS` is understood
+today. Every local zone except P-56 is therefore UNKNOWN activation, and UNKNOWN
+caps severity at LOW (`severity.unknown_activation_cap`), so an aircraft in
+Fort Pickett's restricted area during its published active season scores the same
+as one in a cold MOA at midnight.
+
+**The local zones use only four phrasings:**
+
+| Zones | `times_of_use` |
+|---|---|
+| Farmville MOA ×3 | `0800 - 1700, MON - FRI; O/T BY NOTAM` |
+| Evers South/Center/Low/East | `0630 - SUNSET, DAILY, BY NOTAM; OTHER TIMES BY NOTAM` |
+| Barfoot 1–3 | `INTERMITTENT, SUNRISE - SUNSET, DAILY` |
+| R-6602A | `MAY 1 - SEP 15, CONTINUOUS; OTHER TIMES BY NOTAM 24 HRS IN ADVANCE` |
+
+(R-6602B/C are `BY NOTAM 24 HRS IN ADVANCE` only, and stay UNKNOWN.)
+
+**Do.** Turn these into `active_windows` (local time is US Eastern). Decide and
+document the meaning: inside a published window the zone is *scheduled* active;
+outside it, "O/T BY NOTAM" means it *may* still be active, so stay UNKNOWN rather
+than claiming it's cold. `INTERMITTENT` and sunrise/sunset need a choice too
+(a small solar formula for KLYH is enough). Unparseable text stays UNKNOWN.
+
+**Done when.** One test per phrasing (inside and outside the window), the
+regenerated local file is committed, and the PR states how many of the 15 zones
+now have known activation at a given time.
+
+### NFZ-12E — Let AGL-floor zones fire
+
+**Files:** `geo/altitude.py` (plus a small terrain grid)
+
+**Why.** A floor like "300 FT SFC" means 300 ft *above the ground*, so it maps to
+`Datum.AGL`, and the vertical check abstains on AGL because the detector has no
+terrain model. **7 of the 13 Lynchburg-area zones have AGL floors** (Farmville
+×3, Evers Low and East, Barfoot 1 and 2), so more than half the nearby airspace
+can never alert. On the one-hour replay, 1,645 reports exited `bad_input`,
+mostly here.
+
+**Do.** Add terrain elevation for the 65 nm area as a small pre-sampled grid,
+committed and loaded once (no network at import). Compare
+`altitude − terrain` against AGL limits. Keep abstaining where terrain is unknown.
+
+**Done when.** A fixture aircraft below an AGL floor doesn't fire and one above it
+does; a test covers the grid edge (outside it → abstain).
+
+### NFZ-12L — Grade confidence instead of 0 or 1
+
+**Files:** `logic/scoring.py`
+
+**Why.** `raw_model_confidence = float(confirmed)`: 1.0 only for an active zone
+with the aircraft fully inside, otherwise 0.0. Every detection in the real-traffic
+replay was 0.0. The syllabus (§6) says the detector supplies *detector-level
+uncertainty* for TCE/CAATS; a column of zeros gives it nothing to weigh.
+
+**Do.** Derive confidence from what is actually uncertain: activation unknown,
+buffered-only containment (position error vs distance to the boundary), altitude
+source (geometric vs barometric). Keep `anomaly_score` meaning "how bad" and
+confidence meaning "how sure".
+
+**Done when.** Tests show the ordering across those cases; severity is unchanged.
+
+### NFZ-12M — Apply `airspace.include_types`
+
+**Files:** `__init__.py` (`build_detector`) or `adapter.py`
+
+**Why.** The config lists `include_types`, and the loader's docstring says
+filtering is the caller's job, but no caller does it, so editing the list changes
+nothing.
+
+**Do.** Filter zones by `include_types` where they are loaded, so for example MOAs
+can be dropped from alerting by config alone.
+
+**Done when.** A test where removing `MOA` from the list removes the MOA zones.
+
+---
+
+## Track B · Live validation
+
+These are Part 4 of `docs/live_integration/TEAM_NO_FLY_ZONE.md` (E1–E4), our
+team's assigned validation work.
+
+### NFZ-12N — End-to-end tests in the repo (E1/E2)
+
+**Files:** new `tests/air/detectors/no_fly_zone/test_nfz_end_to_end.py`
+
+**Why.** The chain observations → runner → `no_fly_zone_detections` has been
+proven against a real Postgres, but only with a script that isn't in the repo.
+Nothing in the suite would catch a regression.
+
+**Do.** A test that seeds `observations` with the crossings fixture
+(`fixtures/tracks/lynchburg_crossings.csv`) and runs
+`run_live(..., once=True)` (E1); and a test that drives two or more ticks with an
+incursion crossing a window edge and asserts **one** row (E2). Use a throwaway
+database and skip when `SKYWATCH_TEST_DSN` isn't set, like the real-Postgres test
+in `test_nfz_live.py`. Pin the fixture zones (`klyh-150nm.geojson`). Tim has
+the working script to start from.
+
+**Done when.** Both pass locally against `docker compose up -d db`.
+
+### NFZ-12O — Live smoke test and behaviour note (E3/E4)
+
+**Needs:** the poller running on a campus machine, and a runner built from `main` at or after #121 (altitude check: `docs/RUN_PIPELINE.md`, Known gotchas).
+
+**Why.** Everything we know about detection rates comes from a recorded hour.
+The spoofing team's version of this is `docs/spoofing/LIVE_SMOKE.md` (#124),
+a good model.
+
+**Do.** Run the poller and the NFZ runner continuously for at least a few hours.
+Report: detections per hour by zone, how many are one aircraft split into
+several episodes, the share of reports skipped as `bad_input`, and the runner's
+`lag_s` / `duration_s` from `docker logs`. Capture one or two real incursions as
+fixtures. Note whether `max_gap_sec` (30 s) holds at the feed's rate (it did on
+the replay: 40 vs 42 detections, one split).
+
+**Done when.** A short `docs/no_fly_zone/LIVE_SMOKE.md` with the numbers, and any
+captured fixtures committed with a test.
+
+### NFZ-12P — Run the database tests in CI
+
+**Files:** `.github/workflows/tests.yml`
+
+**Why.** CI has no Postgres, so every test that needs one (`test_nfz_live.py`'s
+real-database test, persistence, the reader SQL, NFZ-12N) is skipped there.
+
+**Do.** Add a `timescale/timescaledb-ha:pg14` service (the same image as
+`docker-compose.yml`), load `db/schema/*.sql`, set `SKYWATCH_TEST_DSN`.
+
+**Done when.** CI shows those tests running, not skipped.
+
+---
+
+## Track C · Runner (Spine C)
+
+### NFZ-12K — Skip reasons in the heartbeat
+
+**Files:** `air/live/runner.py`, `docs/RUN_PIPELINE.md`
+
+**Why.** Week 12's exit criterion is "each detector fails safely". NFZ counts why
+every report left without a detection (`exit_counts`: `no_candidate`,
+`vertical_clear`, `bad_input`, …), but the heartbeat (`detector_runs.counts`)
+only stores observations and detections. A detector that can't see altitude and
+a quiet sky look identical: `SUCCESS`, 0. That is exactly what live data did
+before #121.
+
+**Do.** Add the per-tick change in `exit_counts` to the heartbeat counts when the
+detector has them (only NFZ does today; keep it optional). A `bad_input` share
+near 100% is the alarm.
+
+**Done when.** A runner test shows the counts in `finish_run`, and
+`RUN_PIPELINE.md` has a query that shows them.
+
+### NFZ-12Q — Fail fast on misconfiguration
+
+**Files:** `air/live/runner.py`, `scripts/run_live_detector.py`
+
+**Why** (from Nate's `WEEK12_TODO.md`). A missing detection table isn't noticed
+until the first real detection, and `load_extra_columns` silently returns `None`
+if the module or function name is wrong, dropping that detector's columns.
+
+**Do.** At startup, check the table exists and the mapper loaded; log what loaded;
+exit with a clear message otherwise.
+
+**Done when.** Tests for both failure cases.
+
+### NFZ-12R — One runner per detector
+
+**Files:** `air/live/runner.py`
+
+**Why** (from Nate's `WEEK12_TODO.md`). Two copies of one detector's runner
+(a crash-loop overlap, a tick outliving its interval) can run at once. Results
+stay correct (cursor `GREATEST` plus dedup) but work is wasted.
+
+**Do.** Take a Postgres advisory lock keyed on `detector_id` for the life of the
+runner; a second copy logs and exits.
+
+**Done when.** A test with two lock attempts on the same id.
+
+---
+
+## Track D · Demo
+
+### NFZ-12H — Live incursions on the dashboard
+
+**Files:** `air/detectors/no_fly_zone/dashboard/app.py`
+
+**Why.** The Streamlit dashboard reads `detections.jsonl` and Parquet files, the
+offline outputs. The live pipeline writes `no_fly_zone_detections`.
+
+**Do.** Add a source option that reads the table (`SKYWATCH_DB_DSN`), showing open
+incursions (no end time) differently from closed ones, with the 15 zone polygons
+from `klyh-local-faa.geojson` (R-6602 and P-56 visually distinct from MOAs).
+
+**Done when.** Pointed at the local DB, it shows the rows the runner wrote.
+
+---
+
+## Done this week
+
+| ID | What | PR |
+|---|---|---|
+| — | NFZ table mapper (`live.py`); runner stopped flushing every tick (one crossing was one row per tick) | #118 |
+| 12B | Reports arriving late were dropped (one watermark for all aircraft); now per aircraft | #119 |
+| 12C | Real FAA zones in the live runner, scoped to Lynchburg plus P-56 | #120 |
+| 12I | Runner: catches up after downtime, survives errors, clean SIGTERM shutdown, a log line per tick | #122 |
+| 12J | Zone lookup 52× faster (609 s → 11.7 s per replayed hour on 52 zones) | #122 |
+| 12A | Live data arrived without altitude: confirmed on live data; the reader now reads the feed's envelope | #121 (Will) |
+| 12G | Stale spine test (`test_live_spine`): fixed | #116 (Will) |
+| 12F | Report-rate tuning: measured on the replay, settings hold; folded into 12O | — |
+
+---
+
+## Reference
+
+**Real-traffic replay** (`data/lynchburg_adsb.csv`, one hour, 284,249 reports, 914 aircraft):
+
+| Zones | Detections | Notes |
+|---|---|---|
+| All 52 FAA zones within 150 nm | 42 | 39 from zones 100+ nm away, mostly airliners at cruise over Chesapeake Bay restricted areas |
+| 15 local zones (current) | 2 | Both Evers South MOA, LOW, confidence 0 |
+
+**Useful commands** (full guide: `docs/RUN_PIPELINE.md`)
 
 ```bash
-docker exec skywatch-db psql -U skywatch -d skywatch -c "SELECT payload ? 'altitude_ft' AS flat_altitude, payload->'payload' ? 'alt_baro' AS nested_alt_baro FROM observations WHERE domain='air' ORDER BY observed_at DESC LIMIT 5;"
+# NFZ tests
+pytest tests/air/detectors/no_fly_zone -q
+
+# Live: poller + all runners, then follow NFZ
+docker compose --profile poller --profile runners up -d --build
+docker logs --tail 20 -f skywatch-no-fly-zone-runner
+
+# Latest NFZ rows
+docker exec skywatch-db psql -U skywatch -d skywatch -x -c "SELECT entity_id, zone_id, zone_type, severity, confidence, temporal_bounds_start, temporal_bounds_end FROM no_fly_zone_detections ORDER BY last_detected_at DESC LIMIT 5;"
+
+# Regenerate the local zones (each 8-week FAA cycle; needs internet)
+python scripts/make_faa_airspace.py --radius-nm 65 --also "P-56" --out air/detectors/no_fly_zone/fixtures/airspace/klyh-local-faa.geojson
 ```
-
-If it is nested, the fix belongs in spine A (`air/live/payload.py`, spoofing
-team), not in our adapter, so all three detectors get it.
-
-**Done when:** a live row read through `observation_from_row` has a non-null
-altitude, with a test on a captured envelope.
-
----
-
-## NFZ-12B — Reports that land late are dropped *(missed incursions)*
-
-**Status: fixed** in branch `nfz/late-reports`: the watermark is per aircraft,
-with `sampling.seen_retention_sec` bounding memory. Kept here for the reasoning.
-
-**Owner:** Tim · `air/detectors/no_fly_zone/adapter.py`
-
-The adapter skips any report at or before `_watermark`, which is **one timestamp
-for all aircraft**. The poller writes every 10 s and the runner ticks every 30 s,
-so rows whose `observed_at` is a few seconds old routinely arrive after a tick has
-already processed a newer report from some other aircraft. Those rows are
-skipped forever.
-
-Reproduced: aircraft A (outside any zone) processed up to t=10; aircraft B's five
-reports inside P-901 at t=4..8 arrive in the next window. Result: **0 detections,
-7 skipped**. The same five reports in order: **1 detection**.
-
-**Do:** keep the watermark per aircraft (`icao24 → newest timestamp`), so overlap
-is still deduplicated but one aircraft's late report is not judged against
-another's clock. Check `close_silent` still uses a sensible "now".
-
-**Done when:** a fixture test with exactly that interleaving produces the
-incursion, and `test_nfz_adapter.py` plus `test_nfz_live.py` stay green.
-
----
-
-## NFZ-12C — Use real FAA airspace in the live runner
-
-**Owner:** Tim · branch `nfz/faa-airspace` (one commit, Will, Oct 27, **no PR yet**)
-
-The live runner loads `airspace.fixture_path`, which is still three hand-built
-test zones (P-901, one TFR, one MOA). `scripts/make_faa_airspace.py` on that
-branch builds the real 52 zones within 150 nm of KLYH from the FAA AIS feature
-service; it merges cleanly onto `main`.
-
-**Do:** open the PR for `nfz/faa-airspace`. Then make the live runner load the
-generated file without breaking the test suite, which pins the fixture zones in
-55 assertions (for example, a `build_live_detector` override for the live path
-only). The 1 MB file is generated, not committed, so decide how the runner image
-gets it.
-
-**Done when:** a `--once` run on the live DB loads 52 zones, and tests still pass.
-
----
-
-## NFZ-12D — Most real zones have UNKNOWN activation *(precision)*
-
-**Owner:** ___ · `logic/activation.py`, `scripts/make_faa_airspace.py`
-
-FAA `TIMESOFUSE` is prose. Only `CONTINUOUS` is parsed as always active, so 46 of
-52 real zones come out SCHEDULED or NOTAM with no active windows, which is
-UNKNOWN activation, capped at LOW severity (`severity.unknown_activation_cap`).
-An incursion into a MOA that is cold today looks the same as one that is hot.
-
-**Do:** parse the common clock-time forms (e.g. `0700-2200 LOCAL MON-FRI`) into
-`active_windows`; leave anything that is not parseable as UNKNOWN rather than guessing.
-
-**Done when:** a test per parsed form, and a count of how many of the 52 now have
-known activation.
-
----
-
-## NFZ-12E — Zones with AGL floors can never fire *(coverage)*
-
-**Owner:** ___ · `geo/altitude.py`
-
-A non-zero `SFC` floor (Farmville MOA: 300 FT SFC) means above ground, so it maps
-to `Datum.AGL`, and the vertical check abstains on AGL because there is no
-terrain model. 17 of 52 real zones are in this position: they can never alert.
-
-**Do:** add a terrain elevation lookup (e.g. a small pre-sampled grid for the
-150 nm scope, loaded once, no network at import) and compare AGL floors against
-altitude minus terrain. Keep abstaining where terrain is unknown.
-
-**Done when:** a fixture aircraft below an AGL floor does not fire and one above
-it does.
-
----
-
-## NFZ-12F — Measure episodes and cost at the live rate *(tuning / efficiency)*
-
-**Owner:** ___ · `configs/detectors/no_fly_zone.yaml`, runner settings
-
-The config was written for 1 Hz from our own receiver (`target_hz: 1.0`). The
-live feed is polled every 10 s, and the runner reads a 300 s window every 30 s,
-so each row is read about ten times. `max_gap_sec: 30` and
-`clear_observations_to_close: 2` have never been checked against that rate.
-
-**Do:** after a few hours of live data, report: incursions per hour, how many are
-one aircraft split into several episodes, `skipped_reports`, and tick duration.
-Then decide whether `window_s` can shrink (the adapter already keeps state across
-ticks, so the overlap mostly buys tolerance for late rows; see NFZ-12B).
-
-**Done when:** a short note in `docs/no_fly_zone/` with the numbers and any
-config change it justifies.
-
----
-
-## NFZ-12G — Make `main` green again *(good first ticket)*
-
-**Owner:** ___ · `tests/air/live/test_live_spine.py`
-
-`test_stubs_raise_until_owning_teams_implement_them` fails on `main`: it asserts
-the spine components still raise `NotImplementedError`, and they have since been
-implemented. It is the only failing test in the suite.
-
-**Do:** replace it with a check that the spine's public entry points exist with the
-frozen signatures, or delete it with a one-line reason in the PR.
-
-**Done when:** `pytest` on `main` has zero failures.
-
----
-
-## NFZ-12H — Show live incursions on the dashboard *(for the Xenith demo)*
-
-**Owner:** ___ · `air/detectors/no_fly_zone/dashboard/app.py`
-
-The Streamlit dashboard reads `detections.jsonl` and Parquet files, the offline
-outputs. The live pipeline writes `no_fly_zone_detections`.
-
-**Do:** add a source option that reads the table (`SKYWATCH_DB_DSN`), showing open
-incursions (no end time) differently from closed ones, with the zone polygons.
-
-**Done when:** pointing it at the local DB shows the rows the runner wrote.
-
----
-
-Not ours, but noticed: `db/schema/005_detector_runs.sql` and `006_detector_runs.sql`
-are identical (the spoofing team flagged this too in #117).

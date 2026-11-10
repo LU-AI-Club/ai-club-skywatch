@@ -179,8 +179,12 @@ def run_live(
   keyed by `detector_id`, and is saved only after a tick succeeds.
 - **Rolling window + dedup.** Consecutive windows overlap by `window_s - step_s`;
   `persistence` collapses the re-processed overlap on `dedup_key`.
-- **Stateful detectors.** Calls `flush()` when the detector exposes it (NFZ keeps
-  incursion episodes open across windows) so a crossing is not split in two.
+- **Stateful detectors.** Keeps one detector instance for the whole run and calls
+  `flush()` (when the detector exposes it; NFZ keeps incursion episodes open across
+  windows) only when the stream ends: a `once` run or a clean shutdown. Flushing
+  every tick would close every open finding and split one crossing into a row per tick.
+- **Catch-up.** Sleeps only `poll_interval_s` minus how far the cursor is behind, so
+  after a restart or a slow tick it runs windows back to back until current.
 - **Resilience.** Survives a DB hiccup or a bad window without dying; logs one
   structured line per tick (counts, lag); clean shutdown on SIGTERM.
 - `once=True` runs a single tick for the end-to-end test and CI.
