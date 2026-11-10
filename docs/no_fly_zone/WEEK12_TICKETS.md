@@ -28,6 +28,18 @@ Branch off `main`, PR into `main`. Every ticket finishes with a fixture test
 | NFZ-12F | Measure episodes and cost at the live rate | Tuning / efficiency | M | Yes |
 | NFZ-12G | Fix the stale spine test so `main` is green | Hygiene | S | No |
 | NFZ-12H | Point the dashboard at the live table | Demo | M | No |
+| NFZ-12I | Live runner: catch-up, resilience, shutdown, logging | Pipeline | M | No — **fixed** |
+| NFZ-12J | Zone lookup re-serialized every zone per report | Efficiency | S | No — **fixed** |
+| NFZ-12K | Put skip reasons in the heartbeat ("fail safely") | Pipeline / eval | S | No |
+| NFZ-12L | Confidence is only ever 0 or 1 | Output quality | M | No |
+| NFZ-12M | `airspace.include_types` is never applied | Config | S | No |
+
+**Measured on real traffic** (one hour of the Lynchburg capture, 284,249 reports,
+914 aircraft), which re-ranked these: with all 52 FAA zones within 150 nm, 39 of
+42 detections came from zones 100+ nm away, mostly airliners at cruise. With the
+15 local zones (#120: within 65 nm plus P-56), 2 detections, both Evers South
+MOA, both LOW with confidence 0. So for the local set, **12E and 12D now matter
+most**: they decide whether a nearby zone can fire at all, and at what severity.
 
 ---
 
@@ -127,6 +139,10 @@ An incursion into a MOA that is cold today looks the same as one that is hot.
 **Done when:** a test per parsed form, and a count of how many of the 52 now have
 known activation.
 
+**Local set (#120):** every local MOA is SCHEDULED and R-6602 is NOTAM, so every
+local zone except P-56 is UNKNOWN and every local detection is capped at LOW. Do
+the local zones first.
+
 ---
 
 ## NFZ-12E — Zones with AGL floors can never fire *(coverage)*
@@ -144,6 +160,11 @@ altitude minus terrain. Keep abstaining where terrain is unknown.
 **Done when:** a fixture aircraft below an AGL floor does not fire and one above
 it does.
 
+**Local set (#120): 7 of the 13 Lynchburg-area zones have AGL floors** (Farmville
+MOA x3, Evers Low and East, Barfoot 1 and 2), so more than half the nearby
+airspace cannot alert today. On the replay, 1,645 reports exited `bad_input`,
+mostly here. A grid covering 65 nm is far smaller than one for 150 nm.
+
 ---
 
 ## NFZ-12F — Measure episodes and cost at the live rate *(tuning / efficiency)*
@@ -155,10 +176,16 @@ live feed is polled every 10 s, and the runner reads a 300 s window every 30 s,
 so each row is read about ten times. `max_gap_sec: 30` and
 `clear_observations_to_close: 2` have never been checked against that rate.
 
-**Do:** after a few hours of live data, report: incursions per hour, how many are
-one aircraft split into several episodes, `skipped_reports`, and tick duration.
-Then decide whether `window_s` can shrink (the adapter already keeps state across
-ticks, so the overlap mostly buys tolerance for late rows; see NFZ-12B).
+**Measured, lower priority now:** thinning the capture to one report per aircraft
+per 10 s (the feed's rate) gave 40 detections against 42 at 1 Hz, with one
+aircraft-zone pair split, so `max_gap_sec: 30` holds. Do **not** shrink `window_s`:
+the feed returns positions up to 5 minutes old (`ADSB_POSITIONS_FEED_GUIDE.md`),
+and the reader filters on `observed_at`, so a row older than the window start
+when it arrives is never read.
+
+**Do:** after a few hours of live data, confirm: incursions per hour, split
+episodes, `skipped_reports`, and the per-tick `lag_s`/`duration_s` the runner now
+logs (NFZ-12I).
 
 **Done when:** a short note in `docs/no_fly_zone/` with the numbers and any
 config change it justifies.
@@ -194,5 +221,87 @@ incursions (no end time) differently from closed ones, with the zone polygons.
 
 ---
 
-Not ours, but noticed: `db/schema/005_detector_runs.sql` and `006_detector_runs.sql`
-are identical (the spoofing team flagged this too in #117).
+## NFZ-12I — Live runner: catch-up, resilience, shutdown, logging
+
+**Status: fixed** in branch `nfz/runner-hardening` (Spine C is ours). What
+`SPINE_PLAN.md` asked for and the runner did not do:
+
+- **Fell behind forever.** It slept the full 30 s after every tick, losing the
+  tick's own run time each time: about 24 min behind live after a day at 0.5 s
+  ticks, and never caught up after a restart. Now it sleeps only what is left of
+  the interval and runs windows back to back when behind: lag stays at about one
+  tick's run time, and a runner restarted an hour behind is current in ~4 min.
+- **Died on any error.** A DB hiccup raised out of the loop, the container
+  restarted, and NFZ's open incursions (held in memory) were lost, leaving rows
+  OPEN forever. Now a failed tick is logged and retried with back-off (doubling,
+  capped at 300 s), the detector keeps its state, and detections that could not
+  be stored are carried to the next tick.
+- **Ignored `docker compose down`.** As PID 1 with no SIGTERM handler, it was
+  killed after the 10 s grace period, mid-tick. Now it finishes the tick, flushes
+  open incursions so none stay OPEN, and exits.
+- **Printed nothing.** Now one line per tick in `docker logs`:
+  `tick detector=… status=SUCCESS window_end=… lag_s=… duration_s=… observations=… detections=… inserted=… updated=… skipped=…`
+
+---
+
+## NFZ-12J — Zone lookup re-serialized every zone on every report
+
+**Status: fixed** in branch `nfz/runner-hardening`. The H3 prefilter cached each
+zone's cells keyed on the zone's WKB bytes, so it serialized every zone outline
+(about 45,000 points for the 52 FAA zones) for every position report just to
+build the key: 85% of run time. Keyed on the geometry object now. One hour of
+traffic on 52 zones: **609 s → 11.7 s**, same 42 detections and exit counts.
+
+---
+
+## NFZ-12K — Put skip reasons in the heartbeat *(Week 12: "each detector fails safely")*
+
+**Owner:** ___ · `air/live/runner.py` (heartbeat counts), `adapter.py`
+
+The detector counts why every report left without a detection (`exit_counts`:
+`no_candidate`, `vertical_clear`, `bad_input`, …), but the live heartbeat
+(`detector_runs.counts`) only has observations and detections. So a detector that
+is blind (no altitude, NFZ-12A) and a quiet sky look identical: `SUCCESS`, 0.
+
+**Do:** add the per-tick change in `exit_counts` to the heartbeat counts when the
+detector has them. A `bad_input` share near 100% is the alarm.
+
+**Done when:** a runner test shows the counts, and `RUN_PIPELINE.md` has the query.
+
+---
+
+## NFZ-12L — Confidence is only ever 0 or 1 *(output quality)*
+
+**Owner:** ___ · `logic/scoring.py`
+
+`raw_model_confidence = float(confirmed)`: 1.0 only for an active zone with the
+aircraft fully inside, otherwise 0.0. Every real detection in the replay was 0.0.
+The syllabus (§6) says the detector supplies *detector-level uncertainty* for
+TCE/CAATS, and a column of zeros gives it nothing to weigh.
+
+**Do:** grade it from what is actually uncertain: activation unknown, buffered-only
+containment (position error vs distance to the boundary), altitude source
+(geometric vs barometric). Keep `anomaly_score` as "how bad", confidence as "how sure".
+
+**Done when:** tests show confidence ordering across those cases; no change to severity.
+
+---
+
+## NFZ-12M — `airspace.include_types` is never applied *(config)*
+
+**Owner:** ___ · `__init__.py` / `adapter.py`
+
+The config lists `include_types`, and the loader says filtering is the caller's
+job, but no caller does it, so editing the list changes nothing. Apply it where
+zones are loaded, so e.g. MOAs (legal to fly through) can be dropped from alerting
+by config. **Done when:** a test where removing `MOA` drops the MOA zones.
+
+---
+
+Not ours, but noticed: if `sentinel-ca.crt` is ever missing, Docker mounts an
+empty *folder* in its place and the poller fails TLS confusingly. Nate's
+`docs/WEEK12_TODO.md` lists the runner resilience and catch-up items (12I) and
+two more Spine C ones worth taking: fail fast on a missing table or mapper, and a
+single-instance guard.
+Restart still loses NFZ's in-memory state after a *crash* (12I covers clean stops
+and DB errors); persisting open episodes is a future option.

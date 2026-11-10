@@ -33,6 +33,7 @@ boundary still surfaces for the buffered-containment check.
 from __future__ import annotations
 
 import functools
+import weakref
 from collections.abc import Sequence
 
 import h3
@@ -52,8 +53,23 @@ def _resolution(cfg: Config) -> int:
     return res
 
 
+# Per geometry object: (id(geometry), res) -> cells. Looking the cells up by
+# WKB meant serializing every zone's full outline on every position report just
+# to build the cache key - 85% of NFZ's run time with the real FAA zones (some
+# have 6-8k vertices). Each entry is dropped when its geometry is freed, so a
+# reused id can never be served another zone's cells.
+_CELLS_BY_GEOMETRY: dict[tuple[int, int], frozenset[str]] = {}
+
+
 def _zone_cells(zone: AirspaceZone, res: int) -> frozenset[str]:
-    return _cells_for_geometry(zone.geometry.wkb, res)
+    geometry = zone.geometry
+    key = (id(geometry), res)
+    cells = _CELLS_BY_GEOMETRY.get(key)
+    if cells is None:
+        cells = _cells_for_geometry(geometry.wkb, res)
+        _CELLS_BY_GEOMETRY[key] = cells
+        weakref.finalize(geometry, _CELLS_BY_GEOMETRY.pop, key, None)
+    return cells
 
 
 # Covering a zone with cells is the expensive step (milliseconds for a large
