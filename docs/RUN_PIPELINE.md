@@ -126,13 +126,21 @@ docker exec skywatch-db psql -U skywatch -d skywatch -c "SELECT detector_id, sta
 How many detections each table holds:
 
 ```bash
-docker exec skywatch-db psql -U skywatch -d skywatch -c "SELECT 'proximity' AS detector, count(*) FROM proximity_detections UNION ALL SELECT 'spoofing', count(*) FROM spoofing_detections;"
+docker exec skywatch-db psql -U skywatch -d skywatch -c "SELECT 'proximity' AS detector, count(*) FROM proximity_detections UNION ALL SELECT 'spoofing', count(*) FROM spoofing_detections UNION ALL SELECT 'no_fly_zone', count(*) FROM no_fly_zone_detections;"
 ```
 
 What a detection row looks like (proximity):
 
 ```bash
 docker exec skywatch-db psql -U skywatch -d skywatch -x -c "SELECT detector_id, detection_type, severity, confidence, entity_id, member_entity_ids, predicted_horizontal_nm, predicted_vertical_ft, t_cpa_seconds, temporal_bounds_start FROM proximity_detections ORDER BY last_detected_at DESC LIMIT 1;"
+```
+
+What a detection row looks like (no-fly-zone). One row per incursion: it appears
+on entry with no end time (still inside the zone) and is updated in place until
+the aircraft leaves:
+
+```bash
+docker exec skywatch-db psql -U skywatch -d skywatch -x -c "SELECT entity_id, zone_id, zone_name, zone_type, severity, confidence, temporal_bounds_start, temporal_bounds_end, duration_seconds FROM no_fly_zone_detections ORDER BY last_detected_at DESC LIMIT 1;"
 ```
 
 > A run with `status=SUCCESS` and `detections=0` is normal — it means the detector
@@ -178,8 +186,12 @@ docker compose stop proximity-runner
   `docker exec -i skywatch-db psql -U skywatch -d skywatch < db/schema/00X_xxx.sql`.
 - **Rebuild after code changes.** Edits under `air/` or `scripts/` only take
   effect in the containers after `--build`.
-- **No-Fly-Zone** needs its detection table migration and `air/detectors/no_fly_zone/live.py`
-  before it can persist; until then its runner only "succeeds" while it finds
-  nothing.
+- **No-Fly-Zone** zones come from `airspace.fixture_path` in
+  `configs/detectors/no_fly_zone.yaml`, which still points at three hand-built
+  test zones. Real FAA airspace is ticket NFZ-12C in
+  [`no_fly_zone/WEEK12_TICKETS.md`](no_fly_zone/WEEK12_TICKETS.md).
+- **Zero detections is not always a quiet sky.** If the observations reach a
+  detector without altitude (see NFZ-12A / SPOOF-12C), no-fly-zone abstains on
+  every aircraft and still reports `SUCCESS`.
 - **Poller not inserting?** Check `docker logs skywatch-adsb-poller` for TLS/network
   errors — usually the missing CA cert or a non-whitelisted network.
