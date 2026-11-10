@@ -109,3 +109,30 @@ def test_real_postgres_migration_and_persist():
             assert row == (1, "P-901", "PROHIBITED", 1.0, True)
         finally:
             conn.rollback()  # leave the local DB exactly as it was
+
+
+def _persist_like_the_runner(*, flush_every_tick: bool) -> list[dict]:
+    """Feed one 4-tick incursion through the detector the way the runner does.
+
+    One detector for the whole run, one persist per tick, flush either every
+    tick (the old runner) or only after the last tick (end of stream).
+    """
+    detector, db = build_live_detector(), FakeDB()
+    ticks = [[_obs(0), _obs(1)], [_obs(30), _obs(31)], [_obs(60), _obs(61)], [_obs(90)]]
+    for index, window in enumerate(ticks):
+        found = detector.detect_observations(window)
+        if flush_every_tick or index == len(ticks) - 1:
+            found += detector.flush()
+        persist(db, TABLE, found, extra_columns=extra_columns)
+    return list(db.tables[TABLE].values())
+
+
+def test_one_incursion_across_ticks_is_one_row_when_flushed_at_end():
+    [row] = _persist_like_the_runner(flush_every_tick=False)
+    assert row["temporal_bounds_start"] == _TS.isoformat()
+    assert row["temporal_bounds_end"] == (_TS + timedelta(seconds=90)).isoformat()
+
+
+def test_flushing_every_tick_splits_one_incursion_into_rows():
+    # Documents why the runner must not flush between ticks.
+    assert len(_persist_like_the_runner(flush_every_tick=True)) == 4
