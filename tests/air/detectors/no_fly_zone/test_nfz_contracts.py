@@ -47,7 +47,8 @@ def test_detection_serializes_to_contract_shape() -> None:
     ("section", "key", "value"),
     [("dedup", "clear_observations_to_close", 0),
      ("dedup", "clear_observations_to_close", True),
-     ("sampling", "max_gap_sec", 0)],
+     ("sampling", "max_gap_sec", 0),
+     ("sampling", "seen_retention_sec", 30)],  # must exceed max_gap_sec
 )
 def test_episode_settings_are_validated(tmp_path: Any, section: str, key: str, value: Any) -> None:
     import yaml
