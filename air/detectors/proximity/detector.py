@@ -28,7 +28,7 @@ Governance (do not violate):
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from air.detectors.proximity.config import ProximityConfig, load_config
 from air.detectors.proximity.features import PairGeometry, pair_geometry
@@ -154,7 +154,12 @@ LIMITATIONS = [
 ]
 
 
-def to_detection(geom: PairGeometry, severity: SeverityLevel, cfg: ProximityConfig) -> Detection:
+def to_detection(
+    geom: PairGeometry,
+    severity: SeverityLevel,
+    cfg: ProximityConfig,
+    period_start: float | None = None,
+) -> Detection:
     """DONE. Fill the SENTINEL Detection contract for one pair at one instant."""
     assert geom.t_cpa_s is not None
     a, b = geom.obs_a, geom.obs_b
@@ -176,19 +181,24 @@ def to_detection(geom: PairGeometry, severity: SeverityLevel, cfg: ProximityConf
             ),
         ),
     )
-    # PROX-5: anchor the detection to the encounter, not to the moment we
-    # happened to evaluate it. The predicted closest approach is a property of
-    # the two aircraft, so every window that sees this encounter computes the
-    # same instant (agreeing to a few microseconds), while the evaluation tick
-    # differs by whole seconds. Rounding to the second makes
-    # air.windowing.detection_dedup_key -- which keys on
-    # temporal_bounds.start_time -- identical across windows, so one encounter
-    # collapses to one event. The evaluation tick is not lost: it is on the
-    # evidence records and in the provenance chain.
+    # The alert covers one cooldown period and predicts a closest approach
+    # inside it. start_time is the period, which is epoch-anchored and so
+    # identical from any window that covers it -- that is what makes
+    # air.windowing.detection_dedup_key collapse the same alert seen twice
+    # while keeping consecutive alerts about an ongoing encounter distinct.
+    # end_time is the predicted closest approach. The evaluation tick is not
+    # lost: it is on the evidence records and in the provenance chain.
     cpa_time = geom.at + timedelta(seconds=geom.t_cpa_s)
     cpa_time = cpa_time.replace(microsecond=0) + timedelta(
         seconds=1 if cpa_time.microsecond >= 500_000 else 0
     )
+    if period_start is None:
+        window_start = geom.at.replace(microsecond=0)
+    else:
+        window_start = datetime.fromtimestamp(period_start, tz=timezone.utc)
+    if cpa_time < window_start:
+        cpa_time = window_start
+
     mid_lat = (a.latitude + b.latitude) / 2
     mid_lon = (a.longitude + b.longitude) / 2
     mid_alt = None
@@ -201,7 +211,7 @@ def to_detection(geom: PairGeometry, severity: SeverityLevel, cfg: ProximityConf
         detection_type=DETECTION_TYPE,
         severity=severity,
         confidence=confidence,
-        temporal_bounds=TimeBounds(start_time=cpa_time, end_time=cpa_time),
+        temporal_bounds=TimeBounds(start_time=window_start, end_time=cpa_time),
         provenance=provenance,
         entities_involved=[
             EntityRef(entity_id=f"aircraft:{a.icao24}", entity_type="aircraft", domain=DOMAIN),
@@ -287,9 +297,19 @@ class ProximityDetector(BaseDetector):
         """
         cfg = self.config
         snapshots = align_tracks(observations, cfg)
-        best: dict[tuple[str, str], tuple[PairGeometry, SeverityLevel]] = {}
 
-        for snapshot in snapshots.values():
+        # An encounter lasting minutes SHOULD produce several alerts -- the front
+        # end groups them per pair. What it must not do is alert on every report.
+        # So each pair may alert once per cooldown period, and the periods are
+        # anchored to the epoch rather than to whichever tick we happened to see
+        # first. That makes the grouping identical no matter how the runner
+        # slices time, which is what lets two overlapping windows agree on the
+        # same alert instead of emitting it twice.
+        period = cfg.alert_cooldown_s
+        best: dict[tuple[str, str, int], tuple[PairGeometry, SeverityLevel]] = {}
+
+        for tick, snapshot in snapshots.items():
+            slot = int(tick.timestamp() // period) if period > 0 else 0
             for a, b in candidate_pairs(snapshot, cfg):
                 geom = pair_geometry(a, b)
                 if geom is None:
@@ -300,18 +320,22 @@ class ProximityDetector(BaseDetector):
                     continue
 
                 assert geom.predicted_horizontal_nm is not None
-                key = (a.icao24, b.icao24)
+                # period 0 disables grouping: every tick is its own alert
+                key = (a.icao24, b.icao24, slot if period > 0 else int(tick.timestamp()))
                 previous = best.get(key)
-
                 if previous is None:
                     best[key] = (geom, severity)
-                else:
-                    previous_geom, _ = previous
-                    assert previous_geom.predicted_horizontal_nm is not None
-                    if geom.predicted_horizontal_nm < previous_geom.predicted_horizontal_nm:
-                        best[key] = (geom, severity)
+                    continue
+                held, _ = previous
+                assert held.predicted_horizontal_nm is not None
+                if geom.predicted_horizontal_nm < held.predicted_horizontal_nm:
+                    best[key] = (geom, severity)
 
-        return [to_detection(geom, severity, cfg) for geom, severity in best.values()]
+        ordered = sorted(best.items(), key=lambda kv: (kv[0][2], kv[0][0], kv[0][1]))
+        return [
+            to_detection(geom, severity, cfg, period_start=slot * period if period > 0 else None)
+            for (_, _, slot), (geom, severity) in ordered
+        ]
 
     def detect(self, context: DetectionContext) -> list[Detection]:
         """BaseDetector entry point (same convention as the example detector)."""
