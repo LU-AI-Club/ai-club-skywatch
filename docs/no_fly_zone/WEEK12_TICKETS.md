@@ -62,7 +62,10 @@ altitude, with a test on a captured envelope.
 
 ## NFZ-12B — Reports that land late are dropped *(missed incursions)*
 
-**Owner:** ___ · `air/detectors/no_fly_zone/adapter.py`
+**Status: fixed** in branch `nfz/late-reports`: the watermark is per aircraft,
+with `sampling.seen_retention_sec` bounding memory. Kept here for the reasoning.
+
+**Owner:** Tim · `air/detectors/no_fly_zone/adapter.py`
 
 The adapter skips any report at or before `_watermark`, which is **one timestamp
 for all aircraft**. The poller writes every 10 s and the runner ticks every 30 s,
