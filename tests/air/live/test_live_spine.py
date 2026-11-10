@@ -1,8 +1,13 @@
-"""Contract tests for the air.live spine stubs.
+"""Contract tests for the air.live spine.
 
-Keeps CI green from day 1 and locks the two pieces that are implemented now
-(``PersistResult`` and ``dedup_key``). The owning teams replace the
-NotImplementedError stubs with real behavior and their own fixture tests.
+The spine is complete: A (``read_window``, Spoofing), B (``persist``,
+``start_run``, ``finish_run``, Proximity) and C (``run_live``, No-Fly-Zone)
+are all implemented, each with its own tests alongside it.
+
+What stays here is the part no single team owns: the shapes the three pieces
+agree on. ``read_window``'s signature is imported by B and C, so it is pinned
+here rather than in Spoofing's own tests -- a change that breaks them should
+fail in a file none of us think of as ours.
 """
 
 from __future__ import annotations
@@ -14,8 +19,11 @@ from types import SimpleNamespace
 from air.live import (
     PersistResult,
     dedup_key,
+    finish_run,
+    persist,
     read_window,
     run_live,
+    start_run,
 )
 
 
@@ -58,34 +66,12 @@ def test_read_window_keeps_its_frozen_signature() -> None:
     assert parameters["domain"].default == "air"
 
 
-def test_only_spine_c_is_still_a_stub() -> None:
-    """What remains unimplemented, stated positively.
+def test_the_whole_spine_is_implemented() -> None:
+    """No stubs left. Asserted, because this file used to track which remained.
 
-    Spine A (read_window) is ours and implemented -- tests/air/live/.
-    Spine B (persist, start_run, finish_run) landed with Proximity's PR #113
-    -- tests/air/live/test_persistence.py and test_detector_runs.py.
-    Spine C (run_live) is No-Fly-Zone's and is the last piece.
-
-    This file is the one place that says which parts of the spine exist, so it
-    is worth keeping exact: a stale entry here reads as "that team has not
-    started" when they have.
-    """
-    with pytest.raises(NotImplementedError):
-        run_live(
-            detector=SimpleNamespace(detector_id="skywatch.spoofing"),
-            table="spoofing_detections",
-            dsn="postgresql://x",
-            window_s=120,
-            step_s=30,
-            poll_interval_s=30,
-        )
-
-
-def test_the_implemented_spine_pieces_do_not_raise() -> None:
-    """The other half of the claim above, so it cannot rot unnoticed.
-
-    read_window is called with a fake connection returning no rows: an empty
-    window is a quiet minute, not an error.
+    It is cheap to keep honest and expensive to leave stale: while it still
+    listed a piece as unimplemented, it read as "that team has not started"
+    when they had.
     """
     now = datetime.now(timezone.utc)
 
@@ -105,4 +91,13 @@ def test_the_implemented_spine_pieces_do_not_raise() -> None:
             return None
 
     connection = SimpleNamespace(cursor=lambda: _Cursor())
+
+    # Spine A: an empty window is a quiet minute, not an error.
     assert read_window(connection, start=now, end=now) == []
+
+    # Spine B and C exist and are callable; their behaviour is covered by
+    # tests/air/live/test_persistence.py, test_detector_runs.py and the
+    # No-Fly-Zone runner tests. Here we only assert they are no longer stubs.
+    for piece in (persist, start_run, finish_run, run_live):
+        assert callable(piece)
+        assert "NotImplementedError" not in (inspect.getsource(piece) or "")
