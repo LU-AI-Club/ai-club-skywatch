@@ -202,8 +202,14 @@ docker compose stop proximity-runner
 - **No-Fly-Zone on test zones?** `docker logs skywatch-no-fly-zone-runner` shows
   `using TEST zones` if the committed zone file is missing from the image.
   Detections with `zone_id` P-901, TFR-6/1234 or LYNCHBURG-MOA are test zones.
-- **Zero detections is not always a quiet sky.** If the observations reach a
-  detector without altitude (see NFZ-12A / SPOOF-12C), no-fly-zone abstains on
-  every aircraft and still reports `SUCCESS`.
-- **Poller not inserting?** Check `docker logs skywatch-adsb-poller` for TLS/network
-  errors — usually the missing CA cert or a non-whitelisted network.
+- **Zero detections is not always a quiet sky.** The live feed nests the ADS-B
+  fields inside the SENTINEL envelope (`payload.payload`, readsb names such as
+  `alt_baro`). Until the reader handles that (#121), live observations reach the
+  detectors with no altitude, NIC/NACp, squawk or callsign: no-fly-zone skips every
+  aircraft and still reports `SUCCESS`. Check:
+  `docker exec skywatch-db psql -U skywatch -d skywatch -c "SELECT payload->'payload' ? 'alt_baro' AS nested_alt FROM observations WHERE domain='air' ORDER BY observed_at DESC LIMIT 1;"`
+- **Poller not inserting?** Check `docker logs skywatch-adsb-poller`. A
+  `ConnectTimeout` means the machine is not on an allowlisted network (see
+  `docs/ADSB_POSITIONS_FEED_GUIDE.md`); a TLS error means `sentinel-ca.crt` is
+  missing from the repo root. Test from the host first:
+  `curl --cacert sentinel-ca.crt -m 15 -s -o /dev/null -w "%{http_code}\n" "https://adsb-ingest.sentinel.xenithsolutions.com/v1/adsb/positions.geojson?lookback_minutes=1&limit=1"` (expect `200`).
