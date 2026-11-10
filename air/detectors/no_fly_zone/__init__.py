@@ -21,11 +21,14 @@ drag in shapely, h3 or streamlit for someone who only needs the types, so
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .adapter import NoFlyZoneDetector
+
+_log = logging.getLogger(__name__)
 
 
 def build_detector(
@@ -65,8 +68,30 @@ def build_live_detector(
     detection table on entry and is updated in place until it closes. Replay
     and the CLI keep using :func:`build_detector`, which only emits finished
     episodes.
+
+    Zones: the real FAA file at ``airspace.live_path`` when it exists (NFZ-12C),
+    otherwise ``airspace.fixture_path`` with a WARNING in the runner's log, so a
+    machine that has not generated the file still runs, visibly on test zones.
+    An explicit ``airspace_path`` always wins.
     """
-    return build_detector(config_path, airspace_path, emit_open=True)
+    from .adapter import configured_airspace_path, live_airspace_path
+    from .config import DEFAULT_PATH, load_config
+
+    if airspace_path is None:
+        cfg = load_config(config_path if config_path is not None else DEFAULT_PATH)
+        live = live_airspace_path(cfg)
+        if live is not None and live.is_file():
+            airspace_path = live
+        else:
+            airspace_path = configured_airspace_path(cfg)
+            _log.warning(
+                "NFZ live: real FAA airspace not found at %s; using TEST zones from %s. "
+                "Generate it with scripts/make_faa_airspace.py (docs/RUN_PIPELINE.md).",
+                live, airspace_path,
+            )
+    detector = build_detector(config_path, airspace_path, emit_open=True)
+    _log.info("NFZ live: %d zones loaded from %s", len(detector.zones), airspace_path)
+    return detector
 
 
 __all__ = ["build_detector", "build_live_detector"]

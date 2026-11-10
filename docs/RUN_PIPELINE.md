@@ -73,6 +73,15 @@ docker exec skywatch-db psql -U skywatch -d skywatch -tAc "SELECT jsonb_pretty(p
 Detectors: `proximity`, `spoofing`, `no_fly_zone`. Each runner is the same image
 with a different `--detector`.
 
+**No-fly-zone: generate the real FAA zones first** (once per 8-week FAA cycle, needs
+internet), then build. The file is baked into the image, so generate it *before*
+`--build`. Without it the runner still starts, but on three hand-built test zones,
+and says so in its log (`NFZ live: real FAA airspace not found ... using TEST zones`).
+
+```bash
+python scripts/make_faa_airspace.py --out air/detectors/no_fly_zone/fixtures/airspace/klyh-150nm-faa.geojson
+```
+
 ### One-shot (recommended for testing)
 
 Run a single read→detect→persist pass and exit. Add `--build` on the first run so
@@ -186,10 +195,9 @@ docker compose stop proximity-runner
   `docker exec -i skywatch-db psql -U skywatch -d skywatch < db/schema/00X_xxx.sql`.
 - **Rebuild after code changes.** Edits under `air/` or `scripts/` only take
   effect in the containers after `--build`.
-- **No-Fly-Zone** zones come from `airspace.fixture_path` in
-  `configs/detectors/no_fly_zone.yaml`, which still points at three hand-built
-  test zones. Real FAA airspace is ticket NFZ-12C in
-  [`no_fly_zone/WEEK12_TICKETS.md`](no_fly_zone/WEEK12_TICKETS.md).
+- **No-Fly-Zone on test zones?** `docker logs skywatch-no-fly-zone-runner` shows
+  `using TEST zones` when the real FAA file was not generated before `--build`.
+  Detections with `zone_id` P-901, TFR-6/1234 or LYNCHBURG-MOA are test zones.
 - **Zero detections is not always a quiet sky.** If the observations reach a
   detector without altitude (see NFZ-12A / SPOOF-12C), no-fly-zone abstains on
   every aircraft and still reports `SUCCESS`.

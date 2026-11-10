@@ -23,6 +23,11 @@ sampling:
 airspace:
   # Relative to air/detectors/no_fly_zone/ (the CLI resolves it there), not to this file.
   fixture_path: fixtures/airspace/klyh-150nm.geojson
+  # Real FAA zones for the LIVE runner only (build_live_detector). Generated, not
+  # committed: python scripts/make_faa_airspace.py --out air/detectors/no_fly_zone/fixtures/airspace/klyh-150nm-faa.geojson
+  # If it is missing, the live runner warns and falls back to fixture_path.
+  # Tests, replay and the CLI always use fixture_path.
+  live_path: fixtures/airspace/klyh-150nm-faa.geojson
   source_asof: "2026-08-07"   # SUA publication cycle; update with the file
   include_types: [PROHIBITED, RESTRICTED, TFR, WARNING, ALERT, MOA]
   # Community-reported U.S. DoD block; heuristic, not authoritative identity proof.

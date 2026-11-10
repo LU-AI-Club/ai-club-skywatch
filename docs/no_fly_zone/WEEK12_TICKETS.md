@@ -85,7 +85,11 @@ incursion, and `test_nfz_adapter.py` plus `test_nfz_live.py` stay green.
 
 ## NFZ-12C — Use real FAA airspace in the live runner
 
-**Owner:** Tim · branch `nfz/faa-airspace` (one commit, Will, Oct 27, **no PR yet**)
+**Status: fixed** in branch `nfz/faa-airspace-live` (Will's generator plus the live
+wiring): `build_live_detector` loads `airspace.live_path` when generated, else falls
+back to the test zones with a warning. Kept here for the reasoning.
+
+**Owner:** Tim, Will · originally branch `nfz/faa-airspace`
 
 The live runner loads `airspace.fixture_path`, which is still three hand-built
 test zones (P-901, one TFR, one MOA). `scripts/make_faa_airspace.py` on that
