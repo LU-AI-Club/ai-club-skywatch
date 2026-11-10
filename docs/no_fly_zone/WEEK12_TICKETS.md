@@ -33,6 +33,12 @@ Branch off `main`, PR into `main`. Every ticket finishes with a fixture test
 
 ## NFZ-12A — Does the live payload reach us with altitude? *(check first)*
 
+**Status: confirmed on live data (2026-11-10), fixed** in branch `spine-a/envelope`.
+The poller stores the SENTINEL envelope; readsb fields (`alt_baro`, `nac_p`,
+`squawk`, `flight`, …) sit under `payload.payload`, and the reader only read flat
+keys. A live-shaped aircraft inside P-901: 0 detections (all `bad_input`) before,
+1 after. Kept here for the reasoning.
+
 **Owner:** ___ · same question as the spoofing team's SPOOF-12C; do it once, together.
 
 `scripts/poll_adsb_feed.py` stores the SENTINEL envelope verbatim, and

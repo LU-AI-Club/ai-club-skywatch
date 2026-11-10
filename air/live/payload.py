@@ -37,6 +37,26 @@ and course, so those are columns. Everything specific to ADS-B is inside the
     on_ground         -> on_ground
     receiver_id       -> receiver_id
 
+**The live feed stores a different shape.** ``scripts/poll_adsb_feed.py`` keeps
+the SENTINEL envelope verbatim, and the receiver's own readsb record sits one
+level down, under ``payload["payload"]``, with readsb's names. Read flat only,
+every live row came back with altitude, NIC/NACp, squawk and callsign all None
+-- and every detector still reported SUCCESS. So a field missing from the flat
+keys is looked up in the nested record:
+
+    payload["payload"] key -> AdsbObservation
+    ---------------------------------------
+    alt_baro          -> altitude_ft      ("ground" -> None, on_ground True)
+    alt_geom          -> alt_geom_ft
+    baro_rate         -> vertical_rate_fpm (geom_rate if no baro_rate)
+    nic               -> nic
+    nac_p             -> nacp
+    squawk            -> squawk
+    flight            -> callsign         (readsb pads it with spaces)
+    category          -> emitter_category
+
+Flat keys always win, so CSV-loaded rows map exactly as before.
+
 The target of that mapping is not a guess: ``air/normalizers/adsb_csv.py``
 already produces ``AdsbObservation``s from the raw CSV, and
 ``scripts/load_observations_csv.py`` already writes those same observations
@@ -79,6 +99,20 @@ _PAYLOAD_FIELDS = (
     "receiver_id",
 )
 
+# The live envelope: readsb names under payload["payload"] (see module docstring).
+_NESTED_KEY = "payload"
+_ENVELOPE_FIELDS = {
+    "altitude_ft": "alt_baro",
+    "alt_geom_ft": "alt_geom",
+    "vertical_rate_fpm": "baro_rate",
+    "nic": "nic",
+    "nacp": "nac_p",
+    "squawk": "squawk",
+    "callsign": "flight",
+    "emitter_category": "category",
+}
+_GROUND = "ground"
+
 _ENTITY_PREFIX = "icao24:"
 
 
@@ -99,6 +133,28 @@ def _payload_dict(raw: Any) -> Mapping[str, Any]:
             return {}
         return parsed if isinstance(parsed, Mapping) else {}
     return {}
+
+
+def _optional_fields(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """The optional ADS-B fields: flat keys first, then the live envelope's record."""
+    fields = {name: payload.get(name) for name in _PAYLOAD_FIELDS}
+    nested = payload.get(_NESTED_KEY)
+    if not isinstance(nested, Mapping):
+        return fields  # a CSV-loaded row: flat only, unchanged
+    for name, key in _ENVELOPE_FIELDS.items():
+        if fields[name] is None:
+            fields[name] = nested.get(key)
+    if fields["vertical_rate_fpm"] is None:
+        fields["vertical_rate_fpm"] = nested.get("geom_rate")
+    # readsb reports a surface aircraft as alt_baro "ground", not a number.
+    alt_baro = nested.get("alt_baro")
+    if fields["on_ground"] is None and alt_baro is not None:
+        fields["on_ground"] = alt_baro == _GROUND
+    if fields["altitude_ft"] == _GROUND:
+        fields["altitude_ft"] = None
+    if isinstance(fields["callsign"], str):
+        fields["callsign"] = fields["callsign"].strip() or None
+    return fields
 
 
 def observation_from_row(row: Mapping[str, Any]) -> AdsbObservation | None:
@@ -130,7 +186,7 @@ def observation_from_row(row: Mapping[str, Any]) -> AdsbObservation | None:
             ground_speed_kt=row.get("sog"),
             track_deg=row.get("cog"),
             source_row_id=row.get("raw_record_ref"),
-            **{name: payload.get(name) for name in _PAYLOAD_FIELDS},
+            **_optional_fields(payload),
         )
     except Exception:  # noqa: BLE001 -- one bad row must not kill a window
         _log.debug("skipping observations row that could not be mapped", exc_info=True)
