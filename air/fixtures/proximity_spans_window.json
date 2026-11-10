@@ -1,7 +1,7 @@
 [
   {
     "_expect": {
-      "detections": 1,
+      "detections": 2,
       "severity": "HIGH",
       "window_edge_s": 60
     },

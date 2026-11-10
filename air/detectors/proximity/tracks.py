@@ -15,6 +15,7 @@ OWNER: Erik (interpolate_to_grid). group_tracks and align_tracks are done.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
 
@@ -103,7 +104,7 @@ def interpolate_to_grid(
 
     out: list[AdsbObservation] = []
     last_k: int | None = None  # index of the last tick emitted, to avoid duplicates
-    for before, after in zip(track, track[1:]):
+    for before, after in zip(track, track[1:], strict=False):  # consecutive pairs
         b_us = (before.observed_at - epoch) // one_us
         a_us = (after.observed_at - epoch) // one_us
         span_us = a_us - b_us
@@ -113,6 +114,7 @@ def interpolate_to_grid(
         # exact boundary just below the integer span (e.g. 1.001 seconds).
         can_blend = span_us > 0 and span_us / 1_000_000 <= max_gap_s
 
+        ks: Sequence[int]
         if can_blend:
             ks = range(-(-b_us // step_us), a_us // step_us + 1)  # ceil .. floor
         else:
@@ -131,11 +133,15 @@ def interpolate_to_grid(
                 obs = replace(
                     before,
                     observed_at=epoch + timedelta(microseconds=tick_us),
-                    latitude=_lerp(before.latitude, after.latitude, frac),
-                    longitude=_lerp(before.longitude, after.longitude, frac),
+                    # lat/lon are never None on AdsbObservation, so blend directly
+                    # (_lerp's None-abstain path is for the optional fields).
+                    latitude=before.latitude + (after.latitude - before.latitude) * frac,
+                    longitude=before.longitude + (after.longitude - before.longitude) * frac,
                     altitude_ft=_lerp(before.altitude_ft, after.altitude_ft, frac),
                     ground_speed_kt=_lerp(before.ground_speed_kt, after.ground_speed_kt, frac),
-                    vertical_rate_fpm=_lerp(before.vertical_rate_fpm, after.vertical_rate_fpm, frac),
+                    vertical_rate_fpm=_lerp(
+                        before.vertical_rate_fpm, after.vertical_rate_fpm, frac
+                    ),
                     track_deg=_lerp_angle(before.track_deg, after.track_deg, frac),
                 )
             out.append(obs)

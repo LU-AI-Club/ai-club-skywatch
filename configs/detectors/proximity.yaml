@@ -11,7 +11,7 @@
 
 detector_id: skywatch.proximity
 detector_version: 0.1.0
-config_version: 2026-10-26.2
+config_version: 2026-11-03.1
 
 # --- Time alignment (tracks.py) ----------------------------------------------
 grid_step_s: 1.0        # interpolate every track onto this common clock
@@ -42,6 +42,17 @@ max_current_separation_nm: 10.0
 # detector is built for; terminal proximity needs airport and runway context
 # (FAA NASR) we do not have yet.
 min_altitude_ft: 5000
+
+# --- How often may one pair alert? -------------------------------------------
+# An encounter lasting several minutes SHOULD produce several alerts -- the
+# front end groups them per pair ("these two aircraft have 5 alerts"). What we
+# must not do is alert on every report; ADS-B arrives every few seconds.
+#
+# This is the minimum gap between two alerts about the same pair. Until now it
+# was an accident of the runner's window size, which meant a 10 s window would
+# have alerted every 10 s. Stating it here makes the behaviour independent of
+# how the runner happens to be configured.
+alert_cooldown_s: 60
 
 # --- Severity tiers, evaluated top to bottom; BOTH limits must hold ----------
 # predicted separation at closest approach, not current separation
