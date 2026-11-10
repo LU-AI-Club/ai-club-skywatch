@@ -73,13 +73,17 @@ docker exec skywatch-db psql -U skywatch -d skywatch -tAc "SELECT jsonb_pretty(p
 Detectors: `proximity`, `spoofing`, `no_fly_zone`. Each runner is the same image
 with a different `--detector`.
 
-**No-fly-zone: generate the real FAA zones first** (once per 8-week FAA cycle, needs
-internet), then build. The file is baked into the image, so generate it *before*
-`--build`. Without it the runner still starts, but on three hand-built test zones,
-and says so in its log (`NFZ live: real FAA airspace not found ... using TEST zones`).
+**No-fly-zone zones** are committed: 15 real FAA zones in
+`air/detectors/no_fly_zone/fixtures/airspace/klyh-local-faa.geojson`, i.e. the
+Lynchburg area (within 65 nm of KLYH: Farmville, Evers and Barfoot MOAs, and
+Fort Pickett's restricted area R-6602) plus P-56 over Washington, DC. Nothing to
+generate. Expect few detections: MOAs are legal to fly through and score LOW/INFO,
+and in a one-hour replay of real traffic only Evers South MOA fired.
+
+Refresh them each FAA cycle (8 weeks; needs internet) and commit the result:
 
 ```bash
-python scripts/make_faa_airspace.py --out air/detectors/no_fly_zone/fixtures/airspace/klyh-150nm-faa.geojson
+python scripts/make_faa_airspace.py --radius-nm 65 --also "P-56" --out air/detectors/no_fly_zone/fixtures/airspace/klyh-local-faa.geojson
 ```
 
 ### One-shot (recommended for testing)
@@ -196,7 +200,7 @@ docker compose stop proximity-runner
 - **Rebuild after code changes.** Edits under `air/` or `scripts/` only take
   effect in the containers after `--build`.
 - **No-Fly-Zone on test zones?** `docker logs skywatch-no-fly-zone-runner` shows
-  `using TEST zones` when the real FAA file was not generated before `--build`.
+  `using TEST zones` if the committed zone file is missing from the image.
   Detections with `zone_id` P-901, TFR-6/1234 or LYNCHBURG-MOA are test zones.
 - **Zero detections is not always a quiet sky.** If the observations reach a
   detector without altitude (see NFZ-12A / SPOOF-12C), no-fly-zone abstains on

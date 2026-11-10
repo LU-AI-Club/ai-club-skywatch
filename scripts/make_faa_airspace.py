@@ -303,6 +303,35 @@ def unique_zone_ids(features: list[dict[str, Any]]) -> list[str]:
     return ids
 
 
+def _names(csv: str | None) -> set[str]:
+    return {name.strip().upper() for name in (csv or "").split(",") if name.strip()}
+
+
+def keep_local(
+    in_range: list[tuple[float, dict[str, Any]]],
+    radius_nm: float | None,
+    also: str | None,
+) -> list[tuple[float, dict[str, Any]]]:
+    """Narrow ``(distance_nm, feature)`` pairs to ``radius_nm`` plus the ``also`` names.
+
+    ``radius_nm`` None keeps every pair (no narrowing). A name in ``also`` that
+    matches nothing is an error, so a typo cannot silently drop a zone.
+    """
+    if radius_nm is None and not also:
+        return in_range
+    extra = _names(also)
+    kept = [
+        (d, f) for d, f in in_range
+        if (radius_nm is None or d <= radius_nm)
+        or (f["properties"].get("NAME") or "").strip().upper() in extra
+    ]
+    found = {(f["properties"].get("NAME") or "").strip().upper() for _, f in kept}
+    missing = sorted(extra - found)
+    if missing:
+        raise SystemExit(f"--also named zones that are not in range: {missing}")
+    return kept
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True, type=Path)
@@ -315,6 +344,24 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=None,
         help="keep only the N nearest zones, for a small committed test fixture",
+    )
+    parser.add_argument(
+        "--radius-nm",
+        type=float,
+        default=None,
+        help=(
+            "keep zones within this many nm of scope.center_* (default: scope.radius_nm). "
+            "The committed live file uses 65: the Lynchburg area"
+        ),
+    )
+    parser.add_argument(
+        "--also",
+        default=None,
+        help=(
+            "comma-separated FAA NAMEs to keep even beyond --radius-nm, as long as they "
+            "are within scope.radius_nm. The committed live file adds P-56 (Washington, "
+            "DC) as an always-active prohibited area"
+        ),
     )
     parser.add_argument(
         "--only",
@@ -343,6 +390,9 @@ def main(argv: list[str] | None = None) -> int:
     in_range = [(d, f) for d, f in in_range if d <= radius]
     in_range.sort(key=lambda pair: pair[0])
     print(f"within {radius:g} nm: {len(in_range)}")
+    in_range = keep_local(in_range, args.radius_nm, args.also)
+    if args.radius_nm is not None or args.also:
+        print(f"kept {len(in_range)} within {args.radius_nm} nm plus {args.also or 'nothing'}")
     if args.only:
         wanted = {name.strip().upper() for name in args.only.split(",")}
         in_range = [

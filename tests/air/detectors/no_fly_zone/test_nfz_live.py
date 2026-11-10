@@ -21,6 +21,10 @@ pytest.importorskip("shapely")
 pytest.importorskip("h3")
 
 from air.detectors.no_fly_zone import build_live_detector  # noqa: E402
+
+# Unit tests pin the hand-built zones; the live default is the real FAA file.
+FIXTURE_ZONES = (Path(__file__).resolve().parents[4]
+                 / "air/detectors/no_fly_zone/fixtures/airspace/klyh-150nm.geojson")
 from air.detectors.no_fly_zone.live import TABLE, extra_columns  # noqa: E402
 from air.live.persistence import PersistResult, dedup_key, persist  # noqa: E402
 from air.models.observation import AdsbObservation  # noqa: E402
@@ -42,7 +46,7 @@ def _obs(seconds: int) -> AdsbObservation:
 
 
 def _open_incursion():
-    [det] = build_live_detector().detect_observations([_obs(0), _obs(1)])
+    [det] = build_live_detector(airspace_path=FIXTURE_ZONES).detect_observations([_obs(0), _obs(1)])
     return det
 
 
@@ -74,7 +78,7 @@ def test_extra_columns_match_the_migration():
 
 
 def test_persist_writes_an_open_incursion_then_updates_it():
-    detector = build_live_detector()
+    detector = build_live_detector(airspace_path=FIXTURE_ZONES)
     db = FakeDB()
     [opened] = detector.detect_observations([_obs(0), _obs(1)])
     [grown] = detector.detect_observations([_obs(2), _obs(3)])
@@ -92,7 +96,7 @@ DSN = os.environ.get("SKYWATCH_TEST_DSN")
 @pytest.mark.skipif(not DSN, reason="set SKYWATCH_TEST_DSN to run against Postgres")
 def test_real_postgres_migration_and_persist():
     psycopg = pytest.importorskip("psycopg")
-    detector = build_live_detector()
+    detector = build_live_detector(airspace_path=FIXTURE_ZONES)
     [opened] = detector.detect_observations([_obs(0), _obs(1)])
     [closed] = detector.flush()
     with psycopg.connect(DSN) as conn:
@@ -117,7 +121,7 @@ def _persist_like_the_runner(*, flush_every_tick: bool) -> list[dict]:
     One detector for the whole run, one persist per tick, flush either every
     tick (the old runner) or only after the last tick (end of stream).
     """
-    detector, db = build_live_detector(), FakeDB()
+    detector, db = build_live_detector(airspace_path=FIXTURE_ZONES), FakeDB()
     ticks = [[_obs(0), _obs(1)], [_obs(30), _obs(31)], [_obs(60), _obs(61)], [_obs(90)]]
     for index, window in enumerate(ticks):
         found = detector.detect_observations(window)

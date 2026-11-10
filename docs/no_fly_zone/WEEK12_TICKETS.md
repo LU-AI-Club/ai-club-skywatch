@@ -86,8 +86,11 @@ incursion, and `test_nfz_adapter.py` plus `test_nfz_live.py` stay green.
 ## NFZ-12C — Use real FAA airspace in the live runner
 
 **Status: fixed** in branch `nfz/faa-airspace-live` (Will's generator plus the live
-wiring): `build_live_detector` loads `airspace.live_path` when generated, else falls
-back to the test zones with a warning. Kept here for the reasoning.
+wiring). The live runner loads 15 committed real zones: the Lynchburg area (within
+65 nm) plus P-56, DC. Scoped down from 150 nm after a one-hour replay of real
+traffic: 39 of 42 detections came from zones 100+ nm away (mostly airliners at
+cruise over Chesapeake Bay restricted areas), and none from the two nearest zones.
+Kept here for the reasoning.
 
 **Owner:** Tim, Will · originally branch `nfz/faa-airspace`
 

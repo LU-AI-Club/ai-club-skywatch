@@ -63,3 +63,63 @@ def test_explicit_airspace_path_still_wins(tmp_path: Path) -> None:
 def test_replay_and_tests_never_read_the_live_file(tmp_path: Path) -> None:
     cfg = _config(tmp_path, str(AIRSPACE / "klyh-faa-sample.geojson"))
     assert _ids(build_detector(cfg)) == FIXTURE_IDS
+
+
+# --- The committed live zone set (the default the live runner loads) -------
+
+LOCAL_IDS = {
+    "FARMVILLE MOA", "FARMVILLE MOA #2", "FARMVILLE MOA #3",
+    "EVERS SOUTH MOA", "EVERS CENTER MOA", "EVERS LOW MOA", "EVERS EAST MOA",
+    "BARFOOT 1 MOA", "BARFOOT 2 MOA", "BARFOOT 3 MOA",
+    "R-6602A", "R-6602B", "R-6602C",
+}
+DC_IDS = {"P-56", "P-56 #2"}
+
+
+def test_live_runner_default_is_lynchburg_plus_dc() -> None:
+    # Scope decision: the Lynchburg area (within 65 nm of KLYH) plus P-56 over
+    # Washington, DC as an always-active prohibited area. 15 zones.
+    assert _ids(build_live_detector()) == LOCAL_IDS | DC_IDS
+
+
+def test_committed_local_zones_are_within_65_nm_except_dc() -> None:
+    from scripts.make_faa_airspace import within_radius_nm
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    lat, lon = raw["scope"]["center_lat"], raw["scope"]["center_lon"]
+    import json
+
+    data = json.loads((AIRSPACE / "klyh-local-faa.geojson").read_text(encoding="utf-8"))
+    for feature in data["features"]:
+        zone_id = feature["properties"]["zone_id"]
+        if zone_id not in DC_IDS:
+            assert within_radius_nm(feature["geometry"], lat, lon) <= 65, zone_id
+
+
+# --- make_faa_airspace.py --radius-nm / --also ------------------------------
+
+def _pair(distance: float, name: str) -> tuple[float, dict]:
+    return distance, {"properties": {"NAME": name}}
+
+
+def test_keep_local_narrows_to_the_radius_plus_named_zones() -> None:
+    from scripts.make_faa_airspace import keep_local
+
+    pairs = [_pair(18, "FARMVILLE MOA"), _pair(71, "EVERS LOW MOA"), _pair(138, "P-56"),
+             _pair(159, "R-4008")]
+    kept = keep_local(pairs, 65, "p-56")
+    assert [f["properties"]["NAME"] for _, f in kept] == ["FARMVILLE MOA", "P-56"]
+
+
+def test_keep_local_without_options_keeps_everything() -> None:
+    from scripts.make_faa_airspace import keep_local
+
+    pairs = [_pair(18, "FARMVILLE MOA"), _pair(159, "R-4008")]
+    assert keep_local(pairs, None, None) == pairs
+
+
+def test_keep_local_rejects_a_misspelled_name() -> None:
+    from scripts.make_faa_airspace import keep_local
+
+    with pytest.raises(SystemExit, match="P-65"):
+        keep_local([_pair(18, "FARMVILLE MOA")], 65, "P-65")
