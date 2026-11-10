@@ -146,7 +146,7 @@ def test_fires_inside_zone_and_emits_platform_detection(detector: NoFlyZoneDetec
     assert detector.open_episodes == 0
     assert detection.geospatial_context.risk_zone_ids == ["P-901"]
     assert detection.provenance.raw_source_ref == "test.csv:7"
-    assert [e.entity_id for e in detection.entities_involved] == ["aircraft:a1b2c3"]
+    assert [e.entity_id for e in detection.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]
     assert detection.temporal_bounds.start_time == _TS
 
 
@@ -320,7 +320,7 @@ def test_silence_closes_an_episode_in_a_later_window(detector: NoFlyZoneDetector
         observed_at=_TS + timedelta(seconds=max_gap + 1),
     )
     [closed] = detector.detect_observations([later])
-    assert [e.entity_id for e in closed.entities_involved] == ["aircraft:a1b2c3"]
+    assert [e.entity_id for e in closed.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]
     assert detector.open_episodes == 0
 
 
@@ -368,4 +368,4 @@ def test_run_detectors_flushes_after_the_last_window(detector: NoFlyZoneDetector
     from air.windowing import run_detectors
 
     [episode] = list(run_detectors([[make_obs()]], [detector]))
-    assert [e.entity_id for e in episode.entities_involved] == ["aircraft:a1b2c3"]
+    assert [e.entity_id for e in episode.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]

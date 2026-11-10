@@ -13,6 +13,7 @@ tests pin the properties the live store relies on:
 """
 from __future__ import annotations
 
+import dataclasses
 import importlib.util
 import sys
 from datetime import UTC, datetime, timedelta
@@ -21,13 +22,15 @@ from typing import Any
 
 import pytest
 
-from air.detectors.no_fly_zone import build_detector, build_live_detector
-from air.detectors.no_fly_zone.adapter import NoFlyZoneDetector
-from air.models.observation import AdsbObservation
-from air.windowing import detection_dedup_key
-
+# Before the detector imports, which need both: a machine without them should
+# skip this file, not fail to collect it.
 pytest.importorskip("shapely")
 pytest.importorskip("h3")
+
+from air.detectors.no_fly_zone import build_detector, build_live_detector  # noqa: E402
+from air.detectors.no_fly_zone.adapter import NoFlyZoneDetector  # noqa: E402
+from air.models.observation import AdsbObservation  # noqa: E402
+from air.windowing import detection_dedup_key  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 _TS = datetime(2026, 9, 22, 20, 15, tzinfo=UTC)
@@ -88,7 +91,9 @@ def test_incursion_is_emitted_on_entry(live: NoFlyZoneDetector) -> None:
     assert extras["report_count"] == 1
     assert entry.temporal_bounds.start_time == _TS
     assert entry.temporal_bounds.end_time is None
-    assert "still inside" in entry.evidence[0].summary
+    summary = entry.evidence[0].summary
+    assert summary is not None
+    assert "still inside" in summary
     assert live.open_episodes == 1  # the snapshot did not close it
 
 
@@ -117,6 +122,36 @@ def test_an_episode_with_no_new_reports_is_not_re_emitted(live: NoFlyZoneDetecto
                      observed_at=_TS + timedelta(seconds=2), source_row_id="test.csv:other")
     assert live.detect_observations([other]) == []
     assert live.open_episodes == 1
+
+
+def test_an_episode_is_re_emitted_when_reports_resume(live: NoFlyZoneDetector) -> None:
+    """A quiet window must not stop later snapshots: the live row keeps updating."""
+    [first] = live.detect_observations([inside(0)])
+    other = make_obs(icao24="ffffff", latitude=36.0, longitude=-81.0,
+                     observed_at=_TS + timedelta(seconds=2), source_row_id="test.csv:other")
+    assert live.detect_observations([other]) == []
+    [resumed] = live.detect_observations([inside(5)])
+    assert resumed.metadata["extras"]["episode_status"] == "OPEN"
+    assert resumed.metadata["extras"]["report_count"] == 2
+    assert detection_dedup_key(resumed) == detection_dedup_key(first)
+
+
+def test_overlapping_zones_get_distinct_dedup_keys(live: NoFlyZoneDetector) -> None:
+    """One aircraft in two zones is two incursions, so two rows after an upsert."""
+    p901 = next(zone for zone in live.zones if zone.zone_id == "P-901")
+    twin = dataclasses.replace(p901, zone_id="R-TWIN", name="Twin")
+    detector = NoFlyZoneDetector(live.cfg, [p901, twin], emit_open=True)
+    detections = detector.detect_observations([inside(0)])
+    assert sorted(d.metadata["extras"]["zone_id"] for d in detections) == ["P-901", "R-TWIN"]
+    assert len({detection_dedup_key(d) for d in detections}) == 2
+
+
+def test_aircraft_is_the_first_entity_and_the_zone_follows(live: NoFlyZoneDetector) -> None:
+    """entities_involved[0] is the aircraft: the dashboard and entity_id column read it."""
+    [entry] = live.detect_observations([inside(0)])
+    aircraft, zone = entry.entities_involved
+    assert (aircraft.entity_id, aircraft.entity_type) == ("aircraft:a1b2c3", "aircraft")
+    assert (zone.entity_id, zone.entity_type, zone.domain) == ("zone:P-901", "airspace_zone", "air")
 
 
 def test_an_empty_window_emits_nothing(live: NoFlyZoneDetector) -> None:
