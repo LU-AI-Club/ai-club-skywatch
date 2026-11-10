@@ -202,12 +202,14 @@ docker compose stop proximity-runner
 - **No-Fly-Zone on test zones?** `docker logs skywatch-no-fly-zone-runner` shows
   `using TEST zones` if the committed zone file is missing from the image.
   Detections with `zone_id` P-901, TFR-6/1234 or LYNCHBURG-MOA are test zones.
-- **Zero detections is not always a quiet sky.** The live feed nests the ADS-B
+- **Zero detections: quiet sky, or blind detector?** The live feed nests the ADS-B
   fields inside the SENTINEL envelope (`payload.payload`, readsb names such as
-  `alt_baro`). Until the reader handles that (#121), live observations reach the
-  detectors with no altitude, NIC/NACp, squawk or callsign: no-fly-zone skips every
-  aircraft and still reports `SUCCESS`. Check:
-  `docker exec skywatch-db psql -U skywatch -d skywatch -c "SELECT payload->'payload' ? 'alt_baro' AS nested_alt FROM observations WHERE domain='air' ORDER BY observed_at DESC LIMIT 1;"`
+  `alt_baro`); the reader translates them since #121. If a runner was built from
+  code older than that, its detectors get no altitude, NIC/NACp, squawk or
+  callsign, and still report `SUCCESS`. This runs the real reader on the last 5
+  minutes and should show nearly every observation with altitude (`0 with
+  altitude` = rebuild with `--build` from current `main`):
+  `docker compose --profile runners run --rm --no-deps --entrypoint python no-fly-zone-runner -c "import os, psycopg; from datetime import datetime, timedelta, UTC; from air.live.observations_reader import read_window; now = datetime.now(UTC); obs = read_window(psycopg.connect(os.environ['SKYWATCH_DB_DSN']), start=now - timedelta(minutes=5), end=now); print(len(obs), 'observations,', sum(o.altitude_ft is not None for o in obs), 'with altitude')"`
 - **Poller not inserting?** Check `docker logs skywatch-adsb-poller`. A
   `ConnectTimeout` means the machine is not on an allowlisted network (see
   `docs/ADSB_POSITIONS_FEED_GUIDE.md`); a TLS error means `sentinel-ca.crt` is

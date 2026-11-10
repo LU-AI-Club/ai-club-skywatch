@@ -22,8 +22,8 @@ person can take one ticket and work without waiting on anyone else.
 | Live runner (Spine C, ours) | ✅ Keeps up with live time, survives DB errors, stops cleanly, logs every tick (#122) |
 | Zones | ✅ 15 real FAA zones committed: the Lynchburg area (within 65 nm of KLYH) plus P-56 over Washington DC (#120) |
 | Live feed → `observations` | ✅ Poller works from an allowlisted machine |
-| Live feed fields (altitude, squawk, NIC…) | ⏳ Reader fix in review: **#121** (Will). Until it merges, live data has **no altitude**, so NFZ skips every aircraft and still reports `SUCCESS` |
-| `main` test suite | ⏳ One stale test fails (`test_live_spine`); fixed by **#116** (Will) |
+| Live feed fields (altitude, squawk, NIC…) | ✅ The reader translates the feed's nested fields, so NFZ sees altitude on live data (#121, Will). Rebuild with `--build` after pulling |
+| `main` test suite | ✅ Passing: 1067 passed, 0 failed (the stale spine test was fixed in #116, Will) |
 
 **What the zones are.** Fort Pickett **R-6602A/B/C** (restricted) and **P-56**
 (prohibited, always active) are the real "violation" zones. The 10 local MOAs
@@ -46,7 +46,7 @@ severity.
 | | [NFZ-12L](#nfz-12l--grade-confidence-instead-of-0-or-1) | Grade confidence instead of 0 or 1 | M | No | |
 | | [NFZ-12M](#nfz-12m--apply-airspaceinclude_types) | Apply `airspace.include_types` | S | No | |
 | **B · Live validation** | [NFZ-12N](#nfz-12n--end-to-end-tests-in-the-repo-e1e2) | End-to-end tests in the repo (E1/E2) | M | No | |
-| | [NFZ-12O](#nfz-12o--live-smoke-test-and-behaviour-note-e3e4) | Live smoke test + behaviour note (E3/E4) | M | **Yes**, after #121 | |
+| | [NFZ-12O](#nfz-12o--live-smoke-test-and-behaviour-note-e3e4) | Live smoke test + behaviour note (E3/E4) | M | **Yes** | |
 | | [NFZ-12P](#nfz-12p--run-the-database-tests-in-ci) | Run the database tests in CI | S | No | |
 | **C · Runner (Spine C)** | [NFZ-12K](#nfz-12k--skip-reasons-in-the-heartbeat) | Skip reasons in the heartbeat ("fail safely") | S | No | |
 | | [NFZ-12Q](#nfz-12q--fail-fast-on-misconfiguration) | Fail fast on misconfiguration | S | No | |
@@ -167,7 +167,7 @@ the working script to start from.
 
 ### NFZ-12O — Live smoke test and behaviour note (E3/E4)
 
-**Blocked on:** #121 merged (without it there is no altitude in live data).
+**Needs:** the poller running on a campus machine, and a runner built from `main` at or after #121 (altitude check: `docs/RUN_PIPELINE.md`, Known gotchas).
 
 **Why.** Everything we know about detection rates comes from a recorded hour.
 The spoofing team's version of this is `docs/spoofing/LIVE_SMOKE.md` (#124),
@@ -271,8 +271,8 @@ from `klyh-local-faa.geojson` (R-6602 and P-56 visually distinct from MOAs).
 | 12C | Real FAA zones in the live runner, scoped to Lynchburg plus P-56 | #120 |
 | 12I | Runner: catches up after downtime, survives errors, clean SIGTERM shutdown, a log line per tick | #122 |
 | 12J | Zone lookup 52× faster (609 s → 11.7 s per replayed hour on 52 zones) | #122 |
-| 12A | Live data arrived without altitude: confirmed on live data; fix in review | #121 (Will) |
-| 12G | Stale spine test; fix in review | #116 (Will) |
+| 12A | Live data arrived without altitude: confirmed on live data; the reader now reads the feed's envelope | #121 (Will) |
+| 12G | Stale spine test (`test_live_spine`): fixed | #116 (Will) |
 | 12F | Report-rate tuning: measured on the replay, settings hold; folded into 12O | — |
 
 ---
