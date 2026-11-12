@@ -56,6 +56,19 @@ DOMAIN = "air"
 DETECTION_TYPE = "predicted_proximity"
 FEATURE_SCHEMA_VERSION = "air-features-v1"
 
+# Entity id prefix. MUST match the `observations.entity_id` form ('icao24:a1b2c3'),
+# because that is the only thing downstream can join a detection back to a
+# position on. `air/live/payload.py` strips this prefix on the way in, leaving
+# AdsbObservation.icao24 as bare hex, so we paste the same one back on here --
+# a different prefix would silently match nothing. See
+# docs/live_integration/DETECTION_TABLE_COLUMNS.md.
+ENTITY_PREFIX = "icao24:"
+
+
+def entity_id_for(icao24: str) -> str:
+    """`'a1b2c3'` -> `'icao24:a1b2c3'` — the id every consumer joins on."""
+    return f"{ENTITY_PREFIX}{icao24}"
+
 
 # --- Scoring + output (done) --------------------------------------------------
 # NACp (Navigation Accuracy Category - Position) is the 95% containment radius
@@ -214,15 +227,15 @@ def to_detection(
         temporal_bounds=TimeBounds(start_time=window_start, end_time=cpa_time),
         provenance=provenance,
         entities_involved=[
-            EntityRef(entity_id=f"aircraft:{a.icao24}", entity_type="aircraft", domain=DOMAIN),
-            EntityRef(entity_id=f"aircraft:{b.icao24}", entity_type="aircraft", domain=DOMAIN),
+            EntityRef(entity_id=entity_id_for(a.icao24), entity_type="aircraft", domain=DOMAIN),
+            EntityRef(entity_id=entity_id_for(b.icao24), entity_type="aircraft", domain=DOMAIN),
         ],
         evidence=[
             Evidence(
                 evidence_type="predicted_closest_approach",
                 summary=facts[-1],
                 source_ref=ref_a,
-                entity_id=f"aircraft:{a.icao24}",
+                entity_id=entity_id_for(a.icao24),
                 confidence=confidence,
                 timestamp=geom.at,
                 metadata={
@@ -238,7 +251,7 @@ def to_detection(
                 evidence_type="aircraft_state",
                 summary=f"{b.icao24} at {b.altitude_ft:.0f} ft, {b.ground_speed_kt:.0f} kt, track {b.track_deg:.0f}.",
                 source_ref=ref_b,
-                entity_id=f"aircraft:{b.icao24}",
+                entity_id=entity_id_for(b.icao24),
                 timestamp=b.observed_at,
             ),
         ],
