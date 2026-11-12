@@ -133,7 +133,7 @@ def test_shared_columns_filled_from_to_dict():
     assert (row["detector_id"], row["detector_version"]) == ("skywatch.proximity", "0.1.0")
     assert (row["detection_type"], row["severity"]) == ("predicted_proximity", "HIGH")
     assert row["confidence"] == pytest.approx(d["confidence"])
-    assert row["entity_id"] == "aircraft:aaa001"
+    assert row["entity_id"] == "icao24:aaa001"
     assert row["temporal_bounds_start"] == d["temporal_bounds"]["start_time"]
     assert row["temporal_bounds_end"] == d["temporal_bounds"]["end_time"]
     assert row["latitude"] == pytest.approx(37.4154655)
@@ -149,7 +149,7 @@ def test_extra_columns_hook_is_merged():
     db, det = FakeDB(), _detection()
     persist(db, TABLE, [det], extra_columns=_extra)
     [row] = db.tables[TABLE].values()
-    assert row["member_entity_ids"] == ["aircraft:aaa001", "aircraft:bbb002"]
+    assert row["member_entity_ids"] == ["icao24:aaa001", "icao24:bbb002"]
     assert row["predicted_horizontal_nm"] == pytest.approx(0.2, abs=1e-3)
     assert row["predicted_vertical_ft"] == pytest.approx(200.0)
     assert row["t_cpa_seconds"] == pytest.approx(58.0, abs=0.1)
@@ -229,7 +229,7 @@ def test_real_postgres_same_detection_twice_is_one_row(pg):
         " bool_and(updated_at IS NOT NULL), "
         "min(raw_detection->>'detector_id') FROM proximity_detections_test"
     ).fetchone()
-    assert rows == (1, "HIGH", "{aircraft:aaa001,aircraft:bbb002}", True, "skywatch.proximity")
+    assert rows == (1, "HIGH", "{icao24:aaa001,icao24:bbb002}", True, "skywatch.proximity")
 
 
 @needs_db
