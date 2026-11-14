@@ -48,7 +48,7 @@ Each stage records an ExitReason when a state leaves without a detection.
 | Stream | File | Signature |
 |---|---|---|
 | A | air/normalizers/no_fly_zone_adsb.py | load_states(path) -> Iterator[AircraftState] |
-| B | ingest/airspace_loader.py | load_zones(path) -> list[AirspaceZone] |
+| B | ingest/airspace_loader.py | load_zones(path) -> list[AirspaceZone]; load_filtered_zones(path, cfg) -> list[AirspaceZone] |
 | C | geo/zone_index.py | candidate_zone_ids(state, zones, cfg) -> tuple[str, ...] |
 | C | geo/containment.py | check_containment(state, zones, cfg) -> ContainmentResult |
 | D | geo/altitude.py | vertical_check(state, zone) -> VerticalResult |

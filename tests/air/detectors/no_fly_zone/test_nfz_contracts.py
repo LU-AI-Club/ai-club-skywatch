@@ -33,6 +33,64 @@ def test_config_loads_and_validates() -> None:
     assert cfg.baseline_version.startswith("nfz-rules-0.1.0+sua-")
 
 
+def test_config_defaults_missing_include_types_to_all_zone_types(tmp_path: Any) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+    from air.detectors.no_fly_zone.types import ZoneType
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    del raw["airspace"]["include_types"]
+    config_path = tmp_path / "without_include_types.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    cfg = load_config(config_path)
+    assert "include_types" not in cfg["airspace"]
+    assert {zone_type.value for zone_type in ZoneType} == set(raw["scoring"]["base_by_zone_type"])
+
+
+def test_config_allows_empty_include_types(tmp_path: Any) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw["airspace"]["include_types"] = []
+    config_path = tmp_path / "empty_include_types.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    assert load_config(config_path)["airspace"]["include_types"] == []
+
+
+def test_config_rejects_duplicate_include_types(tmp_path: Any) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw["airspace"]["include_types"] = ["MOA", "MOA"]
+    config_path = tmp_path / "duplicate_include_types.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="duplicate airspace.include_types value: 'MOA'"):
+        load_config(config_path)
+
+
+@pytest.mark.parametrize("include_types", [["MAO"], "MOA"])
+def test_config_rejects_invalid_include_types(tmp_path: Any, include_types: Any) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw["airspace"]["include_types"] = include_types
+    config_path = tmp_path / "bad_include_types.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="airspace.include_types"):
+        load_config(config_path)
+
+
 def test_detection_serializes_to_contract_shape() -> None:
     d = Detection("skywatch.no_fly_zone", "0.1.0", ("aircraft:ace81d",), "restricted_airspace_incursion",
                   Severity.HIGH, 0.82, 0.82, ("obs:1",), "air-features-v1", "nfz-rules-0.1.0+sua-2026-08-07",

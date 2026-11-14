@@ -13,8 +13,8 @@ path:
 Outputs
 -------
 A list of :class:`AirspaceZone`. Everything parseable is returned; filtering to
-``cfg["airspace"]["include_types"]`` is the caller's policy decision, not a
-parsing one.
+``cfg["airspace"]["include_types"]`` is available through
+:func:`load_filtered_zones`, which combines parsing with the configured policy.
 
 Failure causes
 --------------
@@ -22,7 +22,7 @@ FileNotFoundError
     ``path`` does not exist.
 ValueError
     Not a FeatureCollection, a feature carries a geometry that is neither a
-    Polygon nor a MultiPolygon, or a datum is not a member of :class:`Datum`.
+    Polygon nor a MultiPolygon, or a datum/zone type is invalid.
 
 A missing altitude limit defaults outward, each side on its own: no floor means
 the surface, no ceiling means unlimited. That over-includes rather than
@@ -42,12 +42,14 @@ silently mislabels every result.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
 from shapely.geometry import shape
 
+from ..config import Config
 from ..types import Activation, AirspaceZone, Datum, TimeWindow, ZoneType
 
 _POLYGON_TYPES = ("Polygon", "MultiPolygon")
@@ -123,3 +125,20 @@ def load_zones(path: str | Path) -> list[AirspaceZone]:
         zones.append(zone)
 
     return zones
+
+
+def filter_zones(zones: Sequence[AirspaceZone], cfg: Config) -> list[AirspaceZone]:
+    """Keep only configured zone types; a missing setting includes every type."""
+    include_types = cfg["airspace"].get(
+        "include_types", [zone_type.value for zone_type in ZoneType]
+    )
+    included_types = {ZoneType(zone_type) for zone_type in include_types}
+    return [zone for zone in zones if zone.zone_type in included_types]
+
+
+def load_filtered_zones(path: str | Path, cfg: Config) -> list[AirspaceZone]:
+    """Load zones from ``path`` and apply ``airspace.include_types``.
+
+    An absent setting includes every zone type; an empty list includes none.
+    """
+    return filter_zones(load_zones(path), cfg)
