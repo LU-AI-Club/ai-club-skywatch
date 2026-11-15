@@ -7,6 +7,7 @@ its own config.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -49,6 +50,63 @@ def _validate(raw: Mapping[str, Any]) -> None:
     for z, v in bases.items():
         if not 0.0 <= float(v) <= 1.0:
             raise ValueError(f"base score for {z} out of range: {v}")
+    confidence = raw["scoring"].get("confidence")
+    if not isinstance(confidence, Mapping):
+        raise ValueError("scoring.confidence must be a mapping")
+    for key in (
+        "active_activation_factor",
+        "unknown_activation_factor",
+        "strict_position_min_factor",
+        "buffered_position_factor",
+        "preferred_altitude_factor",
+        "fallback_altitude_factor",
+        "persistence_min_factor",
+    ):
+        value = confidence.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"scoring.confidence.{key} must be a number in [0, 1]")
+        lower_bound_ok = (
+            value > 0.0
+            if key == "persistence_min_factor"
+            else value >= 0.0
+        )
+        if not isfinite(value) or not lower_bound_ok or value > 1.0:
+            if key == "persistence_min_factor":
+                raise ValueError(
+                    "scoring.confidence.persistence_min_factor must be in (0, 1]"
+                )
+            raise ValueError(f"scoring.confidence.{key} must be a number in [0, 1]")
+    if confidence["unknown_activation_factor"] >= confidence["active_activation_factor"]:
+        raise ValueError(
+            "scoring.confidence.unknown_activation_factor must be less than "
+            "active_activation_factor"
+        )
+    if confidence["buffered_position_factor"] >= confidence["strict_position_min_factor"]:
+        raise ValueError(
+            "scoring.confidence.buffered_position_factor must be less than "
+            "strict_position_min_factor"
+        )
+    if confidence["fallback_altitude_factor"] >= confidence["preferred_altitude_factor"]:
+        raise ValueError(
+            "scoring.confidence.fallback_altitude_factor must be less than "
+            "preferred_altitude_factor"
+        )
+    saturation = confidence.get("persistence_saturation_sec")
+    if (
+        isinstance(saturation, bool)
+        or not isinstance(saturation, (int, float))
+        or not isfinite(saturation)
+        or saturation <= 0.0
+    ):
+        raise ValueError("scoring.confidence.persistence_saturation_sec must be positive")
+    uncertainty = raw["geometry"]["default_uncertainty_m"]
+    if (
+        isinstance(uncertainty, bool)
+        or not isinstance(uncertainty, (int, float))
+        or not isfinite(uncertainty)
+        or uncertainty <= 0.0
+    ):
+        raise ValueError("geometry.default_uncertainty_m must be positive")
     for key in ("unknown_activation_cap", "buffered_only"):
         Severity(raw["severity"][key])  # raises if not a valid severity
     if raw["sampling"]["target_hz"] <= 0:
