@@ -62,7 +62,7 @@ Each stage records an ExitReason when a state leaves without a detection.
 | Lead | logic/detector.py | run(states, zones, cfg, *, exit_counts, per_report) — wiring only |
 | Lead | emit.py | to_platform_detection(detection) -> contracts.Detection |
 | Lead | adapter.py | NoFlyZoneDetector.detect_observations(list[AdsbObservation]) -> list[contracts.Detection]; flush() at end of stream; emit_open=True also returns open episodes (OPEN, no end time) |
-| Lead | `__init__.py` | build_detector(config_path=None, airspace_path=None, *, emit_open=False) -> NoFlyZoneDetector; build_live_detector(...) = emit_open=True, used by scripts/run_live_detector.py |
+| Lead | `__init__.py` | build_detector(config_path=None, airspace_path=None, *, emit_open=False) -> NoFlyZoneDetector; build_live_detector(..., *, demo_zones=None) = emit_open=True, used by scripts/run_live_detector.py; demo_zones (or SKYWATCH_NFZ_DEMO_ZONES=1) adds the synthetic zones at airspace.demo_path |
 
 ## Input data
 Two routes in, one pipeline. They must give identical detections (test_nfz_adapter.py

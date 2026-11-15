@@ -31,6 +31,13 @@ airspace:
   # it each FAA cycle with the command in docs/RUN_PIPELINE.md.
   # Tests, replay and the CLI always use fixture_path.
   live_path: fixtures/airspace/klyh-local-faa.geojson
+  # SYNTHETIC demo zone(s), NOT real airspace: DEMO-1, a 1 nm prohibited circle
+  # 3 nm west of KLYH (SFC-5000 ft MSL, always active) where local traffic flies,
+  # so a live demo or frontend test gets HIGH incursions on real aircraft. Added
+  # ON TOP of the live zones only when SKYWATCH_NFZ_DEMO_ZONES=1 (see
+  # build_live_detector and docs/RUN_PIPELINE.md). Off by default; tests, replay
+  # and the CLI never load it.
+  demo_path: fixtures/airspace/klyh-demo.geojson
   source_asof: "2026-08-07"   # SUA publication cycle; update with the file
   include_types: [PROHIBITED, RESTRICTED, TFR, WARNING, ALERT, MOA]
   # Community-reported U.S. DoD block; heuristic, not authoritative identity proof.
