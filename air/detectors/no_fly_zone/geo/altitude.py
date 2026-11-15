@@ -27,9 +27,14 @@ Both altitude fields ``None``
     Returns ``within=False``, ``altitude_source=NONE``,
     ``reason=ExitReason.BAD_INPUT``. Abstain; never guess an altitude.
 :attr:`Datum.AGL`
-    Needs a terrain model this detector does not have. Abstain with
-    ``BAD_INPUT`` rather than silently comparing an AGL floor to an MSL
-    altitude, which would be wrong by the terrain elevation.
+    An AGL limit is a height above the ground, and the detector has no terrain
+    model. It has, at best, the lowest and highest ground elevation under the
+    zone (``zone.terrain_min_ft`` / ``zone.terrain_max_ft``), so the limit is
+    somewhere in ``[limit + terrain_min, limit + terrain_max]`` ft MSL. An
+    aircraft clear of that whole range is decided either way; an aircraft
+    inside it abstains with ``BAD_INPUT``, as does any AGL limit on a zone with
+    no terrain bound. Never compares an AGL limit to an MSL altitude directly,
+    which would be wrong by the terrain elevation.
 
 Notes
 -----
@@ -55,7 +60,7 @@ def _resolve_altitude(
     """Resolve the aircraft altitude and source appropriate for ``datum``.
 
     FL limits are standard pressure altitudes, so barometric altitude is preferred.
-    MSL and SFC limits are geometric heights, so geometric altitude is preferred.
+    MSL, SFC and AGL limits are geometric heights, so geometric altitude is preferred.
     Each falls back to the other available altitude if the preferred one is None.
     """
     if datum == Datum.FL:
@@ -68,6 +73,21 @@ def _resolve_altitude(
             return state.alt_geom_ft, AltitudeSource.GEOMETRIC
         assert state.alt_baro_ft is not None
         return state.alt_baro_ft, AltitudeSource.BAROMETRIC
+
+
+def _limit_range_ft(
+    value_ft: float, datum: Datum, zone: AirspaceZone
+) -> tuple[float, float] | None:
+    """The lowest and highest ft MSL a floor or ceiling can be.
+
+    One value for MSL/SFC/FL limits. An AGL limit sits on the ground, so it
+    spans the zone's terrain bound; ``None`` when the zone has none.
+    """
+    if datum is not Datum.AGL:
+        return value_ft, value_ft
+    if zone.terrain_min_ft is None or zone.terrain_max_ft is None:
+        return None
+    return value_ft + zone.terrain_min_ft, value_ft + zone.terrain_max_ft
 
 
 def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
@@ -85,12 +105,53 @@ def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
         )
 
     # -------------------------------------------------------------------------
-    # 2. Validate zone datums
-    # AGL (Above Ground Level) requires a terrain elevation model that this
-    # detector lacks. Comparing AGL directly against MSL/FL would produce
-    # significant errors, so abstain with BAD_INPUT when AGL is encountered.
+    # 2. Resolve the altitude to compare against each limit
+    # MSL/SFC/AGL limits are heights, so geometric altitude is preferred,
+    # falling back to barometric. FL limits are pressure altitudes, so
+    # barometric is preferred, falling back to geometric.
     # -------------------------------------------------------------------------
-    if zone.floor_datum == Datum.AGL or zone.ceiling_datum == Datum.AGL:
+    floor_alt, floor_source = _resolve_altitude(state, zone.floor_datum)
+    ceiling_alt, ceiling_source = _resolve_altitude(state, zone.ceiling_datum)
+
+    # -------------------------------------------------------------------------
+    # 3. Put each limit in ft MSL as a (lowest, highest) range
+    # Equal for MSL/SFC/FL. For AGL the range is as wide as the terrain under
+    # the zone, and None when the zone carries no terrain bound.
+    # -------------------------------------------------------------------------
+    floor_range = _limit_range_ft(zone.floor_ft, zone.floor_datum, zone)
+    ceiling_range = _limit_range_ft(zone.ceiling_ft, zone.ceiling_datum, zone)
+
+    # -------------------------------------------------------------------------
+    # 4. Cleanly below the floor or above the ceiling: VERTICAL_CLEAR
+    # Decided first, so an aircraft above an MSL ceiling is clear even when the
+    # zone's AGL floor cannot be placed.
+    # -------------------------------------------------------------------------
+    if floor_range is not None and floor_alt < floor_range[0]:
+        return VerticalResult(
+            within=False,
+            altitude_ft=floor_alt,
+            altitude_source=floor_source,
+            reason=ExitReason.VERTICAL_CLEAR,
+        )
+
+    if ceiling_range is not None and ceiling_alt > ceiling_range[1]:
+        return VerticalResult(
+            within=False,
+            altitude_ft=ceiling_alt,
+            altitude_source=ceiling_source,
+            reason=ExitReason.VERTICAL_CLEAR,
+        )
+
+    # -------------------------------------------------------------------------
+    # 4b. An AGL limit that cannot be placed, or an aircraft inside the range
+    # an AGL limit could be anywhere in: abstain with BAD_INPUT, never guess.
+    # -------------------------------------------------------------------------
+    if (
+        floor_range is None
+        or ceiling_range is None
+        or floor_alt < floor_range[1]
+        or ceiling_alt > ceiling_range[0]
+    ):
         default_alt = (
             state.alt_geom_ft
             if state.alt_geom_ft is not None
@@ -106,37 +167,6 @@ def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
             altitude_ft=default_alt,
             altitude_source=default_source,
             reason=ExitReason.BAD_INPUT,
-        )
-
-    # -------------------------------------------------------------------------
-    # 3. Resolve altitude values for each boundary datum
-    # MSL/SFC boundaries are geometric heights above sea level, so geometric
-    # altitude is preferred, falling back to barometric.
-    # FL (Flight Level) boundaries are pressure altitudes, so barometric
-    # altitude is preferred, falling back to geometric.
-    # -------------------------------------------------------------------------
-    floor_alt, floor_source = _resolve_altitude(state, zone.floor_datum)
-    ceiling_alt, ceiling_source = _resolve_altitude(state, zone.ceiling_datum)
-
-    # -------------------------------------------------------------------------
-    # 4. Check vertical containment within the [floor_ft, ceiling_ft] band
-    # If the aircraft is cleanly above or below the band, report VERTICAL_CLEAR
-    # with the altitude value that was compared against that boundary.
-    # -------------------------------------------------------------------------
-    if floor_alt < zone.floor_ft:
-        return VerticalResult(
-            within=False,
-            altitude_ft=floor_alt,
-            altitude_source=floor_source,
-            reason=ExitReason.VERTICAL_CLEAR,
-        )
-
-    if ceiling_alt > zone.ceiling_ft:
-        return VerticalResult(
-            within=False,
-            altitude_ft=ceiling_alt,
-            altitude_source=ceiling_source,
-            reason=ExitReason.VERTICAL_CLEAR,
         )
 
     # -------------------------------------------------------------------------

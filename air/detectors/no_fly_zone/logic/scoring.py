@@ -31,7 +31,7 @@ One :class:`Detection`. ``baseline_or_model_version`` must come from
 :meth:`Config.baseline_version`, which pins both the rules version and the
 airspace publication cycle. ``explanation_facts`` must be reconstructable from
 the inputs, and ``limitations`` must state what the detector could not check
-(unknown activation, barometric-only altitude, AGL floor not evaluated).
+(unknown activation, barometric-only altitude, AGL limit placed from a terrain bound).
 
 Required ``extras`` keys
 ------------------------
@@ -93,6 +93,13 @@ ENTITY_PREFIX = "icao24:"
 def entity_id_for(icao24: str) -> str:
     """``'a1b2c3'`` -> ``'icao24:a1b2c3'``, the id every consumer joins on."""
     return f"{ENTITY_PREFIX}{icao24}"
+
+
+def _terrain_bound(zone: AirspaceZone) -> str:
+    """'300-900 ft MSL', or 'unknown' when the zone carries no terrain bound."""
+    if zone.terrain_min_ft is None or zone.terrain_max_ft is None:
+        return "unknown"
+    return f"{zone.terrain_min_ft:.0f}-{zone.terrain_max_ft:.0f} ft MSL"
 
 
 def build_detection(
@@ -169,7 +176,8 @@ def build_detection(
         )
     if zone.floor_datum is Datum.AGL or zone.ceiling_datum is Datum.AGL:
         limitations.append(
-            "AGL floor or ceiling was not evaluated because terrain data is unavailable."
+            "An AGL floor or ceiling was placed using the zone's terrain bound "
+            f"({_terrain_bound(zone)}), not a terrain model."
         )
     if vertical.altitude_source is AltitudeSource.NONE:
         limitations.append("No usable altitude was available.")

@@ -104,7 +104,18 @@ terrain model. **7 of the 13 Lynchburg-area zones have AGL floors** (Farmville
 can never alert. On the one-hour replay, 1,645 reports exited `bad_input`,
 mostly here.
 
-**Do.** Add terrain elevation for the 65 nm area as a small pre-sampled grid,
+**Part 1 is in.** Each zone can carry a terrain bound (`terrain_min_ft` /
+`terrain_max_ft` on its GeoJSON feature), with an area-wide fallback in
+`geometry.terrain_fallback_ft`. An aircraft above `floor + terrain max` fires,
+one below `floor + terrain min` is clear, and anything between still abstains.
+With only the fallback (0-5,800 ft) Evers East, Evers Low and Barfoot 2 can fire
+in their upper part; Farmville x3 and Barfoot 1 cannot until they get a real
+per-zone bound, because their ceilings are below `floor + 5,800`. It also showed
+that almost all of the `bad_input` exits on the one-hour replay were aircraft
+above the zones' ceilings: they now exit `vertical_clear`, and 1 report is left.
+
+**Still to do.** Either put a measured terrain bound on the four low zones, or
+add terrain elevation for the 65 nm area as a small pre-sampled grid,
 committed and loaded once (no network at import). Compare
 `altitude − terrain` against AGL limits. Keep abstaining where terrain is unknown.
 

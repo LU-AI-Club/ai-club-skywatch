@@ -38,10 +38,13 @@ Three things the real data does that the fixtures never did:
 ``SFC`` is a height, not always zero
     The FAA writes "300 FT SFC" for Farmville MOA's floor, meaning 300 ft
     *above the surface*. Only a value of 0 is literally the surface. So a
-    non-zero SFC maps to :attr:`Datum.AGL`, and ``geo/altitude.py`` abstains on
-    AGL because the detector has no terrain model. Those zones therefore never
-    fire, which is the honest outcome rather than comparing an AGL floor to an
-    MSL altitude. 17 of the 52 zones in range are in this position.
+    non-zero SFC maps to :attr:`Datum.AGL`. The detector has no terrain model,
+    so ``geo/altitude.py`` places an AGL limit from a terrain bound (the zone's
+    ``terrain_min_ft`` / ``terrain_max_ft`` properties, else the config's
+    ``geometry.terrain_fallback_ft``) and abstains inside the range the limit
+    could be in, rather than comparing an AGL floor to an MSL altitude. This
+    script writes no terrain properties; add them to a feature by hand to
+    tighten its bound. 17 of the 52 zones in range have an AGL limit.
 
 ``STD`` means flight level
     "180 FL STD" is FL180. Stored as feet (18000) with :attr:`Datum.FL`, which
@@ -435,7 +438,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {args.out} ({len(mapped)} zones)")
     print(f"  types:       {dict(sorted(types.items()))}")
     print(f"  activation:  {dict(sorted(activations.items()))}")
-    print(f"  AGL limits:  {agl} zone(s) - these abstain in the vertical check")
+    print(f"  AGL limits:  {agl} zone(s) - placed from a terrain bound (geo/altitude.py)")
     return 0
 
 

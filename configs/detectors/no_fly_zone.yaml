@@ -40,6 +40,17 @@ airspace:
 geometry:
   h3_resolution: 7        # ~5 km cells, matches SENTINEL
   default_uncertainty_m: 185   # used when NIC/NACp are missing
+  # Ground elevation, ft MSL, that holds anywhere our zones are. Used to place
+  # an AGL floor ("500 ft above the ground") for a zone whose GeoJSON feature
+  # has no terrain_min_ft / terrain_max_ft of its own: an aircraft above
+  # floor + max is above the floor wherever it is, one below floor + min is
+  # below it, and anything in between abstains (geo/altitude.py).
+  # max is set above Mount Rogers (5,729 ft), the highest ground in Virginia;
+  # West Virginia's highest, Spruce Knob, is 4,863 ft. It is deliberately
+  # loose: a per-zone bound on the feature is far tighter and always wins.
+  terrain_fallback_ft:
+    min: 0
+    max: 5800
 
 filters:
   drop_on_ground: true

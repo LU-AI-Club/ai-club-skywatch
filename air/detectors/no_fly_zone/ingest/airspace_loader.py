@@ -22,13 +22,20 @@ FileNotFoundError
     ``path`` does not exist.
 ValueError
     Not a FeatureCollection, a feature carries a geometry that is neither a
-    Polygon nor a MultiPolygon, or a datum/zone type is invalid.
+    Polygon nor a MultiPolygon, a datum/zone type is invalid, or a terrain
+    bound is half given or has its minimum above its maximum.
 
 A missing altitude limit defaults outward, each side on its own: no floor means
 the surface, no ceiling means unlimited. That over-includes rather than
 silently dropping a restricted volume, which is the safe direction for a
 detector, while keeping whichever limit the source did publish. A limit given
 without a datum is read as MSL.
+
+Terrain: optional ``terrain_min_ft`` / ``terrain_max_ft`` properties give the
+lowest and highest ground elevation under the zone in ft MSL, which is what
+lets ``geo/altitude.py`` place an AGL floor. Give both or neither.
+:func:`load_filtered_zones` fills zones that have an AGL limit and no bound of
+their own from ``geometry.terrain_fallback_ft`` in the config, when it is set.
 
 Window times without a timezone are read as UTC, matching the ADS-B loader, so
 :func:`logic.activation.is_active` never compares naive and aware datetimes.
@@ -43,6 +50,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -69,6 +77,18 @@ def _limit(value: Any, datum_raw: Any, missing: tuple[float, Datum]) -> tuple[fl
     if value is None:
         return missing
     return float(value), Datum(datum_raw) if datum_raw is not None else Datum.MSL
+
+
+def _terrain(props: dict[str, Any], zone_id: Any) -> tuple[float | None, float | None]:
+    """The zone's terrain bound in ft MSL, or (None, None) when it has none."""
+    low, high = props.get("terrain_min_ft"), props.get("terrain_max_ft")
+    if low is None and high is None:
+        return None, None
+    if low is None or high is None:
+        raise ValueError(f"zone {zone_id}: give both terrain_min_ft and terrain_max_ft")
+    if float(low) > float(high):
+        raise ValueError(f"zone {zone_id}: terrain_min_ft is above terrain_max_ft")
+    return float(low), float(high)
 
 
 def load_zones(path: str | Path) -> list[AirspaceZone]:
@@ -107,6 +127,8 @@ def load_zones(path: str | Path) -> list[AirspaceZone]:
         source_asof_raw = props.get("source_asof")
         source_asof = date.fromisoformat(source_asof_raw) if source_asof_raw else None
 
+        terrain_min_ft, terrain_max_ft = _terrain(props, props.get("zone_id"))
+
         zone = AirspaceZone(
             zone_id=props["zone_id"],
             name=props.get("name", ""),
@@ -121,6 +143,8 @@ def load_zones(path: str | Path) -> list[AirspaceZone]:
             controlling_agency=props.get("controlling_agency"),
             source=props.get("source", ""),
             source_asof=source_asof,
+            terrain_min_ft=terrain_min_ft,
+            terrain_max_ft=terrain_max_ft,
         )
         zones.append(zone)
 
@@ -136,9 +160,31 @@ def filter_zones(zones: Sequence[AirspaceZone], cfg: Config) -> list[AirspaceZon
     return [zone for zone in zones if zone.zone_type in included_types]
 
 
-def load_filtered_zones(path: str | Path, cfg: Config) -> list[AirspaceZone]:
-    """Load zones from ``path`` and apply ``airspace.include_types``.
+def apply_terrain_fallback(zones: Sequence[AirspaceZone], cfg: Config) -> list[AirspaceZone]:
+    """Give AGL zones with no terrain bound the config's area-wide one.
 
-    An absent setting includes every zone type; an empty list includes none.
+    ``geometry.terrain_fallback_ft`` is a ``{min, max}`` pair in ft MSL that
+    holds anywhere the zones can be. Zones that carry their own bound, and
+    zones with no AGL limit, are returned untouched. With the setting absent
+    nothing changes, and AGL zones without a bound keep abstaining.
     """
-    return filter_zones(load_zones(path), cfg)
+    fallback = cfg.raw.get("geometry", {}).get("terrain_fallback_ft")
+    if not fallback:
+        return list(zones)
+    low, high = float(fallback["min"]), float(fallback["max"])
+    return [
+        replace(zone, terrain_min_ft=low, terrain_max_ft=high)
+        if Datum.AGL in (zone.floor_datum, zone.ceiling_datum)
+        and zone.terrain_min_ft is None
+        else zone
+        for zone in zones
+    ]
+
+
+def load_filtered_zones(path: str | Path, cfg: Config) -> list[AirspaceZone]:
+    """Load zones from ``path``, apply ``airspace.include_types`` and the terrain fallback.
+
+    An absent ``include_types`` includes every zone type; an empty list
+    includes none. See :func:`apply_terrain_fallback` for the terrain setting.
+    """
+    return apply_terrain_fallback(filter_zones(load_zones(path), cfg), cfg)

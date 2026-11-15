@@ -338,3 +338,73 @@ def test_pin_pressure_vs_geometric_discrepancy() -> None:
 
 
 
+
+
+# --- AGL limits placed from a terrain bound (NFZ-12E) --------------------------
+# A "500 ft AGL" floor over ground between 300 and 900 ft MSL is somewhere in
+# 800-1400 ft MSL. Outside that range the answer is certain; inside it is not.
+
+
+def _agl_floor_zone(**overrides: Any) -> AirspaceZone:
+    base: dict[str, Any] = {
+        "floor_ft": 500.0,
+        "floor_datum": Datum.AGL,
+        "ceiling_ft": 6000.0,
+        "ceiling_datum": Datum.MSL,
+        "terrain_min_ft": 300.0,
+        "terrain_max_ft": 900.0,
+    }
+    base.update(overrides)
+    return make_zone(**base)
+
+
+def test_agl_floor_fires_above_the_highest_the_floor_can_be() -> None:
+    res = vertical_check(make_state(alt_geom_ft=1400.0), _agl_floor_zone())
+    assert res.within is True
+    assert res.altitude_ft == 1400.0
+    assert res.reason is None
+
+
+def test_agl_floor_is_clear_below_the_lowest_the_floor_can_be() -> None:
+    res = vertical_check(make_state(alt_geom_ft=799.0), _agl_floor_zone())
+    assert res.within is False
+    assert res.reason is ExitReason.VERTICAL_CLEAR
+
+
+def test_agl_floor_abstains_inside_the_terrain_range() -> None:
+    """At 1,000 ft MSL the aircraft is above the floor over low ground and
+    below it over high ground. Without a terrain model that is not decidable."""
+    res = vertical_check(make_state(alt_geom_ft=1000.0), _agl_floor_zone())
+    assert res.within is False
+    assert res.reason is ExitReason.BAD_INPUT
+
+
+def test_above_msl_ceiling_is_clear_even_without_a_terrain_bound() -> None:
+    """The ceiling settles it; the AGL floor never needs placing."""
+    zone = _agl_floor_zone(terrain_min_ft=None, terrain_max_ft=None)
+    res = vertical_check(make_state(alt_geom_ft=9000.0), zone)
+    assert res.within is False
+    assert res.reason is ExitReason.VERTICAL_CLEAR
+
+
+def test_agl_floor_without_a_terrain_bound_still_abstains_under_the_ceiling() -> None:
+    zone = _agl_floor_zone(terrain_min_ft=None, terrain_max_ft=None)
+    res = vertical_check(make_state(alt_geom_ft=3000.0), zone)
+    assert res.within is False
+    assert res.reason is ExitReason.BAD_INPUT
+
+
+def test_agl_ceiling_uses_the_same_range() -> None:
+    """Ceiling 2,000 ft AGL over 300-900 ft ground is 2,300-2,900 ft MSL."""
+    zone = _agl_floor_zone(
+        floor_ft=0.0, floor_datum=Datum.SFC, ceiling_ft=2000.0, ceiling_datum=Datum.AGL
+    )
+    assert vertical_check(make_state(alt_geom_ft=2300.0), zone).within is True
+    assert vertical_check(make_state(alt_geom_ft=2600.0), zone).reason is ExitReason.BAD_INPUT
+    assert vertical_check(make_state(alt_geom_ft=2901.0), zone).reason is ExitReason.VERTICAL_CLEAR
+
+
+def test_agl_floor_with_barometric_only_uses_barometric() -> None:
+    res = vertical_check(make_state(alt_geom_ft=None, alt_baro_ft=2000.0), _agl_floor_zone())
+    assert res.within is True
+    assert res.altitude_source is AltitudeSource.BAROMETRIC

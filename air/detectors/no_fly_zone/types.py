@@ -117,6 +117,10 @@ class AirspaceZone:
     controlling_agency: str | None = None
     source: str = ""                 # e.g. "faa_sua"
     source_asof: date | None = None  # publication cycle of the source file
+    # Lowest and highest ground elevation under the zone, ft MSL. Only used to
+    # place an AGL floor or ceiling (geo/altitude.py); None means not known.
+    terrain_min_ft: float | None = None
+    terrain_max_ft: float | None = None
 
 
 # ---------------------------------------------------------------- stage results

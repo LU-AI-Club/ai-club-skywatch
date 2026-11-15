@@ -61,6 +61,12 @@ def _validate(raw: Mapping[str, Any]) -> None:
     for z, v in bases.items():
         if not 0.0 <= float(v) <= 1.0:
             raise ValueError(f"base score for {z} out of range: {v}")
+    terrain = raw["geometry"].get("terrain_fallback_ft")
+    if terrain is not None:
+        if not isinstance(terrain, Mapping) or set(terrain) != {"min", "max"}:
+            raise ValueError("geometry.terrain_fallback_ft must have exactly min and max")
+        if float(terrain["min"]) > float(terrain["max"]):
+            raise ValueError("geometry.terrain_fallback_ft.min must not exceed max")
     for key in ("unknown_activation_cap", "buffered_only"):
         Severity(raw["severity"][key])  # raises if not a valid severity
     if raw["sampling"]["target_hz"] <= 0:
