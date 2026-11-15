@@ -20,7 +20,9 @@ Inputs
 states:
     The stream A iterator.
 zones:
-    The stream B list.
+    The zone list supplied by the caller. ``run`` does not apply the
+    ``airspace.include_types`` config setting; callers that want that policy
+    must load zones with ``ingest.airspace_loader.load_filtered_zones``.
 cfg:
     The loaded config, passed down to every stage.
 
@@ -93,6 +95,10 @@ def run(
     that produced no detection counted under its :class:`ExitReason`. The
     counter fills as the iterator is consumed. ``per_report=True`` skips
     episode grouping and yields every per-report detection.
+
+    Zone filtering is a loading concern, not pipeline behavior. ``zones`` is
+    used as supplied; call ``load_filtered_zones(path, cfg)`` before ``run``
+    when ``airspace.include_types`` should be applied.
     """
     counts: Counter[ExitReason] = exit_counts if exit_counts is not None else Counter()
     zones_by_id = {zone.zone_id: zone for zone in zones}

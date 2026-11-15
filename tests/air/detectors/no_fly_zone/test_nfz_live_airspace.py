@@ -16,7 +16,8 @@ pytest.importorskip("shapely")
 pytest.importorskip("h3")
 
 from air.detectors.no_fly_zone import build_detector, build_live_detector  # noqa: E402
-from air.detectors.no_fly_zone.config import DEFAULT_PATH  # noqa: E402
+from air.detectors.no_fly_zone.adapter import NoFlyZoneDetector  # noqa: E402
+from air.detectors.no_fly_zone.config import DEFAULT_PATH, Config  # noqa: E402
 
 AIRSPACE = Path(__file__).resolve().parents[4] / "air/detectors/no_fly_zone/fixtures/airspace"
 FIXTURE_IDS = {"P-901", "TFR-6/1234", "LYNCHBURG-MOA"}
@@ -30,7 +31,7 @@ def _config(tmp_path: Path, live_path: object) -> Path:
     return out
 
 
-def _ids(detector) -> set[str]:
+def _ids(detector: NoFlyZoneDetector) -> set[str]:
     return {zone.zone_id for zone in detector.zones}
 
 
@@ -48,6 +49,27 @@ def test_missing_faa_file_falls_back_to_test_zones_and_warns(
         detector = build_live_detector(cfg)
     assert _ids(detector) == FIXTURE_IDS
     assert "TEST zones" in caplog.text
+
+
+def test_live_builder_loads_config_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = _config(tmp_path, str(AIRSPACE / "klyh-faa-sample.geojson"))
+    from air.detectors.no_fly_zone import config as config_module
+
+    original_load_config = config_module.load_config
+    load_count = 0
+
+    def counted_load_config(path: str | Path = DEFAULT_PATH) -> Config:
+        nonlocal load_count
+        load_count += 1
+        return original_load_config(path)
+
+    monkeypatch.setattr(config_module, "load_config", counted_load_config)
+
+    build_live_detector(config_path)
+
+    assert load_count == 1
 
 
 def test_no_live_path_configured_means_fixture_zones(tmp_path: Path) -> None:

@@ -96,9 +96,9 @@ def run(
     # Stage B - zones.
     zones: list[Any] = []
     try:
-        from .ingest.airspace_loader import load_zones
+        from .ingest.airspace_loader import load_filtered_zones
 
-        zones = load_zones(airspace_path)
+        zones = load_filtered_zones(airspace_path, cfg)
         _report("B airspace_loader", _STAGE_OK, f"{len(zones)} zones")
     except NotImplementedError as exc:
         todo += 1
