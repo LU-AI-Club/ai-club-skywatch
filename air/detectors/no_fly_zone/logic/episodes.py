@@ -344,7 +344,7 @@ def _merge(hits: list[tuple[datetime, Detection]], *, still_open: bool = False) 
 
 
 def _aircraft(det: Detection) -> str:
-    entity = det.entity_ids[0] if det.entity_ids else "aircraft:unknown"
+    entity = det.entity_ids[0] if det.entity_ids else "icao24:unknown"
     return entity.split(":", 1)[-1]
 
 
