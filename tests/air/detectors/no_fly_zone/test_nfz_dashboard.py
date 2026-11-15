@@ -34,7 +34,7 @@ def _platform_record(**meta_overrides: Any) -> dict[str, Any]:
         "severity": "HIGH",
         "confidence": 1.0,
         "temporal_bounds": {"start_time": "2026-09-22T20:15:00+00:00"},
-        "entities_involved": [{"entity_id": "aircraft:a1b2c3"}],
+        "entities_involved": [{"entity_id": "icao24:a1b2c3"}],
         "geospatial_context": {"centroid": {"latitude": 37.425, "longitude": -79.215,
                                             "altitude": 5200.0}},
         "metadata": meta,
