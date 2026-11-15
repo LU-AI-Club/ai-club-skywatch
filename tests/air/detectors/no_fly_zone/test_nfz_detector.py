@@ -106,11 +106,14 @@ def test_unknown_activation_still_emits_but_capped(cfg: Config, fake_c: None) ->
         replace(z, activation=Activation.NOTAM) if z.zone_id == "P-901" else z
         for z in load_zones(AIRSPACE_FILE)
     ]
-    (detection,) = list(run([make_state()], zones, cfg))
+    (detection,) = list(run([make_state()], zones, cfg, per_report=True))
 
     assert detection.extras["zone_id"] == "P-901"
     assert detection.severity is Severity(cfg["severity"]["unknown_activation_cap"])
-    assert detection.raw_model_confidence == 0.0
+    assert detection.raw_model_confidence == pytest.approx(
+        cfg["scoring"]["confidence"]["unknown_activation_factor"]
+    )
+    assert detection.extras["_strict_hit"] is False
 
 
 def test_no_altitude_exits_as_bad_input(cfg: Config, fake_c: None) -> None:

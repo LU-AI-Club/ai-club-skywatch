@@ -54,6 +54,17 @@ scoring:
     MOA: 0.2
   depth_bump_per_nm: 0.01
   depth_bump_max: 0.1
+  # Provisional confidence policy for Tim's review. Confidence describes
+  # evidence strength, not threat severity or a calibrated probability.
+  confidence:
+    active_activation_factor: 1.0
+    unknown_activation_factor: 0.6
+    strict_position_min_factor: 0.5
+    buffered_position_factor: 0.35
+    preferred_altitude_factor: 1.0
+    fallback_altitude_factor: 0.8
+    persistence_min_factor: 0.3
+    persistence_saturation_sec: 15.0
   context_weights:        # subtracted from the score
     atc_discrete_squawk: 0.4
     military_hex: 0.3

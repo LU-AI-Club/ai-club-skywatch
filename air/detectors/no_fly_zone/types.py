@@ -182,6 +182,7 @@ class Detection:
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["severity"] = self.severity.value
+        d["extras"].pop("_strict_hit", None)
         for k in ("entity_ids", "evidence_refs", "explanation_facts", "limitations"):
             d[k] = list(d[k])
         return d

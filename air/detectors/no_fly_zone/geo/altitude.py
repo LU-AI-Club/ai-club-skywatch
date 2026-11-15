@@ -8,11 +8,13 @@ both on a common reference.
 Inputs
 ------
 state:
-    Supplies ``alt_geom_ft`` and ``alt_baro_ft``. Geometric altitude is preferred
-    for MSL / SFC limits because MSL floors and ceilings are true heights above
-    sea level. Barometric (pressure) altitude is preferred for FL (Flight Level)
-    limits because Flight Levels are standard pressure altitudes (referenced to
-    1013.25 hPa / 29.92 inHg). Each falls back to the other when unavailable.
+    Supplies ``alt_geom_ft`` and ``alt_baro_ft``. readsb defines geometric
+    altitude as GNSS/INS height referenced to the WGS84 ellipsoid; this module
+    currently uses it as an uncorrected proxy for MSL / SFC limits because no
+    geoid model is available. Barometric (pressure) altitude is preferred for
+    FL (Flight Level) limits because Flight Levels are standard pressure
+    altitudes (referenced to 1013.25 hPa / 29.92 inHg). Each falls back to the
+    other when unavailable.
 zone:
     Supplies ``floor_ft``/``floor_datum`` and ``ceiling_ft``/``ceiling_datum``.
 
@@ -55,7 +57,8 @@ def _resolve_altitude(
     """Resolve the aircraft altitude and source appropriate for ``datum``.
 
     FL limits are standard pressure altitudes, so barometric altitude is preferred.
-    MSL and SFC limits are geometric heights, so geometric altitude is preferred.
+    MSL and SFC limits use geometric altitude as an uncorrected proxy; the input
+    is ellipsoid-referenced and has not been converted with a geoid model.
     Each falls back to the other available altitude if the preferred one is None.
     """
     if datum == Datum.FL:
@@ -158,4 +161,3 @@ def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
         altitude_source=within_source,
         reason=None,
     )
-

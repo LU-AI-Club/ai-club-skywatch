@@ -30,8 +30,9 @@ The merged Detection
 anomaly_score
     The **peak** score over the episode.
 severity / raw_model_confidence
-    The highest over the episode (one strictly-inside HIGH report makes the
-    episode HIGH even if its peak score came from a buffer-only report).
+    Severity is the highest over the episode. Confidence is the strongest
+    uninterrupted strict-hit segment, using elapsed observation time; if no
+    strict segment exists, it is the highest per-report confidence.
 explanation_facts
     An episode summary first (zone, duration, report count, time span, peak),
     then the facts of the representative report (highest severity, then
@@ -123,6 +124,9 @@ class _OpenEpisode:
 
     hits: list[tuple[datetime, Detection]] = field(default_factory=list)
     clear_streak: int = 0
+    strict_segment_start: datetime | None = None
+    strict_segment_max_confidence: float = 0.0
+    best_strict_confidence: float | None = None
 
 
 class EpisodeTracker:
@@ -140,6 +144,9 @@ class EpisodeTracker:
     def __init__(self, cfg: Config) -> None:
         self._clears_to_close = int(cfg["dedup"]["clear_observations_to_close"])
         self._max_gap_sec = float(cfg["sampling"]["max_gap_sec"])
+        confidence = cfg["scoring"]["confidence"]
+        self._persistence_min_factor = float(confidence["persistence_min_factor"])
+        self._persistence_saturation_sec = float(confidence["persistence_saturation_sec"])
         self._open: dict[str, dict[str, _OpenEpisode]] = {}
         self._last_seen: dict[str, datetime] = {}
         # (aircraft, zone) episodes that gained a report since the last
@@ -169,21 +176,34 @@ class EpisodeTracker:
             gap = (report.timestamp - previous).total_seconds() if previous is not None else 0.0
             if gap > self._max_gap_sec:
                 for zone_id in list(episodes):
-                    closed.append(_merge(episodes.pop(zone_id).hits))
+                    closed.append(_merge(episodes.pop(zone_id)))
 
             fired = {_zone_id(det): det for det in report.fired}
 
             # Open episodes this report did not fire for count toward closing.
             for zone_id in list(episodes):
-                if zone_id in fired:
-                    continue
                 episode = episodes[zone_id]
-                episode.clear_streak += 1
-                if episode.clear_streak >= self._clears_to_close:
-                    closed.append(_merge(episodes.pop(zone_id).hits))
+                detection = fired.get(zone_id)
+                if detection is not None and _is_strict_hit(detection):
+                    continue
+                _reset_strict_segment(episode)
+                if detection is None:
+                    episode.clear_streak += 1
+                    if episode.clear_streak >= self._clears_to_close:
+                        closed.append(_merge(episodes.pop(zone_id)))
 
             for zone_id, det in fired.items():
                 episode = episodes.setdefault(zone_id, _OpenEpisode())
+                if _is_strict_hit(det):
+                    _add_strict_hit(
+                        episode,
+                        report.timestamp,
+                        det.raw_model_confidence,
+                        self._persistence_min_factor,
+                        self._persistence_saturation_sec,
+                    )
+                else:
+                    _reset_strict_segment(episode)
                 episode.hits.append((report.timestamp, det))
                 episode.clear_streak = 0
                 self._changed.add((aircraft, zone_id))
@@ -203,7 +223,7 @@ class EpisodeTracker:
         for aircraft, zone_id in sorted(self._changed):
             episode = self._open.get(aircraft, {}).get(zone_id)
             if episode is not None and episode.hits:
-                snapshots.append(_merge(episode.hits, still_open=True))
+                snapshots.append(_merge(episode, still_open=True))
         self._changed.clear()
         return snapshots
 
@@ -219,14 +239,14 @@ class EpisodeTracker:
             if (now - self._last_seen[aircraft]).total_seconds() <= self._max_gap_sec:
                 continue
             for episode in self._open.pop(aircraft, {}).values():
-                closed.append(_merge(episode.hits))
+                closed.append(_merge(episode))
             del self._last_seen[aircraft]
         return closed
 
     def flush(self) -> list[Detection]:
         """Close and return every open episode (end of stream)."""
         closed = [
-            _merge(episode.hits)
+            _merge(episode)
             for episodes in self._open.values()
             for episode in episodes.values()
         ]
@@ -254,12 +274,48 @@ def _zone_id(det: Detection) -> str:
     return str(zone_id)
 
 
-def _merge(hits: list[tuple[datetime, Detection]], *, still_open: bool = False) -> Detection:
+def _is_strict_hit(detection: Detection) -> bool:
+    return detection.extras.get("_strict_hit") is True
+
+
+def _reset_strict_segment(episode: _OpenEpisode) -> None:
+    episode.strict_segment_start = None
+    episode.strict_segment_max_confidence = 0.0
+
+
+def _add_strict_hit(
+    episode: _OpenEpisode,
+    at: datetime,
+    confidence: float,
+    minimum_factor: float,
+    saturation_sec: float,
+) -> None:
+    if episode.strict_segment_start is None:
+        episode.strict_segment_start = at
+        episode.strict_segment_max_confidence = confidence
+    else:
+        episode.strict_segment_max_confidence = max(
+            episode.strict_segment_max_confidence, confidence
+        )
+    duration = (at - episode.strict_segment_start).total_seconds()
+    persistence_factor = minimum_factor + (1.0 - minimum_factor) * min(
+        duration / saturation_sec, 1.0
+    )
+    segment_confidence = episode.strict_segment_max_confidence * persistence_factor
+    if (
+        episode.best_strict_confidence is None
+        or segment_confidence > episode.best_strict_confidence
+    ):
+        episode.best_strict_confidence = segment_confidence
+
+
+def _merge(episode: _OpenEpisode, *, still_open: bool = False) -> Detection:
     """Collapse one episode's per-report detections into a single Detection.
 
     ``still_open`` marks a snapshot of an episode in progress: ``episode_end``
     is ``None`` and ``last_report_at`` says how far it has got.
     """
+    hits = episode.hits
     first_at, first = hits[0]
     last_at, last = hits[-1]
     peak_at, peak = max(hits, key=lambda h: h[1].anomaly_score)
@@ -269,20 +325,32 @@ def _merge(hits: list[tuple[datetime, Detection]], *, still_open: bool = False) 
     dwell_sec = (last_at - first_at).total_seconds()
     zone_label = _zone_label(rep, zone_id)
     reports = f"{len(hits)} report{'s' if len(hits) != 1 else ''}"
+    episode_confidence = (
+        episode.best_strict_confidence
+        if episode.best_strict_confidence is not None
+        else max(det.raw_model_confidence for _, det in hits)
+    )
+    confidence_basis = (
+        "best uninterrupted strict-hit segment after persistence weighting"
+        if episode.best_strict_confidence is not None
+        else "highest per-report confidence; no strict-hit segment was observed"
+    )
 
     if still_open:
         summary = (
             f"Aircraft {_aircraft(rep)} has been in zone {zone_label} for {dwell_sec:.0f} s "
             f"and is still inside, across {reports} since {first_at:%H:%M:%S} UTC "
             f"(latest {last_at:%H:%M:%S}); peak anomaly score "
-            f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}."
+            f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}; evidence confidence "
+            f"{episode_confidence:.3f} from the {confidence_basis}."
         )
     else:
         summary = (
             f"Aircraft {_aircraft(rep)} was in zone {zone_label} for {dwell_sec:.0f} s "
             f"across {reports}, "
             f"{first_at:%H:%M:%S}-{last_at:%H:%M:%S} UTC; peak anomaly score "
-            f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}."
+            f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}; evidence confidence "
+            f"{episode_confidence:.3f} from the {confidence_basis}."
         )
     facts = [summary, *rep.explanation_facts]
     # Context signals that showed up elsewhere in the episode, with first sighting.
@@ -312,6 +380,7 @@ def _merge(hits: list[tuple[datetime, Detection]], *, still_open: bool = False) 
         float(p) for _, det in hits if (p := det.extras.get("penetration_nm")) is not None
     ]
     extras: dict[str, Any] = dict(rep.extras)
+    extras.pop("_strict_hit", None)
     extras.update(
         episode_status="OPEN" if still_open else "CLOSED",
         episode_start=first_at,
@@ -333,7 +402,7 @@ def _merge(hits: list[tuple[datetime, Detection]], *, still_open: bool = False) 
         detection_type=rep.detection_type,
         severity=rep.severity,
         anomaly_score=peak.anomaly_score,
-        raw_model_confidence=max(det.raw_model_confidence for _, det in hits),
+        raw_model_confidence=episode_confidence,
         evidence_refs=tuple(evidence),
         feature_schema_version=rep.feature_schema_version,
         baseline_or_model_version=rep.baseline_or_model_version,

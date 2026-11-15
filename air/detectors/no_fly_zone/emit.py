@@ -96,6 +96,8 @@ from contracts import (
 
 from .types import Detection
 
+_METERS_PER_NAUTICAL_MILE = 1852.0
+
 DOMAIN = "air"
 SOURCE_SYSTEM = "skywatch"
 STEP_NAME = "no_fly_zone_detection"
@@ -140,6 +142,7 @@ def _zone_entities(zone_id: Any) -> list[EntityRef]:
 def to_platform_detection(detection: Detection) -> PlatformDetection:
     """Convert an internal Detection into the vendored SENTINEL contract."""
     extras = dict(detection.extras)
+    extras.pop("_strict_hit", None)
 
     observed_at = _as_datetime(_require(extras, "observed_at"), "observed_at")
     source_row_id = str(_require(extras, "source_row_id"))
@@ -194,7 +197,9 @@ def to_platform_detection(detection: Detection) -> PlatformDetection:
         risk_zone_ids=[str(zone_id)] if zone_id else [],
         # Contract requires non-negative; penetration is a depth, never signed.
         distance_meters=(
-            abs(float(penetration_nm)) * 1852.0 if penetration_nm is not None else None
+            abs(float(penetration_nm)) * _METERS_PER_NAUTICAL_MILE
+            if penetration_nm is not None
+            else None
         ),
     )
 

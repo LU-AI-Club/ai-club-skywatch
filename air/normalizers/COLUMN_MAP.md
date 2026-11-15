@@ -24,7 +24,7 @@ drops untrustworthy rows.
 | `nacp` | `np` | Navigation Accuracy Category – Position (0–11). |
 | `squawk` | `sq` | 4-digit transponder code, kept as a string (e.g. `7700`). |
 | `callsign` | `f` | Flight id; ADS-B space-padding is stripped. |
-| `alt_geom_ft` | `ag` | Geometric (GNSS) altitude, feet. Filled on every row of the recorded hour, including the ~4.7% where `ab` is blank. |
+| `alt_geom_ft` | `ag` | Geometric (GNSS) altitude, feet, referenced to the WGS84 ellipsoid. The NFZ vertical check uses it as an uncorrected proxy for MSL/SFC limits; no geoid correction is applied. Filled on every row of the recorded hour, including the ~4.7% where `ab` is blank. |
 | `on_ground` | `og` | readsb writes `True`/`False`; parsed case-insensitively (`1`/`0` also accepted). Blank or unrecognised → `None` ("not reported"), never a guess. |
 | `emitter_category` | `c` | ADS-B emitter category string, e.g. `A3`. |
 | `source_row_id` | — | Set by `iter_observations` to `"<path>:<n>"` (1-based data row), for provenance back to the raw line. `normalize_row` takes it as an optional argument. |

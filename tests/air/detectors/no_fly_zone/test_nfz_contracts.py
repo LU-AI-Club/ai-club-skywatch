@@ -36,10 +36,12 @@ def test_config_loads_and_validates() -> None:
 def test_detection_serializes_to_contract_shape() -> None:
     d = Detection("skywatch.no_fly_zone", "0.1.0", ("aircraft:ace81d",), "restricted_airspace_incursion",
                   Severity.HIGH, 0.82, 0.82, ("obs:1",), "air-features-v1", "nfz-rules-0.1.0+sua-2026-08-07",
-                  ("fact",), ("limit",))
+                  ("fact",), ("limit",), extras={"_strict_hit": True})
     out = d.to_dict()
     assert out["severity"] == "HIGH"
     assert isinstance(out["entity_ids"], list)
+    assert "_strict_hit" not in out["extras"]
+    assert d.extras["_strict_hit"] is True
 
 
 
@@ -60,4 +62,51 @@ def test_episode_settings_are_validated(tmp_path: Any, section: str, key: str, v
     bad = tmp_path / "bad.yaml"
     bad.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(ValueError, match=key):
+        load_config(bad)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("persistence_min_factor", 0.0),
+        ("persistence_min_factor", 1.1),
+        ("persistence_saturation_sec", 0),
+        ("buffered_position_factor", 0.6),
+        ("active_activation_factor", float("nan")),
+        ("unknown_activation_factor", float("inf")),
+        ("strict_position_min_factor", True),
+    ],
+)
+def test_confidence_settings_are_validated(
+    tmp_path: Any, key: str, value: Any
+) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw["scoring"]["confidence"][key] = value
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match=key):
+        load_config(bad)
+
+
+@pytest.mark.parametrize(
+    "missing",
+    ["confidence", "active_activation_factor"],
+)
+def test_missing_confidence_settings_are_rejected(tmp_path: Any, missing: str) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    if missing == "confidence":
+        del raw["scoring"]["confidence"]
+    else:
+        del raw["scoring"]["confidence"][missing]
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match=missing):
         load_config(bad)

@@ -65,6 +65,15 @@ def test_confidence_carries_model_confidence_not_anomaly_score() -> None:
     assert out.metadata["anomaly_score"] == 0.91
 
 
+def test_internal_strict_hit_marker_is_not_exposed() -> None:
+    extras = dict(_internal().extras)
+    extras["_strict_hit"] = True
+
+    out = to_platform_detection(_internal(extras=extras))
+
+    assert "_strict_hit" not in out.metadata["extras"]
+
+
 def test_required_platform_fields_are_populated_from_extras() -> None:
     """temporal_bounds and provenance are required by the contract and absent
     from types.Detection, so they must come out of extras."""
