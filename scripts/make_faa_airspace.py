@@ -423,8 +423,8 @@ def main(argv: list[str] | None = None) -> int:
         encoding="utf-8",
     )
 
-    types = defaultdict(int)
-    activations = defaultdict(int)
+    types: defaultdict[str, int] = defaultdict(int)
+    activations: defaultdict[str, int] = defaultdict(int)
     agl = 0
     for feature in mapped:
         props = feature["properties"]

@@ -7,6 +7,7 @@ so `import contracts` / `import air` work with a plain `pytest` from the root.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,6 @@ def load_observations(fixture_name: str) -> list[AdsbObservation]:
 
 
 @pytest.fixture
-def observations_from():
+def observations_from() -> Callable[[str], list[AdsbObservation]]:
     """Usage: `obs = observations_from('example_altitude.json')`."""
     return load_observations

@@ -28,6 +28,7 @@ FIXTURE_ZONES = (Path(__file__).resolve().parents[4]
 from air.detectors.no_fly_zone.live import TABLE, extra_columns  # noqa: E402
 from air.live.persistence import PersistResult, dedup_key, persist  # noqa: E402
 from air.models.observation import AdsbObservation  # noqa: E402
+from contracts import Detection  # noqa: E402
 from tests.air.live.test_persistence import FakeDB  # noqa: E402
 
 MIGRATION = Path(__file__).resolve().parents[4] / "db" / "schema" / "004_no_fly_zone_detections.sql"
@@ -45,39 +46,39 @@ def _obs(seconds: int) -> AdsbObservation:
     )
 
 
-def _open_incursion():
+def _open_incursion() -> Detection:
     [det] = build_live_detector(airspace_path=FIXTURE_ZONES).detect_observations([_obs(0), _obs(1)])
     return det
 
 
-def test_extra_columns_names_the_zone():
+def test_extra_columns_names_the_zone() -> None:
     cols = extra_columns(_open_incursion())
     assert cols["zone_id"] == "P-901"
     assert cols["zone_type"] == "PROHIBITED"
     assert set(cols) == {"zone_id", "zone_name", "zone_type"}
 
 
-def test_missing_zone_type_fails_loudly_not_in_postgres():
+def test_missing_zone_type_fails_loudly_not_in_postgres() -> None:
     det = _open_incursion()
     det.metadata["extras"] = {k: v for k, v in det.metadata["extras"].items() if k != "zone_type"}
     with pytest.raises(ValueError, match="zone_type"):
         extra_columns(det)
 
 
-def test_missing_zone_name_is_allowed():
+def test_missing_zone_name_is_allowed() -> None:
     det = _open_incursion()
     det.metadata["extras"] = {k: v for k, v in det.metadata["extras"].items() if k != "zone_name"}
     assert extra_columns(det)["zone_name"] is None
 
 
-def test_extra_columns_match_the_migration():
+def test_extra_columns_match_the_migration() -> None:
     # Every key extra_columns returns must be a column in 004, or persist fails live.
     sql = MIGRATION.read_text(encoding="utf-8")
     for col in extra_columns(_open_incursion()):
         assert f"\n    {col} " in sql, col
 
 
-def test_persist_writes_an_open_incursion_then_updates_it():
+def test_persist_writes_an_open_incursion_then_updates_it() -> None:
     detector = build_live_detector(airspace_path=FIXTURE_ZONES)
     db = FakeDB()
     [opened] = detector.detect_observations([_obs(0), _obs(1)])
@@ -94,7 +95,7 @@ DSN = os.environ.get("SKYWATCH_TEST_DSN")
 
 
 @pytest.mark.skipif(not DSN, reason="set SKYWATCH_TEST_DSN to run against Postgres")
-def test_real_postgres_migration_and_persist():
+def test_real_postgres_migration_and_persist() -> None:
     psycopg = pytest.importorskip("psycopg")
     detector = build_live_detector(airspace_path=FIXTURE_ZONES)
     [opened] = detector.detect_observations([_obs(0), _obs(1)])
@@ -131,12 +132,12 @@ def _persist_like_the_runner(*, flush_every_tick: bool) -> list[dict]:
     return list(db.tables[TABLE].values())
 
 
-def test_one_incursion_across_ticks_is_one_row_when_flushed_at_end():
+def test_one_incursion_across_ticks_is_one_row_when_flushed_at_end() -> None:
     [row] = _persist_like_the_runner(flush_every_tick=False)
     assert row["temporal_bounds_start"] == _TS.isoformat()
     assert row["temporal_bounds_end"] == (_TS + timedelta(seconds=90)).isoformat()
 
 
-def test_flushing_every_tick_splits_one_incursion_into_rows():
+def test_flushing_every_tick_splits_one_incursion_into_rows() -> None:
     # Documents why the runner must not flush between ticks.
     assert len(_persist_like_the_runner(flush_every_tick=True)) == 4
