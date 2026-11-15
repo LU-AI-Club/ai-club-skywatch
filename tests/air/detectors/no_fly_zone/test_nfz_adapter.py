@@ -248,7 +248,7 @@ def test_fires_inside_zone_and_emits_platform_detection(detector: NoFlyZoneDetec
     assert detector.open_episodes == 0
     assert detection.geospatial_context.risk_zone_ids == ["P-901"]
     assert detection.provenance.raw_source_ref == "test.csv:7"
-    assert [e.entity_id for e in detection.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]
+    assert [e.entity_id for e in detection.entities_involved] == ["icao24:a1b2c3", "zone:P-901"]
     assert detection.temporal_bounds.start_time == _TS
 
 
@@ -422,7 +422,7 @@ def test_silence_closes_an_episode_in_a_later_window(detector: NoFlyZoneDetector
         observed_at=_TS + timedelta(seconds=max_gap + 1),
     )
     [closed] = detector.detect_observations([later])
-    assert [e.entity_id for e in closed.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]
+    assert [e.entity_id for e in closed.entities_involved] == ["icao24:a1b2c3", "zone:P-901"]
     assert detector.open_episodes == 0
 
 
@@ -466,7 +466,7 @@ def test_late_reports_from_another_aircraft_are_not_dropped(detector: NoFlyZoneD
     detector.detect_observations([_outside("aaaaaa", 9), _outside("aaaaaa", 10), *late])
     assert detector.skipped_reports == 2  # only A's re-read overlap
     [incursion] = detector.flush()
-    assert incursion.entities_involved[0].entity_id == "aircraft:bbbbbb"
+    assert incursion.entities_involved[0].entity_id == "icao24:bbbbbb"
     assert incursion.metadata["extras"]["report_count"] == 5
 
 
@@ -502,7 +502,7 @@ def test_replay_runner_flushes_nfz_after_the_last_window(tmp_path: Path) -> None
     assert replay.main(args) == 0
     lines = out.read_text().splitlines()
     entities = sorted(json.loads(line)["entities_involved"][0]["entity_id"] for line in lines)
-    assert entities == ["aircraft:a89076", "aircraft:ac8438"]
+    assert entities == ["icao24:a89076", "icao24:ac8438"]
 
 
 def test_run_detectors_flushes_after_the_last_window(detector: NoFlyZoneDetector) -> None:
@@ -510,4 +510,4 @@ def test_run_detectors_flushes_after_the_last_window(detector: NoFlyZoneDetector
     from air.windowing import run_detectors
 
     [episode] = list(run_detectors([[make_obs()]], [detector]))
-    assert [e.entity_id for e in episode.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]
+    assert [e.entity_id for e in episode.entities_involved] == ["icao24:a1b2c3", "zone:P-901"]

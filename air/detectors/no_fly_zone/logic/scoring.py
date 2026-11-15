@@ -82,6 +82,18 @@ from ..types import (
     VerticalResult,
 )
 
+# Entity id prefix. MUST match the `observations.entity_id` form ('icao24:a1b2c3'):
+# it is the only field downstream can join a detection back to a position on.
+# air/live/payload.py strips this prefix on the way in, leaving AircraftState.icao24
+# as bare hex, so the same one goes back on here. A different prefix silently
+# matches nothing. See docs/live_integration/DETECTION_TABLE_COLUMNS.md.
+ENTITY_PREFIX = "icao24:"
+
+
+def entity_id_for(icao24: str) -> str:
+    """``'a1b2c3'`` -> ``'icao24:a1b2c3'``, the id every consumer joins on."""
+    return f"{ENTITY_PREFIX}{icao24}"
+
 
 def build_detection(
     state: AircraftState,
@@ -183,7 +195,7 @@ def build_detection(
     return Detection(
         detector_id=str(cfg["detector"]["id"]),
         detector_version=str(cfg["detector"]["version"]),
-        entity_ids=(f"aircraft:{state.icao24}",),
+        entity_ids=(entity_id_for(state.icao24),),
         detection_type=str(cfg["detector"]["detection_type"]),
         severity=severity,
         anomaly_score=anomaly_score,

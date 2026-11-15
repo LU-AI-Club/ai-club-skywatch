@@ -88,7 +88,7 @@ def test_persist_writes_an_open_incursion_then_updates_it() -> None:
     assert persist(db, TABLE, [grown], extra_columns=extra_columns) == PersistResult(updated=1)
     [row] = db.tables[TABLE].values()
     assert (row["zone_id"], row["zone_type"]) == ("P-901", "PROHIBITED")
-    assert row["entity_id"] == "aircraft:a1b2c3"
+    assert row["entity_id"] == "icao24:a1b2c3"
 
 
 DSN = os.environ.get("SKYWATCH_TEST_DSN")

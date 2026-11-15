@@ -92,7 +92,7 @@ def test_config_rejects_invalid_include_types(tmp_path: Any, include_types: Any)
 
 
 def test_detection_serializes_to_contract_shape() -> None:
-    d = Detection("skywatch.no_fly_zone", "0.1.0", ("aircraft:ace81d",), "restricted_airspace_incursion",
+    d = Detection("skywatch.no_fly_zone", "0.1.0", ("icao24:ace81d",), "restricted_airspace_incursion",
                   Severity.HIGH, 0.82, 0.82, ("obs:1",), "air-features-v1", "nfz-rules-0.1.0+sua-2026-08-07",
                   ("fact",), ("limit",))
     out = d.to_dict()
