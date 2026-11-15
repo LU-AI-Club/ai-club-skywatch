@@ -33,15 +33,13 @@ TIMESOFUSE             activation (and kept verbatim as times_of_use)
 CONT_AGENT             controlling_agency
 =====================  ==================================================
 
-Three things the real data does that the fixtures never did:
+Four things the real data does that the fixtures never did:
 
 ``SFC`` is a height, not always zero
     The FAA writes "300 FT SFC" for Farmville MOA's floor, meaning 300 ft
     *above the surface*. Only a value of 0 is literally the surface. So a
-    non-zero SFC maps to :attr:`Datum.AGL`, and ``geo/altitude.py`` abstains on
-    AGL because the detector has no terrain model. Those zones therefore never
-    fire, which is the honest outcome rather than comparing an AGL floor to an
-    MSL altitude. 17 of the 52 zones in range are in this position.
+    non-zero SFC maps to :attr:`Datum.AGL`; ``geo/altitude.py`` checks it using
+    the committed 3DEP terrain grid.
 
 ``STD`` means flight level
     "180 FL STD" is FL180. Stored as feet (18000) with :attr:`Datum.FL`, which
@@ -57,15 +55,11 @@ Names repeat
     duplicate but one. Repeats get a ``#2``, ``#3`` suffix ordered by altitude
     band, which is stable across runs.
 
-Activation is only ever a guess from free text
-    TIMESOFUSE is prose: "CONTINUOUS", "0800 - 1700, MON - FRI; O/T BY NOTAM",
-    "INTERMITTENT BY NOTAM", "SUNRISE - SUNSET, DAILY", "MAY 1 - SEP 15,
-    CONTINUOUS; OTHER TIMES BY NOTAM". Only CONTINUOUS is unambiguous. Anything
-    with clock times becomes SCHEDULED and anything else NOTAM, and **neither
-    gets active_windows** - parsing a recurring schedule is gap 11. Until then
-    those zones report UNKNOWN activation, which caps severity at
-    ``severity.unknown_activation_cap``. The verbatim text rides along as
-    ``times_of_use`` so an analyst can read what we could not parse.
+Activation comes from free text
+    TIMESOFUSE contains four locally used phrasings with parseable recurring
+    schedules. They are stored as US Eastern local-time rules. Outside a
+    published window followed by "BY NOTAM", activation remains UNKNOWN;
+    unrecognized text also stays UNKNOWN.
 """
 from __future__ import annotations
 
@@ -190,20 +184,67 @@ def altitude_limit(value: Any, uom: Any, code: Any, *, is_ceiling: bool) -> tupl
         # "180 FL STD" is FL180; types.py stores flight levels in feet.
         return number * 100.0, "FL"
     if code == "SFC":
-        # Only zero is literally the surface. "300 FT SFC" is 300 ft AGL, and
-        # the vertical check abstains on AGL for want of a terrain model.
+        # Only zero is literally the surface. "300 FT SFC" is 300 ft AGL.
         return (0.0, "SFC") if number == 0.0 else (number, "AGL")
     return number, "MSL"
 
 
-def activation_for(times_of_use: Any) -> str:
-    """Guess the activation rule from the FAA's free-text times of use.
+def recurring_schedule_for(times_of_use: Any) -> tuple[list[dict[str, Any]], bool]:
+    """Parse the recurring schedule phrasings used by local FAA zones.
 
-    CONTINUOUS is the only unambiguous value. Clock times mean a published
-    schedule we cannot yet parse into windows (gap 11), and everything else is
-    NOTAM. Both of the latter end up UNKNOWN downstream, never a false ACTIVE.
+    Returns the recurring-window records and whether activation outside those
+    windows remains unknown because it may occur by NOTAM.
     """
     text = (str(times_of_use) if times_of_use is not None else "").strip().upper()
+    text = re.sub(r"\s+", " ", text)
+
+    farmville = re.fullmatch(
+        r"(\d{3,4})\s*-\s*(\d{3,4}),\s*MON\s*-\s*FRI;\s*O/T BY NOTAM",
+        text,
+    )
+    if farmville:
+        start, end = farmville.groups()
+        return (
+            [{
+                "start_time": f"{start[:-2].zfill(2)}:{start[-2:]}",
+                "end_time": f"{end[:-2].zfill(2)}:{end[-2:]}",
+                "weekdays": [0, 1, 2, 3, 4],
+            }],
+            True,
+        )
+
+    evers = re.fullmatch(
+        r"(\d{3,4})\s*-\s*SUNSET,\s*DAILY,\s*BY NOTAM;\s*OTHER TIMES BY NOTAM",
+        text,
+    )
+    if evers:
+        start = evers.group(1)
+        return ([{
+            "start_time": f"{start[:-2].zfill(2)}:{start[-2:]}",
+            "end_sunset": True,
+        }], True)
+
+    if re.fullmatch(r"INTERMITTENT,\s*SUNRISE\s*-\s*SUNSET,\s*DAILY", text):
+        return ([{"start_sunrise": True, "end_sunset": True}], False)
+
+    if re.fullmatch(
+        r"MAY 1\s*-\s*SEP 15,\s*CONTINUOUS;\s*OTHER TIMES BY NOTAM.*",
+        text,
+    ):
+        return ([{
+            "all_day": True,
+            "start_month_day": "05-01",
+            "end_month_day": "09-15",
+        }], True)
+    return [], False
+
+
+def activation_for(times_of_use: Any) -> str:
+    """Map FAA times-of-use text to the detector activation contract."""
+    text = (str(times_of_use) if times_of_use is not None else "").strip().upper()
+    recurring_windows, _ = recurring_schedule_for(text)
+    if recurring_windows:
+        return "SCHEDULED"
     if not text:
         return "NOTAM"
     if "CONTINUOUS" in text and "NOTAM" not in text:
@@ -246,6 +287,9 @@ def to_feature(
         props.get("UPPER_VAL"), props.get("UPPER_UOM"), props.get("UPPER_CODE"),
         is_ceiling=True,
     )
+    recurring_windows, unknown_outside_schedule = recurring_schedule_for(
+        props.get("TIMESOFUSE")
+    )
 
     out: dict[str, Any] = {
         "zone_id": zone_id,
@@ -254,10 +298,13 @@ def to_feature(
         "activation": activation_for(props.get("TIMESOFUSE")),
         "source": SOURCE,
         "source_asof": asof,
-        # Not read by the loader. Kept so an analyst can see the schedule text
-        # the detector could not parse, and gap 11 has something to work from.
+        # Kept verbatim so an analyst can audit the parsed schedule.
         "times_of_use": (props.get("TIMESOFUSE") or "").strip() or None,
     }
+    if recurring_windows:
+        out["recurring_windows"] = recurring_windows
+        out["schedule_timezone"] = "America/New_York"
+        out["unknown_outside_schedule"] = unknown_outside_schedule
     if floor_ft is not None:
         out["floor_ft"] = floor_ft
         out["floor_datum"] = floor_datum
@@ -425,17 +472,21 @@ def main(argv: list[str] | None = None) -> int:
 
     types: defaultdict[str, int] = defaultdict(int)
     activations: defaultdict[str, int] = defaultdict(int)
-    agl = 0
+    agl_floors = 0
+    agl_ceilings = 0
     for feature in mapped:
         props = feature["properties"]
         types[props["zone_type"]] += 1
         activations[props["activation"]] += 1
-        if "AGL" in (props.get("floor_datum"), props.get("ceiling_datum")):
-            agl += 1
+        if props.get("floor_datum") == "AGL":
+            agl_floors += 1
+        if props.get("ceiling_datum") == "AGL":
+            agl_ceilings += 1
     print(f"wrote {args.out} ({len(mapped)} zones)")
     print(f"  types:       {dict(sorted(types.items()))}")
     print(f"  activation:  {dict(sorted(activations.items()))}")
-    print(f"  AGL limits:  {agl} zone(s) - these abstain in the vertical check")
+    print(f"  AGL floors:  {agl_floors} zone(s) - checked with the terrain grid")
+    print(f"  AGL ceilings:{agl_ceilings} zone(s) - unsupported by the vertical check")
     return 0
 
 

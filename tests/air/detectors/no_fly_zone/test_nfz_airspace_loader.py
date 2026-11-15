@@ -188,20 +188,16 @@ def test_faa_flight_level_ceiling_converts_to_feet() -> None:
 
 
 def test_faa_activation_comes_from_the_times_of_use_prose() -> None:
-    """CONTINUOUS is the only unambiguous value; the rest must not read ACTIVE.
-
-    A schedule we cannot parse into windows is SCHEDULED with no windows, which
-    logic/activation.py reports as UNKNOWN rather than guessing. Parsing
-    "0800 - 1700, MON - FRI" into real windows is a separate piece of work.
-    """
+    """Known local schedules are parsed while unrecognized text remains unknown."""
     zones = _faa_zones()
     assert zones["P-56"].activation is Activation.ALWAYS      # "CONTINUOUS"
-    assert zones["R-6602A"].activation is Activation.NOTAM    # "...BY NOTAM"
+    assert zones["R-6602A"].activation is Activation.SCHEDULED
     assert zones["FARMVILLE MOA"].activation is Activation.SCHEDULED
     assert zones["FARMVILLE MOA"].active_windows == ()
+    assert zones["FARMVILLE MOA"].recurring_windows
 
     live = is_active(zones["FARMVILLE MOA"], datetime(2026, 9, 22, 20, 15, tzinfo=UTC))
-    assert live.state is ActivationState.UNKNOWN
+    assert live.state is ActivationState.ACTIVE
 
 
 def test_faa_sample_pins_the_publication_cycle() -> None:

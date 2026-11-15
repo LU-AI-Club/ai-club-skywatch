@@ -25,6 +25,9 @@ zones:
     must load zones with ``ingest.airspace_loader.load_filtered_zones``.
 cfg:
     The loaded config, passed down to every stage.
+terrain:
+    The immutable offline grid loaded once by detector construction. AGL
+    floors with missing or out-of-grid terrain abstain with ``BAD_INPUT``.
 
 Outputs
 -------
@@ -65,6 +68,7 @@ from ..types import (
     Detection,
     ExitReason,
     ReportResult,
+    TerrainGrid,
 )
 from . import activation, context, episodes, scoring
 
@@ -88,6 +92,7 @@ def run(
     *,
     exit_counts: Counter[ExitReason] | None = None,
     per_report: bool = False,
+    terrain: TerrainGrid | None = None,
 ) -> Iterator[Detection]:
     """Run the full pipeline over ``states``, yielding one Detection per episode.
 
@@ -105,14 +110,14 @@ def run(
     drop_on_ground = bool(cfg.raw.get("filters", {}).get("drop_on_ground", True))
 
     def evaluate(state: AircraftState) -> tuple[Detection, ...]:
-        return _evaluate(state, zones, zones_by_id, cfg, counts, drop_on_ground)
+        return _evaluate(state, zones, zones_by_id, cfg, counts, drop_on_ground, terrain)
 
     if per_report:
         for state in states:
             yield from evaluate(state)
         return
 
-    reports = evaluate_reports(states, zones, cfg, exit_counts=counts)
+    reports = evaluate_reports(states, zones, cfg, exit_counts=counts, terrain=terrain)
     yield from episodes.group_episodes(reports, cfg)
 
 
@@ -122,6 +127,7 @@ def evaluate_reports(
     cfg: Config,
     *,
     exit_counts: Counter[ExitReason] | None = None,
+    terrain: TerrainGrid | None = None,
 ) -> Iterator[ReportResult]:
     """Every stage except episode grouping, as the input episodes need.
 
@@ -135,7 +141,7 @@ def evaluate_reports(
     drop_on_ground = bool(cfg.raw.get("filters", {}).get("drop_on_ground", True))
     ordered = sorted(states, key=lambda s: (s.icao24.strip().lower(), s.timestamp))
     for state in ordered:
-        fired = _evaluate(state, zones, zones_by_id, cfg, counts, drop_on_ground)
+        fired = _evaluate(state, zones, zones_by_id, cfg, counts, drop_on_ground, terrain)
         yield ReportResult(state.icao24, state.timestamp, fired)
 
 
@@ -146,6 +152,7 @@ def _evaluate(
     cfg: Config,
     counts: Counter[ExitReason],
     drop_on_ground: bool,
+    terrain: TerrainGrid | None,
 ) -> tuple[Detection, ...]:
     """Every per-report Detection for one state; counts its exit if none fire."""
     if drop_on_ground and state.on_ground:
@@ -170,7 +177,7 @@ def _evaluate(
             deepest = _deeper(deepest, horizontal.reason or ExitReason.OUTSIDE_POLYGON)
             continue
 
-        vertical = altitude.vertical_check(state, zone)
+        vertical = altitude.vertical_check(state, zone, terrain)
         if not vertical.within:
             deepest = _deeper(deepest, vertical.reason or ExitReason.VERTICAL_CLEAR)
             continue

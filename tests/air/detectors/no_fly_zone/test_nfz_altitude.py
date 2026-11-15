@@ -17,6 +17,7 @@ from air.detectors.no_fly_zone.types import (
     AltitudeSource,
     Datum,
     ExitReason,
+    TerrainGrid,
     ZoneType,
 )
 
@@ -96,6 +97,23 @@ def test_abstains_when_datum_is_agl() -> None:
     res = vertical_check(state, zone)
     assert res.within is False
     assert res.altitude_source is AltitudeSource.GEOMETRIC
+    assert res.reason is ExitReason.BAD_INPUT
+
+
+def test_agl_floor_abstains_when_aircraft_is_off_the_terrain_grid() -> None:
+    state = make_state()
+    zone = make_zone(floor_ft=300.0, floor_datum=Datum.AGL)
+    terrain = TerrainGrid(
+        lat_min=0.0,
+        lon_min=0.0,
+        lat_step=0.1,
+        lon_step=0.1,
+        elevations_ft=((100.0, 100.0), (100.0, 100.0)),
+    )
+
+    res = vertical_check(state, zone, terrain)
+
+    assert res.within is False
     assert res.reason is ExitReason.BAD_INPUT
 
 
@@ -335,6 +353,5 @@ def test_pin_pressure_vs_geometric_discrepancy() -> None:
     assert msl_res.altitude_source is AltitudeSource.GEOMETRIC
     assert msl_res.altitude_ft == 17500.0
     assert msl_res.reason is None
-
 
 

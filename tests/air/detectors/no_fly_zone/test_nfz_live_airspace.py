@@ -41,6 +41,53 @@ def test_live_runner_uses_the_real_faa_file_when_present(tmp_path: Path) -> None
     assert ids and not ids & FIXTURE_IDS
 
 
+@pytest.mark.parametrize(
+    ("text", "expected", "unknown_outside"),
+    [
+        (
+            "0800 - 1700, MON - FRI; O/T BY NOTAM",
+            {"start_time": "08:00", "end_time": "17:00", "weekdays": [0, 1, 2, 3, 4]},
+            True,
+        ),
+        (
+            "0630 - SUNSET, DAILY, BY NOTAM; OTHER TIMES BY NOTAM",
+            {"start_time": "06:30", "end_sunset": True},
+            True,
+        ),
+        (
+            "INTERMITTENT, SUNRISE - SUNSET, DAILY",
+            {"start_sunrise": True, "end_sunset": True},
+            False,
+        ),
+        (
+            "MAY 1 - SEP 15, CONTINUOUS; OTHER TIMES BY NOTAM 24 HRS IN ADVANCE",
+            {
+                "all_day": True,
+                "start_month_day": "05-01",
+                "end_month_day": "09-15",
+            },
+            True,
+        ),
+    ],
+)
+def test_local_faa_schedule_phrasings_are_parsed(
+    text: str, expected: dict[str, object], unknown_outside: bool
+) -> None:
+    from scripts.make_faa_airspace import recurring_schedule_for
+
+    windows, remains_unknown = recurring_schedule_for(text)
+
+    assert windows == [expected]
+    assert remains_unknown is unknown_outside
+
+
+def test_unrecognized_faa_schedule_is_not_guessed() -> None:
+    from scripts.make_faa_airspace import activation_for, recurring_schedule_for
+
+    assert recurring_schedule_for("INTERMITTENT BY NOTAM") == ([], False)
+    assert activation_for("INTERMITTENT BY NOTAM") == "NOTAM"
+
+
 def test_missing_faa_file_falls_back_to_test_zones_and_warns(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
