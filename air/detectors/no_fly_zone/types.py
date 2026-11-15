@@ -167,7 +167,7 @@ class Detection:
     """Common SENTINEL Detection contract (syllabus section 6). Stream G."""
     detector_id: str
     detector_version: str
-    entity_ids: tuple[str, ...]              # ("aircraft:ace81d",)
+    entity_ids: tuple[str, ...]              # ("icao24:ace81d",)
     detection_type: str
     severity: Severity
     anomaly_score: float
