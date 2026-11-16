@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import inspect
+import os
+import signal
+import sys
 from datetime import UTC, datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -10,6 +13,33 @@ import pytest
 
 from air.live import runner
 from air.live.runner import run_live
+
+# Windows has no POSIX signal delivery. `os.kill(os.getpid(), SIGTERM)` there
+# does not invoke the handler -- it calls TerminateProcess and the interpreter
+# dies on the spot. In pytest that kills the whole run partway through, with no
+# failure and no summary, which reads like the suite hanging.
+#
+# Production is unaffected: the runner is PID 1 in a Linux container, so the
+# real signal path is the Linux one and it is still tested here on Linux and in
+# CI. What Windows needs is a way to exercise the same handler without asking
+# the OS for something it does not have.
+ON_WINDOWS = sys.platform == "win32"
+
+
+def _send_sigterm() -> None:
+    """Deliver SIGTERM to this process, or the closest thing Windows allows.
+
+    On POSIX this is a real signal, so the test covers delivery as well as the
+    handler. On Windows it calls whatever handler ``_StopSignal`` installed,
+    which covers everything except the delivery itself -- the part Windows
+    cannot do and production never relies on.
+    """
+    if not ON_WINDOWS:
+        os.kill(os.getpid(), signal.SIGTERM)
+        return
+    handler = signal.getsignal(signal.SIGTERM)
+    assert callable(handler), "no SIGTERM handler installed; _StopSignal did not arm"
+    handler(signal.SIGTERM, None)
 
 
 def _call_run_live(*, once: bool) -> None:
@@ -305,15 +335,12 @@ def test_once_still_raises_so_ci_sees_the_failure(monkeypatch: pytest.MonkeyPatc
 def test_sigterm_finishes_the_tick_then_flushes_and_exits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import os
-    import signal
-
     ticks: list[dict] = []
 
     def tick(**kwargs):
         ticks.append(kwargs)
         if len(ticks) == 2:
-            os.kill(os.getpid(), signal.SIGTERM)   # docker compose down, mid-tick
+            _send_sigterm()                        # docker compose down, mid-tick
         return _result()
 
     monkeypatch.setattr(runner, "_tick", tick)
@@ -327,9 +354,17 @@ def test_sigterm_finishes_the_tick_then_flushes_and_exits(
     assert signal.getsignal(signal.SIGTERM) is not runner._StopSignal._handle
 
 
+@pytest.mark.skipif(
+    ON_WINDOWS,
+    reason=(
+        "needs a signal to interrupt time.sleep in the main thread, which only "
+        "POSIX does. Delivery is what is under test here, so there is nothing "
+        "left to assert once it is simulated -- unlike the test above, where "
+        "the handler's own effect is the point. Covered on Linux and in CI, "
+        "which is where the runner actually runs."
+    ),
+)
 def test_sigterm_during_the_sleep_stops_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    import os
-    import signal
     import threading
     import time as real_time
 
