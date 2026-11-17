@@ -4,7 +4,7 @@
 // its own columns straight off the returned rows.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchJSON, type QueryParams } from "./client";
-import type { Detection, DetectorRun } from "./types";
+import type { Detection, DetectorRun, SpoofingGateCount } from "./types";
 
 export interface FetchResult<T> {
   data: T | null;
@@ -60,4 +60,12 @@ export function useNoFlyZoneDetections(params?: QueryParams) {
 
 export function useDetectorRuns(params?: QueryParams) {
   return useFetch<DetectorRun[]>("/detector-runs", params);
+}
+
+// --- Spoofing team ---------------------------------------------------------
+// Our endpoint takes two filters the shared one does not: `gate` (which rule
+// fired) and `min_confidence`. Both live in metadata/columns the generic
+// endpoint cannot reach, so they need their own params.
+export function useSpoofingGates(params?: QueryParams) {
+  return useFetch<SpoofingGateCount[]>("/spoofing-gates", params);
 }
