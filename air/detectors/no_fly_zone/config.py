@@ -42,6 +42,12 @@ def _validate(raw: Mapping[str, Any]) -> None:
     for section in ("detector", "scope", "sampling", "airspace", "geometry", "scoring", "severity", "dedup"):
         if section not in raw:
             raise ValueError(f"config missing section: {section}")
+    off_grid = raw["geometry"].get("off_grid_terrain_ft")
+    if off_grid is not None:
+        if not isinstance(off_grid, Mapping) or set(off_grid) != {"min", "max"}:
+            raise ValueError("geometry.off_grid_terrain_ft must have exactly min and max")
+        if float(off_grid["min"]) > float(off_grid["max"]):
+            raise ValueError("geometry.off_grid_terrain_ft.min must not exceed max")
     include_types = raw["airspace"].get("include_types", [zone_type.value for zone_type in ZoneType])
     if not isinstance(include_types, list):
         raise ValueError("airspace.include_types must be a list")

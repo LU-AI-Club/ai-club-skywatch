@@ -40,6 +40,17 @@ airspace:
 geometry:
   h3_resolution: 7        # ~5 km cells, matches SENTINEL
   default_uncertainty_m: 185   # used when NIC/NACp are missing
+  # Ground elevation, ft MSL, that holds anywhere our zones are. Used to place
+  # an AGL floor only where the terrain grid has no value. The grid covers
+  # 65 nm around KLYH, and Evers East, Evers Low and Barfoot 1 reach past it.
+  # There, an aircraft above floor + max is above the floor wherever it is,
+  # one below floor + min is below it, and anything between abstains.
+  # max is set above Mount Rogers (5,729 ft), the highest ground in Virginia;
+  # West Virginia's highest, Spruce Knob, is 4,863 ft. Deliberately loose:
+  # widening the grid to the zones' bounds is the real fix and makes this moot.
+  off_grid_terrain_ft:
+    min: 0
+    max: 5800
 
 filters:
   drop_on_ground: true

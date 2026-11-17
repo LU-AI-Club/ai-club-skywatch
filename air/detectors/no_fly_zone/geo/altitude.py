@@ -28,9 +28,11 @@ Both altitude fields ``None``
     ``reason=ExitReason.BAD_INPUT``. Abstain; never guess an altitude.
 :attr:`Datum.AGL`
     A floor is checked against aircraft altitude minus interpolated terrain
-    elevation. If terrain is outside the grid or has a missing sample, abstain
-    with ``BAD_INPUT``. An AGL ceiling still needs a terrain model and is not
-    supported by this task.
+    elevation. Where terrain is outside the grid or has a missing sample, the
+    floor is placed with the area-wide bound ``geometry.off_grid_terrain_ft``
+    instead: clear of the range it allows the answer is certain, inside it
+    (or with no bound configured) abstain with ``BAD_INPUT``. An AGL ceiling
+    still needs a terrain model and is not supported by this task.
 
 Notes
 -----
@@ -128,8 +130,16 @@ def vertical_check(
     state: AircraftState,
     zone: AirspaceZone,
     terrain: TerrainGrid | None = None,
+    off_grid_terrain_ft: tuple[float, float] | None = None,
 ) -> VerticalResult:
-    """Compare ``state``'s altitude to ``zone``'s floor/ceiling band."""
+    """Compare ``state``'s altitude to ``zone``'s floor/ceiling band.
+
+    ``off_grid_terrain_ft`` is the (lowest, highest) ground elevation in ft MSL
+    that holds anywhere the zones are. It places an AGL floor where the terrain
+    grid has no value: the floor is then somewhere between ``floor + lowest``
+    and ``floor + highest``, so an aircraft outside that range is decided and
+    one inside it still abstains.
+    """
     # -------------------------------------------------------------------------
     # 1. Validate available altitudes
     # If neither altitude is available, abstain with BAD_INPUT (never guess).
@@ -166,7 +176,8 @@ def vertical_check(
 
     # -------------------------------------------------------------------------
     # 3. Resolve the floor. AGL floors compare height above the interpolated
-    # terrain; unknown terrain remains BAD_INPUT rather than skipping the floor.
+    # terrain. Where the grid has no value, step 3a falls back to the area-wide
+    # terrain bound, and abstains with BAD_INPUT when that cannot decide.
     # -------------------------------------------------------------------------
     if zone.floor_datum is Datum.AGL:
         terrain_ft = (
@@ -174,30 +185,47 @@ def vertical_check(
             if terrain is not None
             else None
         )
-        if terrain_ft is None:
-            default_alt = (
-                state.alt_geom_ft
-                if state.alt_geom_ft is not None
-                else state.alt_baro_ft
-            )
-            default_source = (
-                AltitudeSource.GEOMETRIC
-                if state.alt_geom_ft is not None
-                else AltitudeSource.BAROMETRIC
-            )
-            return VerticalResult(
-                within=False,
-                altitude_ft=default_alt,
-                altitude_source=default_source,
-                reason=ExitReason.BAD_INPUT,
-            )
         floor_altitude, floor_source = (
             (state.alt_geom_ft, AltitudeSource.GEOMETRIC)
             if state.alt_geom_ft is not None
             else (state.alt_baro_ft, AltitudeSource.BAROMETRIC)
         )
         assert floor_altitude is not None
-        floor_alt = floor_altitude - terrain_ft
+        if terrain_ft is None:
+            # 3a. No terrain value here (off the grid, or a no-data cell).
+            # Above the ceiling is clear wherever the ground is.
+            ceiling_alt, ceiling_source = _resolve_altitude(state, zone.ceiling_datum)
+            if ceiling_alt > zone.ceiling_ft:
+                return VerticalResult(
+                    within=False,
+                    altitude_ft=ceiling_alt,
+                    altitude_source=ceiling_source,
+                    reason=ExitReason.VERTICAL_CLEAR,
+                )
+            unknown = VerticalResult(
+                within=False,
+                altitude_ft=floor_altitude,
+                altitude_source=floor_source,
+                reason=ExitReason.BAD_INPUT,
+            )
+            if off_grid_terrain_ft is None:
+                return unknown
+            lowest_ft, highest_ft = off_grid_terrain_ft
+            # Below the floor even over the lowest ground: clear.
+            if floor_altitude - lowest_ft < zone.floor_ft:
+                return VerticalResult(
+                    within=False,
+                    altitude_ft=floor_altitude - lowest_ft,
+                    altitude_source=floor_source,
+                    reason=ExitReason.VERTICAL_CLEAR,
+                )
+            # Above it only over low ground: cannot tell, so abstain.
+            if floor_altitude - highest_ft < zone.floor_ft:
+                return unknown
+            # Above the floor even over the highest ground.
+            floor_alt = floor_altitude - highest_ft
+        else:
+            floor_alt = floor_altitude - terrain_ft
     else:
         floor_alt, floor_source = _resolve_altitude(state, zone.floor_datum)
 
