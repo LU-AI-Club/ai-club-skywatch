@@ -19,6 +19,9 @@ Severity caps
 ``containment.contained is False`` but ``buffered_contained is True``
     Cap at ``severity.buffered_only`` - this may be position error, not a
     violation.
+``zone.zone_type`` listed in ``severity.zone_type_cap``
+    Cap at the severity given for that type - a MOA is legal to fly through
+    even when it is in use, so it never reaches the severity of a closed area.
 
 Inputs
 ------
@@ -130,6 +133,9 @@ def build_detection(
         severity_caps.append(Severity(cfg["severity"]["unknown_activation_cap"]))
     if not containment.contained and containment.buffered_contained:
         severity_caps.append(Severity(cfg["severity"]["buffered_only"]))
+    zone_type_cap = cfg["severity"].get("zone_type_cap", {}).get(zone.zone_type.value)
+    if zone_type_cap is not None:
+        severity_caps.append(Severity(zone_type_cap))
     severity_order = (Severity.INFO, Severity.LOW, Severity.MEDIUM, Severity.HIGH)
     severity = min(severity_caps, key=severity_order.index)
 

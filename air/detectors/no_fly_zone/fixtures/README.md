@@ -53,10 +53,13 @@ false-positive lane should add them.
 ## Local FAA schedules and terrain
 
 `airspace/klyh-local-faa.geojson` carries parsed recurring schedules in
-`America/New_York`. The Farmville, Evers, Barfoot, and R-6602A schedule
-phrasings are active during their published windows; outside windows that
-allow additional NOTAM activation, status stays unknown. Thirteen of the 15
-local zones now have known activation.
+`America/New_York`. Farmville and R-6602A are active during their published
+windows. Evers ("0630 - SUNSET, DAILY, BY NOTAM") and Barfoot ("INTERMITTENT,
+SUNRISE - SUNSET") publish hours that only bound when they may be used, so
+they carry `unknown_within_schedule` and stay unknown inside those hours too.
+Outside windows that allow additional NOTAM activation, status stays unknown.
+Whatever its activation, a MOA never rises above `severity.zone_type_cap.MOA`
+(LOW): flying through one is legal.
 
 `terrain/klyh-65nm.json` is a committed USGS 3DEP elevation grid covering the
 65 nm KLYH operating area. Its approximately 2 km cells are stored in feet

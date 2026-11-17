@@ -91,7 +91,7 @@ than claiming it's cold. `INTERMITTENT` and sunrise/sunset need a choice too
 
 **Done when.** One test per phrasing (inside and outside the window), the
 regenerated local file is committed, and the PR states how many of the 15 zones
-now have known activation at a given time.
+now have a parsed schedule; Evers and Barfoot stay unknown inside their "by NOTAM" / "intermittent" hours.
 
 ### NFZ-12E — Let AGL-floor zones fire
 

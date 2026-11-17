@@ -140,6 +140,10 @@ class AirspaceZone:
     recurring_windows: tuple[RecurringWindow, ...] = ()
     schedule_timezone: str = "UTC"
     unknown_outside_schedule: bool = False
+    # True when the published hours only bound when the zone *may* be in use
+    # ("0630 - SUNSET, DAILY, BY NOTAM", "INTERMITTENT ..."): inside them the
+    # zone is live only if a NOTAM or the using agency says so.
+    unknown_within_schedule: bool = False
     controlling_agency: str | None = None
     source: str = ""                 # e.g. "faa_sua"
     source_asof: date | None = None  # publication cycle of the source file

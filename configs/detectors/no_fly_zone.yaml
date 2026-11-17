@@ -63,6 +63,12 @@ scoring:
 severity:
   unknown_activation_cap: LOW
   buffered_only: INFO
+  # The highest severity a zone type can reach, whatever else is true.
+  # A MOA is not closed airspace: flying through one is legal even while it is
+  # in use, so an aircraft inside an active MOA is context, never an alarm.
+  # Types not listed are uncapped (HIGH when the zone is known to be active).
+  zone_type_cap:
+    MOA: LOW
 
 dedup:
   # One Detection per incursion episode (logic/episodes.py). An episode closes

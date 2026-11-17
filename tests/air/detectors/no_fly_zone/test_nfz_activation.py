@@ -100,25 +100,28 @@ def test_farmville_schedule_is_active_weekdays_and_unknown_outside() -> None:
     assert weekend.state is ActivationState.UNKNOWN
 
 
-def test_evers_schedule_runs_until_sunset_and_is_unknown_outside() -> None:
+def test_evers_by_notam_hours_are_unknown_inside_and_outside() -> None:
+    """"0630 - SUNSET, DAILY, BY NOTAM": the hours say when it may be used,
+    not that it is, so inside them the answer is still unknown."""
     zone = _local_zones()["EVERS CENTER MOA"]
     inside = is_active(zone, datetime(2026, 11, 18, 15, tzinfo=UTC))
     before_local_start = is_active(zone, datetime(2026, 11, 18, 8, tzinfo=UTC))
     outside = is_active(zone, datetime(2026, 11, 19, 1, tzinfo=UTC))
 
-    assert inside.state is ActivationState.ACTIVE
+    assert inside.state is ActivationState.UNKNOWN
     assert "America/New_York" in inside.basis
+    assert "by NOTAM or intermittently" in inside.basis
     assert before_local_start.state is ActivationState.UNKNOWN
     assert outside.state is ActivationState.UNKNOWN
 
 
-def test_barfoot_schedule_runs_sunrise_to_sunset() -> None:
+def test_barfoot_intermittent_hours_are_unknown_inside_and_cold_outside() -> None:
     zone = _local_zones()["BARFOOT 1 MOA"]
     inside = is_active(zone, datetime(2026, 11, 18, 15, tzinfo=UTC))
     before_sunrise = is_active(zone, datetime(2026, 11, 18, 10, tzinfo=UTC))
     outside = is_active(zone, datetime(2026, 11, 19, 5, tzinfo=UTC))
 
-    assert inside.state is ActivationState.ACTIVE
+    assert inside.state is ActivationState.UNKNOWN
     assert before_sunrise.state is ActivationState.INACTIVE
     assert outside.state is ActivationState.INACTIVE
 

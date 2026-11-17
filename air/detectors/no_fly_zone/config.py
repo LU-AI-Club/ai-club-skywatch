@@ -63,6 +63,12 @@ def _validate(raw: Mapping[str, Any]) -> None:
             raise ValueError(f"base score for {z} out of range: {v}")
     for key in ("unknown_activation_cap", "buffered_only"):
         Severity(raw["severity"][key])  # raises if not a valid severity
+    zone_type_cap = raw["severity"].get("zone_type_cap", {})
+    if not isinstance(zone_type_cap, Mapping):
+        raise ValueError("severity.zone_type_cap must map zone types to severities")
+    for zone_type, cap in zone_type_cap.items():
+        ZoneType(zone_type)  # raises if not a valid zone type
+        Severity(cap)  # raises if not a valid severity
     if raw["sampling"]["target_hz"] <= 0:
         raise ValueError("sampling.target_hz must be positive")
     if float(raw["sampling"]["max_gap_sec"]) <= 0:
