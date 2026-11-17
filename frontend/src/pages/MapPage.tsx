@@ -13,6 +13,7 @@ import {
   useNoFlyZoneDetections,
 } from "../api/hooks";
 import type { Detection } from "../api/types";
+import { NoFlyZoneOverlay } from "./overlays/NoFlyZoneOverlay";
 
 const OVERLAYS = [
   { key: "spoofing", label: "Spoofing", color: "#a855f7" },
@@ -71,6 +72,12 @@ export function MapPage() {
   const spoofing = useSpoofingDetections({ since_hours: 24 });
   const proximity = useProximityDetections({ since_hours: 24 });
   const noFlyZone = useNoFlyZoneDetections({ since_hours: 24 });
+  // Detections are events, not moving dots: re-poll so new ones appear.
+  const reloadNoFlyZone = noFlyZone.reload;
+  useEffect(() => {
+    const id = window.setInterval(reloadNoFlyZone, 30_000);
+    return () => window.clearInterval(id);
+  }, [reloadNoFlyZone]);
   const data: Record<OverlayKey, Detection[] | null> = {
     spoofing: spoofing.data,
     proximity: proximity.data,
@@ -96,10 +103,11 @@ export function MapPage() {
 
       <MapView style={{ height: "100%" }}>
         {OVERLAYS.map((o) =>
-          on[o.key] && data[o.key] ? (
+          o.key !== "no-fly-zone" && on[o.key] && data[o.key] ? (
             <DetectionOverlay key={o.key} detections={data[o.key]!} color={o.color} />
           ) : null,
         )}
+        {on["no-fly-zone"] && <NoFlyZoneOverlay detections={noFlyZone.data ?? []} />}
       </MapView>
 
       <div className="map-status">
