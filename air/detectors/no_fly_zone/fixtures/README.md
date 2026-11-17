@@ -64,5 +64,10 @@ Whatever its activation, a MOA never rises above `severity.zone_type_cap.MOA`
 `terrain/klyh-65nm.json` is a committed USGS 3DEP elevation grid covering the
 65 nm KLYH operating area. Its approximately 2 km cells are stored in feet
 MSL and bilinearly interpolated for AGL floors. It is loaded once at detector
-construction; the detector makes no network requests. Locations outside the
-grid or interpolation cells containing no-data are skipped.
+construction; the detector makes no network requests. Where the grid has
+no value (outside it, or a no-data cell) an AGL floor is placed with the
+area-wide bound `geometry.off_grid_terrain_ft` instead, and the report is
+skipped only where that cannot decide. The grid stops at 38.435 N and
+77.813 W, short of the zones: Evers East is 16% covered, Barfoot 1 54%, and
+Evers Low 63%. Rebuilding it over lon -80.67..-77.72, lat 36.78..38.76 (the
+bounds of the local zones) would cover all of them.

@@ -27,7 +27,8 @@ cfg:
     The loaded config, passed down to every stage.
 terrain:
     The immutable offline grid loaded once by detector construction. AGL
-    floors with missing or out-of-grid terrain abstain with ``BAD_INPUT``.
+    floors with missing or out-of-grid terrain use ``geometry.off_grid_terrain_ft``
+    and abstain with ``BAD_INPUT`` where that cannot decide.
 
 Outputs
 -------
@@ -145,6 +146,14 @@ def evaluate_reports(
         yield ReportResult(state.icao24, state.timestamp, fired)
 
 
+def _off_grid_terrain_ft(cfg: Config) -> tuple[float, float] | None:
+    """``geometry.off_grid_terrain_ft`` as (lowest, highest) ft MSL, or None if unset."""
+    bound = cfg.raw.get("geometry", {}).get("off_grid_terrain_ft")
+    if not bound:
+        return None
+    return float(bound["min"]), float(bound["max"])
+
+
 def _evaluate(
     state: AircraftState,
     zones: list[AirspaceZone],
@@ -177,7 +186,7 @@ def _evaluate(
             deepest = _deeper(deepest, horizontal.reason or ExitReason.OUTSIDE_POLYGON)
             continue
 
-        vertical = altitude.vertical_check(state, zone, terrain)
+        vertical = altitude.vertical_check(state, zone, terrain, _off_grid_terrain_ft(cfg))
         if not vertical.within:
             deepest = _deeper(deepest, vertical.reason or ExitReason.VERTICAL_CLEAR)
             continue

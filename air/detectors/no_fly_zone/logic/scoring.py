@@ -249,7 +249,8 @@ def build_detection(
         )
     if zone.floor_datum is Datum.AGL:
         limitations.append(
-            "AGL floor was evaluated against bilinearly interpolated terrain from the offline grid."
+            "AGL floor was evaluated against bilinearly interpolated terrain from the "
+            "offline grid, or the area-wide terrain bound where the grid has no value."
         )
     if zone.ceiling_datum is Datum.AGL:
         limitations.append(
