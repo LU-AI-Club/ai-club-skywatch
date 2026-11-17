@@ -30,8 +30,9 @@ The merged Detection
 anomaly_score
     The **peak** score over the episode.
 severity / raw_model_confidence
-    The highest over the episode (one strictly-inside HIGH report makes the
-    episode HIGH even if its peak score came from a buffer-only report).
+    Severity is the highest over the episode. Confidence is the strongest
+    uninterrupted run of fired reports for that zone, using elapsed
+    observation time.
 explanation_facts
     An episode summary first (zone, duration, report count, time span, peak),
     then the facts of the representative report (highest severity, then
@@ -123,6 +124,9 @@ class _OpenEpisode:
 
     hits: list[tuple[datetime, Detection]] = field(default_factory=list)
     clear_streak: int = 0
+    run_start: datetime | None = None
+    run_max_confidence: float = 0.0
+    best_confidence: float = 0.0
 
 
 class EpisodeTracker:
@@ -140,6 +144,9 @@ class EpisodeTracker:
     def __init__(self, cfg: Config) -> None:
         self._clears_to_close = int(cfg["dedup"]["clear_observations_to_close"])
         self._max_gap_sec = float(cfg["sampling"]["max_gap_sec"])
+        confidence = cfg["scoring"]["confidence"]
+        self._persistence_min_factor = float(confidence["persistence_min_factor"])
+        self._persistence_saturation_sec = float(confidence["persistence_saturation_sec"])
         self._open: dict[str, dict[str, _OpenEpisode]] = {}
         self._last_seen: dict[str, datetime] = {}
         # (aircraft, zone) episodes that gained a report since the last
@@ -169,7 +176,7 @@ class EpisodeTracker:
             gap = (report.timestamp - previous).total_seconds() if previous is not None else 0.0
             if gap > self._max_gap_sec:
                 for zone_id in list(episodes):
-                    closed.append(_merge(episodes.pop(zone_id).hits))
+                    closed.append(_merge(episodes.pop(zone_id)))
 
             fired = {_zone_id(det): det for det in report.fired}
 
@@ -178,12 +185,20 @@ class EpisodeTracker:
                 if zone_id in fired:
                     continue
                 episode = episodes[zone_id]
+                _reset_run(episode)
                 episode.clear_streak += 1
                 if episode.clear_streak >= self._clears_to_close:
-                    closed.append(_merge(episodes.pop(zone_id).hits))
+                    closed.append(_merge(episodes.pop(zone_id)))
 
             for zone_id, det in fired.items():
                 episode = episodes.setdefault(zone_id, _OpenEpisode())
+                _add_hit(
+                    episode,
+                    report.timestamp,
+                    det.raw_model_confidence,
+                    self._persistence_min_factor,
+                    self._persistence_saturation_sec,
+                )
                 episode.hits.append((report.timestamp, det))
                 episode.clear_streak = 0
                 self._changed.add((aircraft, zone_id))
@@ -203,7 +218,7 @@ class EpisodeTracker:
         for aircraft, zone_id in sorted(self._changed):
             episode = self._open.get(aircraft, {}).get(zone_id)
             if episode is not None and episode.hits:
-                snapshots.append(_merge(episode.hits, still_open=True))
+                snapshots.append(_merge(episode, still_open=True))
         self._changed.clear()
         return snapshots
 
@@ -219,14 +234,14 @@ class EpisodeTracker:
             if (now - self._last_seen[aircraft]).total_seconds() <= self._max_gap_sec:
                 continue
             for episode in self._open.pop(aircraft, {}).values():
-                closed.append(_merge(episode.hits))
+                closed.append(_merge(episode))
             del self._last_seen[aircraft]
         return closed
 
     def flush(self) -> list[Detection]:
         """Close and return every open episode (end of stream)."""
         closed = [
-            _merge(episode.hits)
+            _merge(episode)
             for episodes in self._open.values()
             for episode in episodes.values()
         ]
@@ -254,12 +269,40 @@ def _zone_id(det: Detection) -> str:
     return str(zone_id)
 
 
-def _merge(hits: list[tuple[datetime, Detection]], *, still_open: bool = False) -> Detection:
+def _reset_run(episode: _OpenEpisode) -> None:
+    episode.run_start = None
+    episode.run_max_confidence = 0.0
+
+
+def _add_hit(
+    episode: _OpenEpisode,
+    at: datetime,
+    confidence: float,
+    minimum_factor: float,
+    saturation_sec: float,
+) -> None:
+    """Add a fired report to the current uninterrupted run and score the run."""
+    if episode.run_start is None:
+        episode.run_start = at
+        episode.run_max_confidence = confidence
+    else:
+        episode.run_max_confidence = max(episode.run_max_confidence, confidence)
+    duration = (at - episode.run_start).total_seconds()
+    persistence = minimum_factor + (1.0 - minimum_factor) * min(
+        duration / saturation_sec, 1.0
+    )
+    episode.best_confidence = max(
+        episode.best_confidence, episode.run_max_confidence * persistence
+    )
+
+
+def _merge(episode: _OpenEpisode, *, still_open: bool = False) -> Detection:
     """Collapse one episode's per-report detections into a single Detection.
 
     ``still_open`` marks a snapshot of an episode in progress: ``episode_end``
     is ``None`` and ``last_report_at`` says how far it has got.
     """
+    hits = episode.hits
     first_at, first = hits[0]
     last_at, last = hits[-1]
     peak_at, peak = max(hits, key=lambda h: h[1].anomaly_score)
@@ -269,20 +312,24 @@ def _merge(hits: list[tuple[datetime, Detection]], *, still_open: bool = False) 
     dwell_sec = (last_at - first_at).total_seconds()
     zone_label = _zone_label(rep, zone_id)
     reports = f"{len(hits)} report{'s' if len(hits) != 1 else ''}"
+    episode_confidence = episode.best_confidence
+    confidence_basis = "best uninterrupted run of reports after persistence weighting"
 
     if still_open:
         summary = (
             f"Aircraft {_aircraft(rep)} has been in zone {zone_label} for {dwell_sec:.0f} s "
             f"and is still inside, across {reports} since {first_at:%H:%M:%S} UTC "
             f"(latest {last_at:%H:%M:%S}); peak anomaly score "
-            f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}."
+            f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}; evidence confidence "
+            f"{episode_confidence:.3f} from the {confidence_basis}."
         )
     else:
         summary = (
             f"Aircraft {_aircraft(rep)} was in zone {zone_label} for {dwell_sec:.0f} s "
             f"across {reports}, "
             f"{first_at:%H:%M:%S}-{last_at:%H:%M:%S} UTC; peak anomaly score "
-            f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}."
+            f"{peak.anomaly_score:.3f} at {peak_at:%H:%M:%S}; evidence confidence "
+            f"{episode_confidence:.3f} from the {confidence_basis}."
         )
     facts = [summary, *rep.explanation_facts]
     # Context signals that showed up elsewhere in the episode, with first sighting.
@@ -333,7 +380,7 @@ def _merge(hits: list[tuple[datetime, Detection]], *, still_open: bool = False) 
         detection_type=rep.detection_type,
         severity=rep.severity,
         anomaly_score=peak.anomaly_score,
-        raw_model_confidence=max(det.raw_model_confidence for _, det in hits),
+        raw_model_confidence=episode_confidence,
         evidence_refs=tuple(evidence),
         feature_schema_version=rep.feature_schema_version,
         baseline_or_model_version=rep.baseline_or_model_version,

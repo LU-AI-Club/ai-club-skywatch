@@ -119,3 +119,50 @@ def test_episode_settings_are_validated(tmp_path: Any, section: str, key: str, v
     bad.write_text(yaml.safe_dump(raw), encoding="utf-8")
     with pytest.raises(ValueError, match=key):
         load_config(bad)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("persistence_min_factor", 0.0),
+        ("persistence_min_factor", 1.1),
+        ("persistence_saturation_sec", 0),
+        ("buffered_position_factor", 0.6),
+        ("active_activation_factor", float("nan")),
+        ("unknown_activation_factor", float("inf")),
+        ("strict_position_min_factor", True),
+    ],
+)
+def test_confidence_settings_are_validated(
+    tmp_path: Any, key: str, value: Any
+) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw["scoring"]["confidence"][key] = value
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match=key):
+        load_config(bad)
+
+
+@pytest.mark.parametrize(
+    "missing",
+    ["confidence", "active_activation_factor"],
+)
+def test_missing_confidence_settings_are_rejected(tmp_path: Any, missing: str) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    if missing == "confidence":
+        del raw["scoring"]["confidence"]
+    else:
+        del raw["scoring"]["confidence"][missing]
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    with pytest.raises(ValueError, match=missing):
+        load_config(bad)

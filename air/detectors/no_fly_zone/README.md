@@ -70,6 +70,23 @@ episode closes after 2 consecutive clear reports or 30 s of silence (both in
 `config.yaml`). Add `--per-report` to get the raw per-report detections the
 episodes are built from.
 
+**Confidence is evidence strength, not threat or probability.** Per-report
+confidence combines activation state, horizontal evidence, and whether the
+altitude source matches the zone datum. Every uninterrupted run of fired reports
+for a zone earns persistence credit, regardless of activation certainty or
+position/altitude confirmation; a report that does not fire for that zone resets
+the run. Episode confidence uses the strongest such run and elapsed timestamps,
+not report counts. Confidence does not rise just because wall-clock time passes
+between reports. Per-report facts show the activation, position, and altitude
+factors; episode summaries explain the persistence weighting. Short crossings
+remain detections with lower confidence. Confidence factors and saturation
+duration come from `configs/detectors/no_fly_zone.yaml`. Anomaly score and
+severity retain their existing policies.
+
+The vertical check uses readsb geometric altitude, which is referenced to the
+WGS84 ellipsoid, as an uncorrected proxy for MSL/SFC limits. No geoid correction
+is currently applied, so vertical results near those limits require caution.
+
 ### On real data: `data/lynchburg_adsb.csv`
 
 `--input` takes the club's readsb CSV directly (one hour, ~284k rows, 915
