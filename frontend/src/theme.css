@@ -67,6 +67,17 @@ a {
   font-weight: 600;
   letter-spacing: 0.2px;
 }
+.nav .brand .sim-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--sev-medium);
+  border: 1px solid var(--sev-medium);
+  background: color-mix(in srgb, var(--sev-medium) 12%, transparent);
+}
 .nav .brand .mark {
   width: 26px;
   height: 26px;
@@ -217,18 +228,111 @@ a {
   position: relative;
   height: calc(100vh - var(--nav-h));
 }
-.map-toggles {
+/* Filter sidebar: slides in over the left edge of the map. The tab on its
+   right edge stays visible when it's closed. */
+.map-page {
+  --sidebar-w: min(280px, 85vw);
+  --sidebar-tab-w: 30px;
+  overflow: hidden;
+}
+.map-sidebar {
   position: absolute;
-  top: 14px;
-  left: 60px;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--sidebar-w);
   z-index: 900;
-  background: rgba(20, 20, 24, 0.94);
+  background: rgba(20, 20, 24, 0.96);
+  border-right: 1px solid var(--border);
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+.map-page.sidebar-open .map-sidebar {
+  transform: translateX(0);
+  box-shadow: 4px 0 18px rgba(0, 0, 0, 0.35);
+}
+.map-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.map-sidebar-tab {
+  position: absolute;
+  top: 12px;
+  left: 100%;
+  width: var(--sidebar-tab-w);
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: rgba(20, 20, 24, 0.96);
+  color: var(--text);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  cursor: pointer;
+}
+.map-sidebar-tab:hover {
+  color: var(--accent);
+}
+.map-sidebar-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.map-sidebar-tab svg {
+  transition: transform 0.25s ease;
+}
+.map-page.sidebar-open .map-sidebar-tab svg {
+  transform: rotate(180deg);
+}
+/* Keep Leaflet's zoom buttons clear of the tab and sidebar. */
+.map-page .leaflet-left {
+  transform: translateX(var(--sidebar-tab-w));
+  transition: transform 0.25s ease;
+}
+.map-page.sidebar-open .leaflet-left {
+  transform: translateX(calc(var(--sidebar-w) + var(--sidebar-tab-w)));
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-sidebar,
+  .map-sidebar-tab svg,
+  .map-page .leaflet-left {
+    transition: none;
+  }
+}
+/* Closed sidebar: hide its contents once the slide finishes, so they drop
+   out of the tab order and screen readers. The tab button stays usable. */
+.map-sidebar-head,
+.map-toggles {
+  transition: visibility 0s linear 0s;
+}
+.map-page:not(.sidebar-open) .map-sidebar-head,
+.map-page:not(.sidebar-open) .map-toggles {
+  visibility: hidden;
+  transition-delay: 0.25s;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.map-toggles {
+  padding: 12px 16px 16px;
   font-size: 13px;
   display: grid;
-  gap: 7px;
+  gap: 8px;
+  overflow-y: auto;
 }
 .map-toggles label {
   display: flex;
@@ -241,6 +345,114 @@ a {
   height: 11px;
   border-radius: 3px;
   display: inline-block;
+}
+.map-toggles .map-toggles-heading {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.map-toggles .map-toggles-section {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+.map-toggles .map-toggles-sub {
+  padding-left: 22px;
+}
+.map-toggles .map-toggles-error {
+  color: var(--sev-critical);
+  font-size: 12px;
+}
+/* Map sidebar search. */
+.map-search {
+  display: grid;
+  gap: 8px;
+}
+.map-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.map-search-box:focus-within {
+  border-color: var(--accent);
+}
+.map-search-box input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 0;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px; /* 16px stops iOS zooming in on focus */
+}
+@media (min-width: 700px) {
+  .map-search-box input {
+    font-size: 13px;
+  }
+}
+.map-search-results {
+  display: grid;
+  gap: 2px;
+}
+.map-search-group {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+  padding: 6px 2px 2px;
+}
+.map-search-item {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 7px 8px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.map-search-item:hover,
+.map-search-item:focus-visible {
+  background: var(--raised);
+  border-color: var(--border);
+  outline: none;
+}
+.map-search-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.map-search-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.map-search-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 2px;
+}
+.map-toggles .type-glyph {
+  flex: none;
+  stroke: #0a0a0c;
+  stroke-width: 1px;
+  paint-order: stroke;
+}
+.map-toggles .map-toggles-note {
+  font-size: 12px;
+  color: var(--muted);
 }
 .map-status {
   position: absolute;
@@ -263,4 +475,19 @@ a {
 }
 .leaflet-popup-content {
   font-size: 13px;
+}
+
+/* Aircraft plane markers (MapView). Leaflet's default divIcon box is white
+   with a border; clear it so only the plane shows. */
+.leaflet-marker-icon.aircraft-marker {
+  background: none;
+  border: none;
+}
+.aircraft-plane {
+  display: block;
+  stroke: #0a0a0c;
+  stroke-width: 1.2px;
+  paint-order: stroke;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6));
 }
