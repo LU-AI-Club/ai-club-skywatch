@@ -39,7 +39,7 @@ Confidence
 score or calibrated probability. It combines configured activation, horizontal
 position, and datum-appropriate altitude-source factors. Episode persistence
 is added later by ``logic.episodes`` using elapsed timestamps from uninterrupted
-strict hits; context signals affect anomaly score only.
+runs of fired reports. Context signals affect anomaly score only.
 
 Required ``extras`` keys
 ------------------------
@@ -137,11 +137,6 @@ def build_detection(
     severity_order = (Severity.INFO, Severity.LOW, Severity.MEDIUM, Severity.HIGH)
     severity = min(severity_caps, key=severity_order.index)
 
-    confirmed = (
-        containment.contained
-        and vertical.within
-        and activation.state is ActivationState.ACTIVE
-    )
     confidence_cfg = scoring["confidence"]
     if activation.state is ActivationState.ACTIVE:
         activation_factor = float(confidence_cfg["active_activation_factor"])
@@ -253,7 +248,6 @@ def build_detection(
         # The signal facts on their own, so episode grouping can say when a
         # signal (e.g. a squawk) first appeared during a crossing.
         "signal_facts": [signal.fact for signal in signals],
-        "_strict_hit": confirmed,
     }
     if altitude is not None:
         extras["altitude_ft"] = altitude

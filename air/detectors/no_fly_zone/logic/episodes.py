@@ -31,8 +31,8 @@ anomaly_score
     The **peak** score over the episode.
 severity / raw_model_confidence
     Severity is the highest over the episode. Confidence is the strongest
-    uninterrupted strict-hit segment, using elapsed observation time; if no
-    strict segment exists, it is the highest per-report confidence.
+    uninterrupted run of fired reports for that zone, using elapsed
+    observation time.
 explanation_facts
     An episode summary first (zone, duration, report count, time span, peak),
     then the facts of the representative report (highest severity, then
@@ -124,9 +124,9 @@ class _OpenEpisode:
 
     hits: list[tuple[datetime, Detection]] = field(default_factory=list)
     clear_streak: int = 0
-    strict_segment_start: datetime | None = None
-    strict_segment_max_confidence: float = 0.0
-    best_strict_confidence: float | None = None
+    run_start: datetime | None = None
+    run_max_confidence: float = 0.0
+    best_confidence: float = 0.0
 
 
 class EpisodeTracker:
@@ -182,28 +182,23 @@ class EpisodeTracker:
 
             # Open episodes this report did not fire for count toward closing.
             for zone_id in list(episodes):
-                episode = episodes[zone_id]
-                detection = fired.get(zone_id)
-                if detection is not None and _is_strict_hit(detection):
+                if zone_id in fired:
                     continue
-                _reset_strict_segment(episode)
-                if detection is None:
-                    episode.clear_streak += 1
-                    if episode.clear_streak >= self._clears_to_close:
-                        closed.append(_merge(episodes.pop(zone_id)))
+                episode = episodes[zone_id]
+                _reset_run(episode)
+                episode.clear_streak += 1
+                if episode.clear_streak >= self._clears_to_close:
+                    closed.append(_merge(episodes.pop(zone_id)))
 
             for zone_id, det in fired.items():
                 episode = episodes.setdefault(zone_id, _OpenEpisode())
-                if _is_strict_hit(det):
-                    _add_strict_hit(
-                        episode,
-                        report.timestamp,
-                        det.raw_model_confidence,
-                        self._persistence_min_factor,
-                        self._persistence_saturation_sec,
-                    )
-                else:
-                    _reset_strict_segment(episode)
+                _add_hit(
+                    episode,
+                    report.timestamp,
+                    det.raw_model_confidence,
+                    self._persistence_min_factor,
+                    self._persistence_saturation_sec,
+                )
                 episode.hits.append((report.timestamp, det))
                 episode.clear_streak = 0
                 self._changed.add((aircraft, zone_id))
@@ -274,39 +269,31 @@ def _zone_id(det: Detection) -> str:
     return str(zone_id)
 
 
-def _is_strict_hit(detection: Detection) -> bool:
-    return detection.extras.get("_strict_hit") is True
+def _reset_run(episode: _OpenEpisode) -> None:
+    episode.run_start = None
+    episode.run_max_confidence = 0.0
 
 
-def _reset_strict_segment(episode: _OpenEpisode) -> None:
-    episode.strict_segment_start = None
-    episode.strict_segment_max_confidence = 0.0
-
-
-def _add_strict_hit(
+def _add_hit(
     episode: _OpenEpisode,
     at: datetime,
     confidence: float,
     minimum_factor: float,
     saturation_sec: float,
 ) -> None:
-    if episode.strict_segment_start is None:
-        episode.strict_segment_start = at
-        episode.strict_segment_max_confidence = confidence
+    """Add a fired report to the current uninterrupted run and score the run."""
+    if episode.run_start is None:
+        episode.run_start = at
+        episode.run_max_confidence = confidence
     else:
-        episode.strict_segment_max_confidence = max(
-            episode.strict_segment_max_confidence, confidence
-        )
-    duration = (at - episode.strict_segment_start).total_seconds()
-    persistence_factor = minimum_factor + (1.0 - minimum_factor) * min(
+        episode.run_max_confidence = max(episode.run_max_confidence, confidence)
+    duration = (at - episode.run_start).total_seconds()
+    persistence = minimum_factor + (1.0 - minimum_factor) * min(
         duration / saturation_sec, 1.0
     )
-    segment_confidence = episode.strict_segment_max_confidence * persistence_factor
-    if (
-        episode.best_strict_confidence is None
-        or segment_confidence > episode.best_strict_confidence
-    ):
-        episode.best_strict_confidence = segment_confidence
+    episode.best_confidence = max(
+        episode.best_confidence, episode.run_max_confidence * persistence
+    )
 
 
 def _merge(episode: _OpenEpisode, *, still_open: bool = False) -> Detection:
@@ -325,16 +312,8 @@ def _merge(episode: _OpenEpisode, *, still_open: bool = False) -> Detection:
     dwell_sec = (last_at - first_at).total_seconds()
     zone_label = _zone_label(rep, zone_id)
     reports = f"{len(hits)} report{'s' if len(hits) != 1 else ''}"
-    episode_confidence = (
-        episode.best_strict_confidence
-        if episode.best_strict_confidence is not None
-        else max(det.raw_model_confidence for _, det in hits)
-    )
-    confidence_basis = (
-        "best uninterrupted strict-hit segment after persistence weighting"
-        if episode.best_strict_confidence is not None
-        else "highest per-report confidence; no strict-hit segment was observed"
-    )
+    episode_confidence = episode.best_confidence
+    confidence_basis = "best uninterrupted run of reports after persistence weighting"
 
     if still_open:
         summary = (
@@ -380,7 +359,6 @@ def _merge(episode: _OpenEpisode, *, still_open: bool = False) -> Detection:
         float(p) for _, det in hits if (p := det.extras.get("penetration_nm")) is not None
     ]
     extras: dict[str, Any] = dict(rep.extras)
-    extras.pop("_strict_hit", None)
     extras.update(
         episode_status="OPEN" if still_open else "CLOSED",
         episode_start=first_at,

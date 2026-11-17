@@ -142,7 +142,6 @@ def _zone_entities(zone_id: Any) -> list[EntityRef]:
 def to_platform_detection(detection: Detection) -> PlatformDetection:
     """Convert an internal Detection into the vendored SENTINEL contract."""
     extras = dict(detection.extras)
-    extras.pop("_strict_hit", None)
 
     observed_at = _as_datetime(_require(extras, "observed_at"), "observed_at")
     source_row_id = str(_require(extras, "source_row_id"))

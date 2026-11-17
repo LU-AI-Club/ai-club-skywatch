@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import timedelta
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -348,35 +349,56 @@ def test_uncertainty_confidence_ordering_survives_episode_aggregation(
     assert len({episode.anomaly_score for episode in episodes}) == 1
 
 
-def test_strict_hit_requires_containment_vertical_pass_and_active_zone(
-    cfg: Config,
-) -> None:
-    strict_containment = ContainmentResult(
+def _short_crossing_confidence(cfg: Config, activation_state: ActivationState) -> float:
+    containment = ContainmentResult(
         contained=True,
         buffered_contained=True,
         zone_ids=("P-56",),
         penetration_nm=1.0,
         uncertainty_radius_m=100.0,
     )
-    buffered_containment = ContainmentResult(
-        contained=False,
-        buffered_contained=True,
-        zone_ids=("P-56",),
-        penetration_nm=None,
-        uncertainty_radius_m=100.0,
-    )
+    start = make_state().timestamp
 
-    strict = _score(cfg, strict_containment)
-    unknown_activation = _score(
-        cfg, strict_containment, activation_state=ActivationState.UNKNOWN
-    )
-    buffer_only = _score(cfg, buffered_containment)
-    vertical_clear = _score(cfg, strict_containment, vertical_within=False)
+    reports = []
+    for seconds in (0, 6):
+        state = replace(
+            make_state(),
+            timestamp=start + timedelta(seconds=seconds),
+        )
+        detection = build_detection(
+            state=state,
+            zone=_zone(),
+            containment=containment,
+            vertical=VerticalResult(
+                within=True,
+                altitude_ft=5200.0,
+                altitude_source=AltitudeSource.GEOMETRIC,
+            ),
+            activation=ActivationResult(
+                state=activation_state,
+                zone_id="P-56",
+                basis="test activation",
+            ),
+            signals=(),
+            cfg=cfg,
+        )
+        reports.append(ReportResult(state.icao24, state.timestamp, (detection,)))
+    (episode,) = group_episodes(reports, cfg)
+    return episode.raw_model_confidence
 
-    assert strict.extras["_strict_hit"] is True
-    assert unknown_activation.extras["_strict_hit"] is False
-    assert buffer_only.extras["_strict_hit"] is False
-    assert vertical_clear.extras["_strict_hit"] is False
+
+def test_short_confirmed_crossing_outscores_short_unknown_activation_crossing(
+    cfg: Config,
+) -> None:
+    confirmed = _short_crossing_confidence(cfg, ActivationState.ACTIVE)
+    unknown = _short_crossing_confidence(cfg, ActivationState.UNKNOWN)
+
+    confidence = cfg["scoring"]["confidence"]
+    assert confirmed > unknown
+    assert unknown / confirmed == pytest.approx(
+        confidence["unknown_activation_factor"]
+        / confidence["active_activation_factor"]
+    )
 
 
 def test_vertical_failure_has_zero_report_and_episode_confidence(cfg: Config) -> None:
@@ -410,7 +432,6 @@ def test_vertical_failure_has_zero_report_and_episode_confidence(cfg: Config) ->
     )
 
     assert detection.raw_model_confidence == 0.0
-    assert detection.extras["_strict_hit"] is False
     assert episode.raw_model_confidence == 0.0
 
 

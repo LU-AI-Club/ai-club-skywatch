@@ -54,8 +54,9 @@ scoring:
     MOA: 0.2
   depth_bump_per_nm: 0.01
   depth_bump_max: 0.1
-  # Provisional confidence policy for Tim's review. Confidence describes
-  # evidence strength, not threat severity or a calibrated probability.
+  # Confidence is evidence strength, not threat severity or a calibrated probability.
+  # Per-report factors multiply; persistence then scales every episode by the elapsed
+  # time of its uninterrupted run of fired reports.
   confidence:
     active_activation_factor: 1.0
     unknown_activation_factor: 0.6

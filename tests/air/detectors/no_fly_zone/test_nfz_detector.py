@@ -113,7 +113,6 @@ def test_unknown_activation_still_emits_but_capped(cfg: Config, fake_c: None) ->
     assert detection.raw_model_confidence == pytest.approx(
         cfg["scoring"]["confidence"]["unknown_activation_factor"]
     )
-    assert detection.extras["_strict_hit"] is False
 
 
 def test_no_altitude_exits_as_bad_input(cfg: Config, fake_c: None) -> None:

@@ -36,12 +36,10 @@ def test_config_loads_and_validates() -> None:
 def test_detection_serializes_to_contract_shape() -> None:
     d = Detection("skywatch.no_fly_zone", "0.1.0", ("aircraft:ace81d",), "restricted_airspace_incursion",
                   Severity.HIGH, 0.82, 0.82, ("obs:1",), "air-features-v1", "nfz-rules-0.1.0+sua-2026-08-07",
-                  ("fact",), ("limit",), extras={"_strict_hit": True})
+                  ("fact",), ("limit",))
     out = d.to_dict()
     assert out["severity"] == "HIGH"
     assert isinstance(out["entity_ids"], list)
-    assert "_strict_hit" not in out["extras"]
-    assert d.extras["_strict_hit"] is True
 
 
 

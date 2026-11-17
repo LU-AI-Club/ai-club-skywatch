@@ -72,18 +72,16 @@ episodes are built from.
 
 **Confidence is evidence strength, not threat or probability.** Per-report
 confidence combines activation state, horizontal evidence, and whether the
-altitude source matches the zone datum. Strict hits require horizontal
-containment, a passing vertical check, and known-active airspace. Only
-consecutive strict hits earn persistence credit; buffer-only, unknown-activation,
-and clear reports reset the current strict segment. Episode confidence uses the
-best strict segment and includes persistence weighting from observed timestamps,
+altitude source matches the zone datum. Every uninterrupted run of fired reports
+for a zone earns persistence credit, regardless of activation certainty or
+position/altitude confirmation; a report that does not fire for that zone resets
+the run. Episode confidence uses the strongest such run and elapsed timestamps,
 not report counts. Confidence does not rise just because wall-clock time passes
 between reports. Per-report facts show the activation, position, and altitude
-factors; episode summaries explain whether persistence credit was earned.
-Short crossings remain detections with lower confidence. Confidence factors
-and saturation duration come from `configs/detectors/no_fly_zone.yaml` and are
-provisional for Tim's review. Anomaly score and severity retain their existing
-policies.
+factors; episode summaries explain the persistence weighting. Short crossings
+remain detections with lower confidence. Confidence factors and saturation
+duration come from `configs/detectors/no_fly_zone.yaml`. Anomaly score and
+severity retain their existing policies.
 
 The vertical check uses readsb geometric altitude, which is referenced to the
 WGS84 ellipsoid, as an uncorrected proxy for MSL/SFC limits. No geoid correction

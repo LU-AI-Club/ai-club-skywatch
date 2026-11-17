@@ -37,13 +37,11 @@ def _det(
     signals: Sequence[str] = (),
     limitations: Sequence[str] = (),
     penetration: float | None = 0.5,
-    strict_hit: bool | None = None,
     confidence: float | None = None,
 ) -> Detection:
     extras: dict[str, Any] = {
         "observed_at": at, "source_row_id": row, "lat": 37.42, "lon": -79.21,
         "zone_id": zone, "zone_type": "PROHIBITED", "signal_facts": list(signals),
-        "_strict_hit": penetration is not None if strict_hit is None else strict_hit,
     }
     if penetration is not None:
         extras["penetration_nm"] = penetration
@@ -111,14 +109,14 @@ def test_irregular_report_timestamps_use_elapsed_time_not_report_count(cfg: Conf
     assert episode.raw_model_confidence == pytest.approx(0.3 + 0.7 * (16 / 20))
 
 
-def test_buffer_only_report_resets_the_strict_segment(cfg: Config) -> None:
+def test_lower_confidence_fired_report_does_not_reset_persistence_run(cfg: Config) -> None:
     raw = deepcopy(cfg.raw)
     raw["scoring"]["confidence"]["persistence_saturation_sec"] = 20.0
     timed_cfg = Config(raw)
     reports = [
         _hit(0),
         _hit(3),
-        _hit(5, penetration=None, strict_hit=False, confidence=0.35),
+        _hit(5, penetration=None, confidence=0.35),
         _hit(11),
         _hit(16),
     ]
@@ -126,14 +124,14 @@ def test_buffer_only_report_resets_the_strict_segment(cfg: Config) -> None:
     (episode,) = list(group_episodes(reports, timed_cfg))
 
     assert episode.extras["dwell_sec"] == 16.0
-    assert episode.raw_model_confidence == pytest.approx(0.3 + 0.7 * (5 / 20))
+    assert episode.raw_model_confidence == pytest.approx(0.3 + 0.7 * (16 / 20))
 
 
-def test_stronger_strict_segment_survives_later_buffer_only_hit(cfg: Config) -> None:
+def test_stronger_run_survives_a_later_run(cfg: Config) -> None:
     reports = [
         _hit(0),
         _hit(15),
-        _hit(16, penetration=None, strict_hit=False, confidence=1.0),
+        _clear(16),
         _hit(17),
     ]
 
@@ -142,7 +140,7 @@ def test_stronger_strict_segment_survives_later_buffer_only_hit(cfg: Config) -> 
     assert episode.raw_model_confidence == 1.0
 
 
-def test_clear_report_resets_strict_segment_but_keeps_episode_open(cfg: Config) -> None:
+def test_clear_report_resets_persistence_run_but_keeps_episode_open(cfg: Config) -> None:
     raw = deepcopy(cfg.raw)
     raw["scoring"]["confidence"]["persistence_saturation_sec"] = 20.0
     timed_cfg = Config(raw)
@@ -154,18 +152,21 @@ def test_clear_report_resets_strict_segment_but_keeps_episode_open(cfg: Config) 
     assert episode.raw_model_confidence == pytest.approx(0.3 + 0.7 * (12 / 20))
 
 
-def test_episode_without_strict_hits_uses_max_per_report_confidence(cfg: Config) -> None:
+def test_short_fired_run_receives_persistence_weighting(cfg: Config) -> None:
     reports = [
-        _hit(0, penetration=None, strict_hit=False, confidence=0.4),
-        _hit(2, penetration=None, strict_hit=False, confidence=0.35),
+        _hit(0, penetration=None, confidence=0.4),
+        _hit(2, penetration=None, confidence=0.35),
     ]
 
     (episode,) = list(group_episodes(reports, cfg))
 
-    assert episode.raw_model_confidence == 0.4
+    minimum = float(cfg["scoring"]["confidence"]["persistence_min_factor"])
+    saturation = float(cfg["scoring"]["confidence"]["persistence_saturation_sec"])
+    factor = minimum + (1.0 - minimum) * (2 / saturation)
+    assert episode.raw_model_confidence == pytest.approx(0.4 * factor)
 
 
-def test_open_and_closed_confidence_only_changes_on_new_strict_reports(cfg: Config) -> None:
+def test_open_and_closed_confidence_only_changes_on_new_fired_reports(cfg: Config) -> None:
     tracker = EpisodeTracker(cfg)
     tracker.feed([_hit(0)])
     (first_snapshot,) = tracker.snapshot_open()
@@ -271,7 +272,7 @@ def test_peak_score_and_highest_severity_are_kept_separately(cfg: Config) -> Non
 
     assert episode.anomaly_score == 0.90
     assert episode.severity is Severity.HIGH
-    assert episode.raw_model_confidence == pytest.approx(0.3 + 0.7 * (2 / 15))
+    assert episode.raw_model_confidence == pytest.approx(0.3 + 0.7 * (4 / 15))
     assert "persistence weighting" in episode.explanation_facts[0]
     assert episode.extras["penetration_nm"] == 1.2      # deepest, not the representative's
     assert episode.extras["peak_score_at"] == T0
