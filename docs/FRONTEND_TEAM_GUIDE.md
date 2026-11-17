@@ -141,14 +141,27 @@ Put your overlay in **your own component file** (e.g.
 it for your toggle. That way three teams aren't editing the same block.
 
 **No-fly zone only — the airspace polygons:** those are **not** in the API. Copy
-the GeoJSON file you want from
-`air/detectors/no_fly_zone/fixtures/airspace/` into `frontend/public/`, then fetch
-it in your overlay and draw it with `L.geoJSON(...)`:
+the zone files the live detector uses from
+`air/detectors/no_fly_zone/fixtures/airspace/` into `frontend/public/airspace/`,
+then fetch them in your overlay and draw them with `L.geoJSON(...)`:
+
+- `klyh-local-faa.geojson` — the 15 real FAA zones (Lynchburg-area MOAs,
+  R-6602A/B/C, and P-56 over D.C.).
+- `klyh-demo.geojson` — the synthetic `DEMO-1` zone, loaded when the live runner
+  runs with demo zones on.
 
 ```tsx
-const zones = await fetch("/klyh-150nm.geojson").then((r) => r.json());
-L.geoJSON(zones).addTo(map);
+const files = ["/airspace/klyh-local-faa.geojson", "/airspace/klyh-demo.geojson"];
+for (const file of files) {
+  const zones = await fetch(file).then((r) => r.json());
+  L.geoJSON(zones).addTo(map);
+}
 ```
+
+Each feature's `properties.zone_id` matches the `zone_id` column on your
+detection rows, so you can highlight the zone a detection is in. Don't use
+`klyh-150nm.geojson`: it holds three made-up test zones (`P-901`, `TFR-6/1234`,
+`LYNCHBURG-MOA`) that the live detector never loads, so nothing would match.
 
 ---
 
