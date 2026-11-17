@@ -199,6 +199,15 @@ def is_active(zone: AirspaceZone, ts: datetime) -> ActivationResult:
                 basis = _active_schedule_basis(
                     zone, recurring_window, local_ts, timezone
                 )
+                # Hours published as "by NOTAM" or "intermittent" only bound
+                # when the zone may be in use. Inside them we still cannot
+                # tell, so say so rather than call it live.
+                if zone.unknown_within_schedule:
+                    return ActivationResult(
+                        ActivationState.UNKNOWN,
+                        zone.zone_id,
+                        f"within {basis}, but in use only by NOTAM or intermittently",
+                    )
                 return ActivationResult(ActivationState.ACTIVE, zone.zone_id, basis)
 
     if zone.unknown_outside_schedule:

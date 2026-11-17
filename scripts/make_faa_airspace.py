@@ -59,7 +59,10 @@ Activation comes from free text
     TIMESOFUSE contains four locally used phrasings with parseable recurring
     schedules. They are stored as US Eastern local-time rules. Outside a
     published window followed by "BY NOTAM", activation remains UNKNOWN;
-    unrecognized text also stays UNKNOWN.
+    unrecognized text also stays UNKNOWN. Hours published as "BY NOTAM" or
+    "INTERMITTENT" are UNKNOWN inside the window too
+    (``unknown_within_schedule``): they say when the zone may be used, not
+    that it is.
 """
 from __future__ import annotations
 
@@ -239,6 +242,20 @@ def recurring_schedule_for(times_of_use: Any) -> tuple[list[dict[str, Any]], boo
     return [], False
 
 
+def unknown_within_schedule_for(times_of_use: Any) -> bool:
+    """Whether the published hours only bound when the zone *may* be in use.
+
+    "0630 - SUNSET, DAILY, BY NOTAM" and "INTERMITTENT, SUNRISE - SUNSET" give
+    hours, but inside them the zone is live only when a NOTAM or the using
+    agency says so. The detector reports UNKNOWN there, not ACTIVE. Only the
+    part before the first ";" counts: "O/T BY NOTAM" after it is about the time
+    outside the published hours.
+    """
+    text = (str(times_of_use) if times_of_use is not None else "").strip().upper()
+    published_hours = text.split(";", 1)[0]
+    return "BY NOTAM" in published_hours or "INTERMITTENT" in published_hours
+
+
 def activation_for(times_of_use: Any) -> str:
     """Map FAA times-of-use text to the detector activation contract."""
     text = (str(times_of_use) if times_of_use is not None else "").strip().upper()
@@ -305,6 +322,8 @@ def to_feature(
         out["recurring_windows"] = recurring_windows
         out["schedule_timezone"] = "America/New_York"
         out["unknown_outside_schedule"] = unknown_outside_schedule
+        if unknown_within_schedule_for(props.get("TIMESOFUSE")):
+            out["unknown_within_schedule"] = True
     if floor_ft is not None:
         out["floor_ft"] = floor_ft
         out["floor_datum"] = floor_datum

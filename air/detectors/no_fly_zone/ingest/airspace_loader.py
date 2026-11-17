@@ -170,6 +170,7 @@ def load_zones(path: str | Path) -> list[AirspaceZone]:
             recurring_windows=recurring_windows,
             schedule_timezone=schedule_timezone,
             unknown_outside_schedule=bool(props.get("unknown_outside_schedule", False)),
+            unknown_within_schedule=bool(props.get("unknown_within_schedule", False)),
             controlling_agency=props.get("controlling_agency"),
             source=props.get("source", ""),
             source_asof=source_asof,
