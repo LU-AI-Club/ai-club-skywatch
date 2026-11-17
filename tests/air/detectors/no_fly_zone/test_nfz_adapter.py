@@ -414,12 +414,22 @@ def test_episode_open_at_a_window_edge_is_held_not_emitted(detector: NoFlyZoneDe
 
 
 def test_silence_closes_an_episode_in_a_later_window(detector: NoFlyZoneDetector) -> None:
-    """The aircraft stops reporting; another aircraft moves the stream clock on."""
-    max_gap = float(detector.cfg["sampling"]["max_gap_sec"])
+    """The aircraft stops reporting; another aircraft moves the stream clock on.
+
+    Silence counts from the newest report less sampling.feed_lateness_sec, so
+    the other aircraft has to get max_gap + lateness ahead before it closes.
+    """
+    sampling = detector.cfg["sampling"]
+    wait = float(sampling["max_gap_sec"]) + float(sampling["feed_lateness_sec"])
     assert detector.detect_observations([make_obs()]) == []
+    not_yet = make_obs(
+        icao24="ffffff", latitude=36.0, longitude=-81.0, source_row_id="test.csv:8",
+        observed_at=_TS + timedelta(seconds=wait),
+    )
+    assert detector.detect_observations([not_yet]) == []
     later = make_obs(
         icao24="ffffff", latitude=36.0, longitude=-81.0, source_row_id="test.csv:9",
-        observed_at=_TS + timedelta(seconds=max_gap + 1),
+        observed_at=_TS + timedelta(seconds=wait + 1),
     )
     [closed] = detector.detect_observations([later])
     assert [e.entity_id for e in closed.entities_involved] == ["icao24:a1b2c3", "zone:P-901"]
