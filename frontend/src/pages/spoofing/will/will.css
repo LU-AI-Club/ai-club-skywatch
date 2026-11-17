@@ -1,0 +1,196 @@
+/* Will's spoofing dashboard.
+   An instrument panel rather than a report: one accent (amber, because this
+   page is about things being wrong), numbers in a monospace face so columns of
+   them line up, and the disagreement given more room than anything else.
+   Everything is scoped under .wpage so it cannot touch the other teams. */
+
+.wpage {
+  --w-accent: #f0a04b;
+  --w-said: #4b5563;      /* what the aircraft claimed — quiet, it is only a claim */
+  --w-did: var(--w-accent); /* what it actually did — loud */
+  --w-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 20px 72px;
+}
+
+/* ---- masthead ----------------------------------------------------------- */
+.wmast {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 14px;
+}
+.wmast h1 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: -0.02em;
+}
+.wmast p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 54ch;
+  line-height: 1.5;
+}
+
+/* ---- pulse strip -------------------------------------------------------- */
+.wpulse {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 22px;
+  margin: 18px 0 0;
+  padding: 14px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.wpulse.down { border-color: color-mix(in srgb, var(--sev-critical) 50%, var(--border)); }
+
+.wpulse-state { display: flex; align-items: center; gap: 9px; }
+.wpulse-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.wpulse-dot.up { background: var(--w-accent); box-shadow: 0 0 0 0 color-mix(in srgb, var(--w-accent) 70%, transparent); animation: wbeat 2.4s ease-out infinite; }
+.wpulse-dot.down { background: var(--sev-critical); }
+@keyframes wbeat {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--w-accent) 60%, transparent); }
+  70%  { box-shadow: 0 0 0 9px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wpulse-dot.up { animation: none; }
+}
+.wpulse-word { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+.wpulse-ticks {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 30px;
+  min-width: 120px;
+}
+.wtick { flex: 1; background: var(--raised); border-radius: 2px 2px 0 0; min-height: 3px; }
+.wtick.hit { background: var(--w-accent); }
+.wtick.bad { background: var(--sev-critical); }
+
+.wpulse-stats { display: flex; gap: 22px; margin: 0; }
+.wpulse-stats div { text-align: right; }
+.wpulse-stats dt {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted);
+}
+.wpulse-stats dd { margin: 2px 0 0; font-family: var(--w-mono); font-size: 18px; }
+.wpulse-note { grid-column: 1 / -1; margin: 4px 0 0; font-size: 13px; color: var(--muted); }
+.wpulse-note.bad { color: var(--sev-critical); }
+
+/* ---- filter bar --------------------------------------------------------- */
+.wbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 22px 0 16px; }
+.wchip {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 5px 13px;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.wchip:hover { color: var(--text); border-color: var(--muted); }
+.wchip.on { background: var(--w-accent); border-color: var(--w-accent); color: #1a1205; font-weight: 600; }
+.wchip .n { opacity: .65; margin-left: 6px; font-family: var(--w-mono); }
+.wbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.wbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+/* ---- finding cards ------------------------------------------------------ */
+.wgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  gap: 14px;
+}
+
+.wcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px 12px;
+}
+.wcard.sev-high, .wcard.sev-critical { border-left-color: var(--sev-high); }
+.wcard.sev-medium { border-left-color: var(--sev-medium); }
+.wcard.sev-low { border-left-color: var(--sev-low); }
+
+.wcard-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.wcard-rule { font-weight: 600; font-size: 14px; }
+.wcard-ac { font-family: var(--w-mono); font-size: 12px; color: var(--muted); }
+.wcard-time { font-family: var(--w-mono); font-size: 11px; color: var(--muted); margin-left: auto; }
+.wcard-sev {
+  font-size: 10px; letter-spacing: .07em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 4px; background: var(--raised); color: var(--muted);
+}
+.wcard-sev.sev-high, .wcard-sev.sev-critical { color: var(--sev-high); }
+.wcard-sev.sev-medium { color: var(--sev-medium); }
+
+/* the point of the whole page */
+.wclaim { margin: 14px 0 0; }
+.wclaim-row { display: grid; grid-template-columns: 34px 1fr 66px; align-items: center; gap: 10px; margin-bottom: 6px; }
+.wclaim-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.wclaim-track { background: var(--bg); border-radius: 3px; height: 14px; overflow: hidden; }
+.wclaim-bar { display: block; height: 100%; border-radius: 3px; }
+.wclaim-bar.said { background: var(--w-said); }
+.wclaim-bar.did { background: var(--w-did); }
+.wclaim-num { font-family: var(--w-mono); font-size: 15px; text-align: right; }
+.wclaim-num small { font-size: 10px; color: var(--muted); margin-left: 2px; }
+.wclaim-gap { margin: 9px 0 0; font-size: 12.5px; color: var(--text); }
+.wclaim-gap strong { color: var(--w-accent); font-family: var(--w-mono); font-size: 15px; }
+.wclaim-none p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+.wcard-foot {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.wconf { display: flex; align-items: center; gap: 7px; font-family: var(--w-mono); font-size: 11px; color: var(--muted); }
+.wconf-track { width: 44px; height: 4px; background: var(--raised); border-radius: 2px; overflow: hidden; }
+.wconf-fill { display: block; height: 100%; background: var(--muted); }
+.wthin { font-size: 11px; color: var(--sev-medium); }
+.wmore {
+  margin-left: auto; background: transparent; border: 0; color: var(--w-accent);
+  font: inherit; font-size: 12px; cursor: pointer; padding: 2px 4px;
+}
+.wmore:hover { text-decoration: underline; }
+
+.wdetail { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.wdetail-measure { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
+.wdetail-measure strong { color: var(--text); font-family: var(--w-mono); }
+.wdetail h4 {
+  margin: 12px 0 5px; font-size: 10px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted); font-weight: 600;
+}
+.wdetail-facts, .wdetail-limits { margin: 0; padding-left: 17px; font-size: 12.5px; line-height: 1.6; }
+.wdetail-limits { color: var(--muted); }
+
+/* ---- empty + explainer -------------------------------------------------- */
+.wempty {
+  border: 1px dashed var(--border); border-radius: 10px;
+  padding: 36px 20px; text-align: center; color: var(--muted); font-size: 14px;
+}
+
+.wexplain { margin: 40px 0 0; border-top: 1px solid var(--border); padding-top: 20px; }
+.wexplain summary {
+  cursor: pointer; font-size: 14px; font-weight: 600; list-style: none;
+  display: flex; align-items: center; gap: 8px;
+}
+.wexplain summary::-webkit-details-marker { display: none; }
+.wexplain summary::before { content: "+"; color: var(--w-accent); font-family: var(--w-mono); }
+.wexplain[open] summary::before { content: "−"; }
+.wexplain-body { margin: 14px 0 0; max-width: 72ch; font-size: 13.5px; line-height: 1.7; color: var(--muted); }
+.wexplain-body strong { color: var(--text); }
+.wexplain-body p { margin: 0 0 12px; }
+
+@media (max-width: 720px) {
+  .wpulse { grid-template-columns: 1fr; gap: 12px; }
+  .wpulse-stats { justify-content: space-between; }
+  .wpulse-ticks { min-width: 0; }
+}

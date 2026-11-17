@@ -1,155 +1,182 @@
-// SPOOFING TEAM — our dashboard.
+// Spoofing — Will's dashboard.
 //
-// The three deliverables, in the order a reader needs them:
-//   2c  is it alive right now   -> spoofing/DetectorHealth
-//   2b  what it found, and why  -> spoofing/GateBreakdown, FindingsTable, DetectionDetail
-//   2a  what it does            -> spoofing/AlgorithmPanel
+// Built around one idea: every finding this detector produces is a
+// disagreement between what an aircraft *said* about itself and what its own
+// positions *did*. So the page leads with that pair rather than with a table.
+// A row of counts tells you something fired; two opposed bars tell you how
+// badly the story failed to add up, before you read a digit.
 //
-// Health sits above the findings on purpose. The first question anyone asks of
-// an empty table is "is this broken?", and answering that after showing them
-// the empty table answers it too late.
-//
-// Every panel is its own file, so several of us can work at once without
-// colliding. This file only arranges them and holds the state they share: the
-// filters, and which finding is open.
+// Three deliverables, arranged to match how someone actually reads the page:
+//   detector health  -> the pulse strip, first, so empty is never ambiguous
+//   detections       -> the cards, which are the page
+//   algorithm        -> folded away at the bottom, reference rather than news
 import { useMemo, useState } from "react";
-import { useSpoofingDetections } from "../api/hooks";
-import { StatCard } from "../components/StatCard";
-import { EmptyState } from "../components/EmptyState";
+import { useSpoofingDetections, useSpoofingGates } from "../api/hooks";
 import type { Detection } from "../api/types";
-import { AlgorithmPanel } from "./spoofing/AlgorithmPanel";
-import { DetectorHealth } from "./spoofing/DetectorHealth";
-import { GateBreakdown } from "./spoofing/GateBreakdown";
-import { FindingsTable } from "./spoofing/FindingsTable";
-import { DetectionDetail } from "./spoofing/DetectionDetail";
-import "./spoofing/spoofing.css";
+import { FindingCard } from "./spoofing/will/FindingCard";
+import { Pulse } from "./spoofing/will/Pulse";
+import { gateOf } from "./spoofing/will/claim";
+import "./spoofing/will/will.css";
 
 const RANGES = [
   { hours: 1, label: "1h" },
   { hours: 6, label: "6h" },
   { hours: 24, label: "24h" },
-  { hours: 72, label: "3d" },
-  // A week, because findings are rare: at a handful an hour a 24h window can
-  // genuinely be empty, and "nothing today" is a different question from
-  // "nothing this week".
   { hours: 168, label: "7d" },
 ] as const;
 
-const SEVERITIES = ["HIGH", "MEDIUM", "LOW"] as const;
+const SHORT: Record<string, string> = {
+  speed_delta_v1: "Speed",
+  turn_rate_v1: "Turn",
+  vrate_delta_v1: "Climb",
+  nic_floor_v1: "GPS",
+  identity_drift_v1: "Callsign",
+  teleport_v1: "Teleport",
+  subterrain_v1: "Terrain",
+  coexistence_v1: "Duplicate",
+  pingpong_v1: "Ping-pong",
+  reappear_v1: "Reappear",
+  registry_mismatch_v1: "Registry",
+};
+
+const SEVERITY_ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
 export function SpoofingPage() {
   const [hours, setHours] = useState<number>(24);
-  const [severity, setSeverity] = useState<string | null>(null);
   const [gate, setGate] = useState<string | null>(null);
-  const [open, setOpen] = useState<Detection | null>(null);
 
-  // `gate` is ours — see api/main.py. The shared endpoint cannot filter on it
-  // because it lives inside metadata, not in a column.
+  // `gate` is our own filter — it reaches into metadata, which the shared
+  // endpoint cannot do. See api/main.py.
   const { data, loading, error, reload } = useSpoofingDetections({
     since_hours: hours,
-    severity: severity ?? undefined,
     gate: gate ?? undefined,
   });
+  const counts = useSpoofingGates({ since_hours: hours });
 
-  const rows = useMemo(() => data ?? [], [data]);
+  // Worst first. A page you scan top-left to bottom-right should put the thing
+  // that matters where the eye lands, not wherever the database happened to
+  // order it.
+  const findings: Detection[] = useMemo(() => {
+    const rows = data ?? [];
+    return [...rows].sort((a, b) => {
+      const sa = SEVERITY_ORDER[String(a.severity).toLowerCase()] ?? 9;
+      const sb = SEVERITY_ORDER[String(b.severity).toLowerCase()] ?? 9;
+      if (sa !== sb) return sa - sb;
+      return (b.confidence ?? 0) - (a.confidence ?? 0);
+    });
+  }, [data]);
 
-  const stats = useMemo(() => {
-    const aircraft = new Set(rows.map((d) => d.entity_id)).size;
-    const high = rows.filter((d) =>
-      ["high", "critical"].includes(String(d.severity).toLowerCase()),
-    ).length;
-    return { aircraft, high, perHour: hours > 0 ? rows.length / hours : 0 };
-  }, [rows, hours]);
+  const firing = (counts.data ?? []).filter((g) => g.count > 0);
+  const quiet = (counts.data ?? []).filter((g) => g.count === 0);
 
   return (
-    <div className="page spoofing-page">
-      <div className="page-head">
-        <h1>Spoofing</h1>
-        <p className="owner">
-          Aircraft whose broadcasts disagree with themselves — with physics, or
-          with who they claim to be.
-        </p>
-      </div>
-
-      {/* 2c — first, so an empty table below is never ambiguous. */}
-      <DetectorHealth />
-
-      {error && <EmptyState kind="error" message={`Couldn't load detections: ${error}`} />}
-
-      <div className="controls">
-        <div className="seg" role="group" aria-label="Time range">
-          {RANGES.map((r) => (
-            <button
-              key={r.hours}
-              className={`seg-btn ${hours === r.hours ? "on" : ""}`}
-              onClick={() => setHours(r.hours)}
-            >
-              {r.label}
-            </button>
-          ))}
+    <div className="page wpage">
+      <header className="wmast">
+        <div>
+          <h1>Spoofing</h1>
+          <p>
+            Aircraft broadcast who they are and where they are, and nobody signs
+            it. We cannot ask whether a message is genuine — only whether the
+            story holds together.
+          </p>
         </div>
+      </header>
 
-        <div className="seg" role="group" aria-label="Severity">
+      <Pulse findings={findings.length} />
+
+      <div className="wbar">
+        {RANGES.map((r) => (
           <button
-            className={`seg-btn ${severity === null ? "on" : ""}`}
-            onClick={() => setSeverity(null)}
+            key={r.hours}
+            className={`wchip ${hours === r.hours ? "on" : ""}`}
+            onClick={() => setHours(r.hours)}
           >
-            All
+            {r.label}
           </button>
-          {SEVERITIES.map((s) => (
-            <button
-              key={s}
-              className={`seg-btn ${severity === s ? "on" : ""}`}
-              onClick={() => setSeverity(severity === s ? null : s)}
-            >
-              {s}
-            </button>
+        ))}
+
+        <span className="wbar-sep" />
+
+        <button className={`wchip ${gate === null ? "on" : ""}`} onClick={() => setGate(null)}>
+          All
+        </button>
+        {firing.map((g) => (
+          <button
+            key={g.gate}
+            className={`wchip ${gate === g.gate ? "on" : ""}`}
+            onClick={() => setGate(gate === g.gate ? null : g.gate)}
+            title={g.gate}
+          >
+            {SHORT[g.gate] ?? g.gate}
+            <span className="n">{g.count}</span>
+          </button>
+        ))}
+
+        <span className="wbar-right">
+          <button className="wchip" onClick={reload} disabled={loading}>
+            {loading ? "…" : "Refresh"}
+          </button>
+        </span>
+      </div>
+
+      {error && <div className="wempty">Couldn't reach the API — {error}</div>}
+
+      {!loading && !error && findings.length === 0 ? (
+        <div className="wempty">
+          Nothing disagreed with itself in the last {hours < 24 ? `${hours}h` : `${hours / 24}d`}.
+        </div>
+      ) : (
+        <div className="wgrid">
+          {findings.map((d) => (
+            <FindingCard key={d.detection_id} detection={d} />
           ))}
         </div>
+      )}
 
-        <button className="btn ghost" onClick={reload} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
-      </div>
+      {/* Rules that are watching and found nothing. Worth naming: otherwise a
+          quiet rule is indistinguishable from one that does not exist. */}
+      {quiet.length > 0 && !loading && (
+        <p className="wpulse-note" style={{ marginTop: 16 }}>
+          Also watching, nothing found:{" "}
+          {quiet.map((g) => SHORT[g.gate] ?? g.gate).join(" · ")}
+        </p>
+      )}
 
-      <div className="stat-grid">
-        <StatCard label={`Findings (${hours}h)`} value={loading ? "…" : rows.length} />
-        <StatCard label="Aircraft involved" value={loading ? "…" : stats.aircraft} />
-        <StatCard label="High severity" value={loading ? "…" : stats.high} />
-        <StatCard label="Per hour" value={loading ? "…" : stats.perHour.toFixed(1)} />
-      </div>
-
-      {/* 2b — which rules fired. Clicking one filters the table below. */}
-      <GateBreakdown sinceHours={hours} selected={gate} onSelect={setGate} />
-
-      <section className="findings">
-        <div className="findings-head">
-          <h2>Findings</h2>
-          {gate && (
-            <button className="btn ghost small" onClick={() => setGate(null)}>
-              Filtered to {gate} — show all
-            </button>
-          )}
+      <details className="wexplain">
+        <summary>How this detector decides</summary>
+        <div className="wexplain-body">
+          <p>
+            Every message carries two stories. One is what the aircraft{" "}
+            <strong>says</strong> about itself — its speed, its heading, how fast
+            it is climbing. The other is what its <strong>positions</strong> show
+            it actually did between one report and the next. A real aircraft
+            tells the same story twice. A spoofer has to keep both straight, and
+            small errors compound.
+          </p>
+          <p>
+            That is what the bars above are. The grey bar is the claim; the amber
+            bar is the measurement. When they match, there is nothing to see —
+            which is most of the time, on most aircraft.
+          </p>
+          <p>
+            A second set of rules asks a different question:{" "}
+            <strong>is this aircraft who it says it is?</strong> One address
+            reported from two places at once. A callsign that changes to another
+            airline mid-flight. Performance that contradicts the registered
+            airframe. Those have no two numbers to compare, so their cards show
+            the finding in words instead.
+          </p>
+          <p>
+            Every limit allows for honest error — the position error the aircraft
+            itself declares, plus timing slop — because being wrong about a limit
+            is how a detector invents alerts. When a reading cannot be used, it
+            is skipped rather than guessed at. And confidence here is about{" "}
+            <strong>the deviation, not the threat</strong>: we report how sure we
+            are that two things disagree. Whether that is an attack is someone
+            else's call.
+          </p>
         </div>
-
-        {!loading && rows.length === 0 ? (
-          <EmptyState message="Nothing found in this window. For this detector that is the normal state — see the status above." />
-        ) : (
-          <>
-            <p className="hint">Click a finding to see why it fired.</p>
-            <FindingsTable
-              detections={rows}
-              selectedId={open?.detection_id ?? null}
-              onSelect={setOpen}
-            />
-          </>
-        )}
-      </section>
-
-      {/* 2a — how it works. Last, because it is reference rather than news. */}
-      <AlgorithmPanel />
-
-      <DetectionDetail detection={open} onClose={() => setOpen(null)} />
+      </details>
     </div>
   );
 }
