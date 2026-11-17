@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Optional, Sequence
 
-from air.detectors.spoofing.callsigns import is_readable_callsign
+from air.detectors.spoofing.callsigns import is_readable_callsign, is_same_operator
 
 
 EARTH_RADIUS_M = 6_371_000.0
@@ -344,6 +344,26 @@ def flag_identity_drift(observations: Sequence[Any]) -> Optional[str]:
     aircraft actually broadcast, so comparing it against a clean callsign can
     only invent a change. See ``is_readable_callsign``.
 
+    **A change within one airline is not drift.** One airframe flies several
+    legs a day and the crew enters the next flight number each time, so
+    ``AAL1478 -> AAL1879`` is a normal day's work. Every alert this rule
+    produced on the Lynchburg capture was exactly that shape -- SAS926 ->
+    SAS930, RPA5645 -> RPA5768, SWA3143 -> SWA490, AAL1478 -> AAL1879 -- four
+    of four, a 100% false-positive rate. The operator designator is what has
+    to stay put; the number after it is expected to change.
+
+    The cost is stated plainly: an attacker who picks another flight number
+    from the same airline will not be caught here. That is a narrower hole
+    than it sounds, because impersonating a *specific* aircraft means matching
+    its address, and the gates that compare an address against its registry
+    block still apply. It is in any case the better trade -- a rule that fires
+    on every airline's normal operations gets ignored, and an ignored rule
+    catches nothing at all.
+
+    A registration (``N784LU``) has no operator in it, so any change between
+    registrations still counts: two different tail numbers on one address is
+    not a crew entering the next leg.
+
     Returns a reason string naming the first change, or None.
     """
     def field(obs: Any, name: str) -> Any:
@@ -376,6 +396,8 @@ def flag_identity_drift(observations: Sequence[Any]) -> Optional[str]:
         if first is None:
             first = callsign
         elif callsign != first:
+            if is_same_operator(first, callsign):
+                continue  # next leg, not a new identity -- see the docstring
             seen = []
             for o in ordered:
                 c = field(o, "callsign")

@@ -448,3 +448,97 @@ def test_a_ground_vehicle_does_not_fire(registry, blocks):
     Without a guard on a zero book speed, the ratio check flags it.
     """
     assert flag_registry_mismatch(obs(GROUND_VEHICLE, 12, 940), registry, blocks) is None
+
+
+# ---------------------------------------------------------------------------
+# flag_identity_drift: airline leg changes are not drift
+#
+# Every alert this rule produced on the Lynchburg capture was one airframe
+# flying its next leg -- four of four, a 100% false-positive rate. These pin
+# the distinction both ways: the operator designator has to stay put, the
+# number after it is expected to change.
+# ---------------------------------------------------------------------------
+
+import pytest
+
+from air.detectors.spoofing.callsigns import is_same_operator, operator_prefix
+
+
+@pytest.mark.parametrize(
+    "before,after",
+    [
+        ("SAS926", "SAS930"),    # Scandinavian
+        ("RPA5645", "RPA5768"),  # Republic
+        ("SWA3143", "SWA490"),   # Southwest
+        ("AAL1478", "AAL1879"),  # American
+    ],
+)
+def test_the_four_real_false_positives_no_longer_fire(before, after):
+    """The exact callsign pairs observed on the capture."""
+    assert flag_identity_drift(cs_track(before, before, after, after)) is None
+
+
+def test_an_aircraft_alternating_between_two_of_its_own_flight_numbers():
+    """4aca66 really did go SAS930 -> SAS926 -> SAS930 in one hour.
+
+    Alternating looks more suspicious than a single switch, which is why it is
+    worth its own case -- but it is still one operator, and a crew correcting
+    a mistyped flight number produces exactly this.
+    """
+    assert flag_identity_drift(cs_track("SAS930", "SAS926", "SAS930")) is None
+
+
+def test_a_different_airline_still_fires():
+    """The whole point. Losing this would make the rule worthless."""
+    reason = flag_identity_drift(cs_track("AAL1478", "AAL1478", "DAL2291"))
+
+    assert reason is not None
+    assert "DAL2291" in reason
+
+
+def test_a_change_between_registrations_still_fires():
+    """N-numbers have no operator, so a change is a change.
+
+    Two tail numbers on one address is not a crew entering the next leg.
+    """
+    assert flag_identity_drift(cs_track("N784LU", "N784LU", "N123AB")) is not None
+
+
+def test_a_registration_turning_into_an_airline_flight_still_fires():
+    """One side having no operator must not read as a match."""
+    assert flag_identity_drift(cs_track("N784LU", "AAL1478")) is not None
+    assert flag_identity_drift(cs_track("AAL1478", "N784LU")) is not None
+
+
+def test_a_later_operator_change_is_still_caught_after_a_leg_change():
+    """Skipping a leg change must not stop the rule watching.
+
+    AAL1478 -> AAL1879 is ignored, and the DAL that follows still fires. If
+    the skip had reset what we compare against, this would go quiet.
+    """
+    reason = flag_identity_drift(cs_track("AAL1478", "AAL1879", "DAL2291"))
+
+    assert reason is not None
+    assert "DAL2291" in reason
+
+
+def test_operator_prefix_reads_icao_flight_callsigns():
+    assert operator_prefix("AAL1478") == "AAL"
+    assert operator_prefix("AAL123A") == "AAL"   # trailing letter is allowed
+    assert operator_prefix("aal1478") == "AAL"   # case is not significant
+
+
+@pytest.mark.parametrize(
+    "callsign",
+    ["N784LU", "G-ABCD", "", "   ", None, "VXP?29T3", "TOOLONG123456"],
+)
+def test_operator_prefix_is_none_when_there_is_no_operator(callsign):
+    """None means "the question does not apply", never "unknown operator"."""
+    assert operator_prefix(callsign) is None
+
+
+def test_an_unknown_operator_never_matches_another_unknown():
+    """Two unparseable callsigns are not evidence of the same airline."""
+    assert is_same_operator("N784LU", "N123AB") is False
+    assert is_same_operator(None, None) is False
+    assert is_same_operator("VXP?29T3", "VXP?29T3") is False
