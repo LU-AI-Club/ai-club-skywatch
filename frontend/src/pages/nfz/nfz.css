@@ -1,0 +1,472 @@
+/* No-fly-zone page styles. Everything is scoped under .nfz so it can't leak
+   into other teams' pages. Builds on the shared tokens in theme.css. */
+.nfz {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 22px 20px 60px;
+}
+.nfz .mono {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.nfz-muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---- header ---- */
+.nfz-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.nfz-head h1 {
+  margin: 0;
+  font-size: 26px;
+}
+.nfz-sub {
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.nfz-live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.nfz-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--sev-low);
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+  animation: nfz-ping 2s infinite;
+}
+.nfz-dot.bad {
+  background: var(--sev-critical);
+  animation: none;
+}
+@keyframes nfz-ping {
+  70% {
+    box-shadow: 0 0 0 7px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+/* ---- KPIs ---- */
+.nfz-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.nfz-kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.nfz-kpi .label {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.nfz-kpi .value {
+  font-size: 26px;
+  font-weight: 650;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.nfz-kpi.alert {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.12), var(--surface));
+}
+.nfz-kpi.alert .value {
+  color: #fca5a5;
+}
+
+/* ---- filters ---- */
+.nfz-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 6px 0 14px;
+}
+.nfz-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.nfz-seg button {
+  background: var(--surface);
+  color: var(--muted);
+  border: 0;
+  border-right: 1px solid var(--border);
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.nfz-seg button:last-child {
+  border-right: 0;
+}
+.nfz-seg button.on {
+  background: var(--accent);
+  color: var(--on-accent);
+  font-weight: 600;
+}
+.nfz-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.nfz-chip {
+  --chip: var(--muted);
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+.nfz-chip::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chip);
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.nfz-chip.on {
+  color: var(--text);
+  border-color: var(--chip);
+  background: color-mix(in srgb, var(--chip) 18%, transparent);
+}
+.nfz-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.nfz-link {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* ---- map + side panel ---- */
+.nfz-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 14px;
+}
+.nfz-map {
+  position: relative;
+  height: 560px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.nfz-legend {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 900;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  max-width: calc(100% - 20px);
+  background: rgba(20, 20, 24, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.nfz-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.nfz-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.nfz-legend-note {
+  color: var(--muted);
+}
+.nfz-pulse {
+  animation: nfz-pulse 1.4s ease-in-out infinite;
+}
+@keyframes nfz-pulse {
+  50% {
+    stroke-opacity: 0.2;
+    stroke-width: 7;
+  }
+}
+
+.nfz-side {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  height: 560px;
+  overflow-y: auto;
+}
+.nfz-side h4 {
+  margin: 16px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.nfz-side-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 17px;
+}
+.nfz-side-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.nfz-hint {
+  margin: 0 0 10px;
+}
+.nfz-zones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.nfz-zones li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.nfz-zones li:hover {
+  background: var(--raised);
+}
+.nfz-zone-name {
+  flex: 1;
+  font-size: 14px;
+  min-width: 0;
+}
+.nfz-zone-name small {
+  display: block;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.nfz-count {
+  min-width: 26px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--muted);
+}
+.nfz-count.hot {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+.nfz-type {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 6px;
+}
+.nfz-zones .nfz-type {
+  margin-right: 0;
+}
+.nfz-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 12px 0 0;
+  font-size: 13.5px;
+}
+.nfz-dl dt {
+  color: var(--muted);
+}
+.nfz-dl dd {
+  margin: 0;
+}
+.nfz-facts {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.nfz-facts li {
+  margin-bottom: 5px;
+}
+.nfz-facts.muted {
+  color: var(--muted);
+}
+
+/* ---- status ---- */
+.nfz-status {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.nfz-status.live {
+  color: #fca5a5;
+  font-weight: 600;
+}
+
+/* ---- table ---- */
+.nfz-table-wrap {
+  margin-top: 22px;
+}
+.nfz-table-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.nfz-table-head h2 {
+  margin: 0;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nfz-pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+}
+.nfz-scroll {
+  overflow-x: auto;
+}
+.nfz-table td {
+  white-space: nowrap;
+}
+.nfz-table tbody tr {
+  cursor: pointer;
+}
+.nfz-table tbody tr.sel {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* ---- 3D airspace view ---- */
+.nfz-3d-loading {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--muted);
+  font-size: 14px;
+}
+.nfz-3d {
+  position: absolute;
+  inset: 0;
+}
+/* maplibre-gl.css sets .maplibregl-map { position: relative }, so size the
+   container explicitly rather than via absolute positioning. */
+.nfz-3d-canvas {
+  width: 100%;
+  height: 100%;
+}
+.nfz-3d-panel {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: grid;
+  gap: 6px;
+  max-width: 260px;
+  background: rgba(20, 20, 24, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 12.5px;
+}
+.nfz-3d-panel label {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+}
+.nfz-3d-panel input[type="range"] {
+  accent-color: var(--accent);
+  width: 100%;
+}
+.nfz-3d-panel .nfz-link {
+  justify-self: start;
+  font-size: 12.5px;
+}
+.nfz-3d-inside {
+  color: var(--muted);
+}
+.nfz-3d-inside.hot {
+  color: #fca5a5;
+  font-weight: 600;
+}
+.nfz-3d .nfz-legend {
+  z-index: 2;
+}
+.nfz-popup .maplibregl-popup-content {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  padding: 8px 11px;
+}
+.nfz-popup .maplibregl-popup-tip {
+  border-top-color: var(--surface);
+  border-bottom-color: var(--surface);
+}
+.nfz-3d .maplibregl-ctrl-group {
+  background: var(--surface);
+}
+.nfz-3d .maplibregl-ctrl-group button + button {
+  border-top-color: var(--border);
+}
+.nfz-3d .maplibregl-ctrl-icon {
+  filter: invert(1);
+}
+
+/* ---- narrow screens ---- */
+@media (max-width: 900px) {
+  .nfz-main {
+    grid-template-columns: 1fr;
+  }
+  .nfz-map {
+    height: 420px;
+  }
+  .nfz-side {
+    height: auto;
+    max-height: 480px;
+  }
+}
