@@ -61,7 +61,6 @@ def _build_detector(
         if clash:
             raise ValueError(f"zone ids in {extra} clash with {airspace_path}: {sorted(clash)}")
         zones = zones + added
-    return NoFlyZoneDetector(cfg, zones, emit_open=emit_open)
     return NoFlyZoneDetector(cfg, zones, emit_open=emit_open, terrain=load_terrain())
 
 
