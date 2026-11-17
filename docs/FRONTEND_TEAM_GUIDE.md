@@ -50,6 +50,34 @@ Then open:
 > expected, not a bug. There's also older local data in the database you can use
 > while building.
 
+### Build and run the containers
+
+The `api` and `frontend` are Docker images built from `api/` and `frontend/`. The
+dev server above (`npm run dev`) is best for building your page — it hot-reloads.
+Use the **containers** to test what actually ships (the API, and the frontend
+compiled and served by nginx), or when you'd rather not install Node.
+
+```bash
+# Build and start the whole stack as containers (app on :8081, API on :8000)
+docker compose up -d --build db api frontend
+
+# Rebuild just one after you change its code:
+docker compose up -d --build api        # after editing anything in api/
+docker compose up -d --build frontend   # after editing anything in frontend/
+
+# Build the images without starting them:
+docker compose build api frontend
+
+# Logs, and stopping:
+docker compose logs -f api              # follow a container's logs (or: frontend)
+docker compose down                     # stop everything (keeps the database)
+```
+
+- `--build` forces a fresh image; without it, `up` reuses the last build.
+- **Editing `api/main.py`?** The dev server only reloads the frontend, so you must
+  rebuild the api container (`docker compose up -d --build api`) for API changes to
+  take effect.
+
 ## Who owns what
 
 | Team | API endpoint | Your page file | Your table / columns |
