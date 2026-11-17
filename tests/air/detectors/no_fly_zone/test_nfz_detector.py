@@ -19,9 +19,16 @@ from nfz_support import AIRSPACE_FILE, TRACKS_FILE, make_state
 
 from air.detectors.no_fly_zone.config import Config
 from air.detectors.no_fly_zone.geo import containment, zone_index
+from air.detectors.no_fly_zone.geo.terrain import load_terrain
 from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
 from air.detectors.no_fly_zone.logic.detector import run
-from air.detectors.no_fly_zone.types import Activation, ContainmentResult, ExitReason, Severity
+from air.detectors.no_fly_zone.types import (
+    Activation,
+    ContainmentResult,
+    Datum,
+    ExitReason,
+    Severity,
+)
 from air.normalizers.no_fly_zone_adsb import load_states
 
 shapely_geometry = pytest.importorskip("shapely.geometry")
@@ -113,6 +120,41 @@ def test_unknown_activation_still_emits_but_capped(cfg: Config, fake_c: None) ->
     assert detection.raw_model_confidence == pytest.approx(
         cfg["scoring"]["confidence"]["unknown_activation_factor"]
     )
+
+
+def test_agl_floor_filters_below_and_fires_above_with_terrain(
+    cfg: Config, fake_c: None
+) -> None:
+    """The committed terrain fixture lets an above-floor aircraft fire."""
+    zones = [
+        replace(z, floor_ft=300.0, floor_datum=Datum.AGL)
+        if z.zone_id == "P-901"
+        else z
+        for z in load_zones(AIRSPACE_FILE)
+    ]
+    below_floor = make_state(alt_geom_ft=900.0, alt_baro_ft=900.0)
+    above_floor = make_state(
+        alt_geom_ft=1100.0,
+        alt_baro_ft=1100.0,
+        timestamp=make_state().timestamp.replace(minute=16),
+    )
+    exits: Counter[ExitReason] = Counter()
+
+    detections = list(
+        run(
+            [below_floor, above_floor],
+            zones,
+            cfg,
+            exit_counts=exits,
+            per_report=True,
+            terrain=load_terrain(),
+        )
+    )
+
+    assert len(detections) == 1
+    assert detections[0].extras["zone_id"] == "P-901"
+    assert any("AGL floor was evaluated" in item for item in detections[0].limitations)
+    assert exits == Counter({ExitReason.VERTICAL_CLEAR: 1})
 
 
 def test_no_altitude_exits_as_bad_input(cfg: Config, fake_c: None) -> None:

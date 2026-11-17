@@ -47,7 +47,7 @@ def _det(
         extras["penetration_nm"] = penetration
     return Detection(
         detector_id="skywatch.no_fly_zone", detector_version="0.1.0",
-        entity_ids=("aircraft:a89076",), detection_type="restricted_airspace_incursion",
+        entity_ids=("icao24:a89076",), detection_type="restricted_airspace_incursion",
         severity=severity, anomaly_score=score,
         raw_model_confidence=(
             confidence if confidence is not None
@@ -306,7 +306,7 @@ def test_each_zone_and_each_aircraft_gets_its_own_episode(cfg: Config) -> None:
     episodes = list(group_episodes([both, other], cfg))
 
     keys = sorted((e.entity_ids[0], e.extras["zone_id"]) for e in episodes)
-    assert len(keys) == 3 and ("aircraft:a89076", "TFR-6/1234") in keys
+    assert len(keys) == 3 and ("icao24:a89076", "TFR-6/1234") in keys
 
 
 def test_an_episode_still_open_at_the_end_is_emitted(cfg: Config) -> None:
@@ -384,9 +384,9 @@ def test_lynchburg_crossings_per_report_vs_episodes(cfg: Config) -> None:
     episodes = {e.entity_ids[0]: e for e in run(load_states(CROSSINGS_FILE), zones, cfg)}
 
     assert len(per_report) == 21
-    assert set(episodes) == {"aircraft:a89076", "aircraft:ac8438"}
+    assert set(episodes) == {"icao24:a89076", "icao24:ac8438"}
 
-    jet = episodes["aircraft:a89076"]                    # PDT5877
+    jet = episodes["icao24:a89076"]                    # PDT5877
     assert jet.severity is Severity.HIGH
     assert jet.extras["report_count"] == 19
     assert jet.extras["dwell_sec"] == pytest.approx(41.3, abs=0.1)
@@ -394,7 +394,7 @@ def test_lynchburg_crossings_per_report_vs_episodes(cfg: Config) -> None:
     assert jet.raw_model_confidence == 1.0
     assert any("squawk 2240" in f and "14 s after entry" in f for f in jet.explanation_facts)
 
-    small = episodes["aircraft:ac8438"]                  # N90508
+    small = episodes["icao24:ac8438"]                  # N90508
     assert small.severity is Severity.HIGH
     assert small.extras["report_count"] == 2
     assert small.extras["dwell_sec"] == pytest.approx(6.0, abs=0.1)
@@ -406,7 +406,7 @@ def test_episode_time_bounds_reach_the_platform_record(cfg: Config) -> None:
 
     zones = load_zones(AIRSPACE_FILE)
     jet = next(e for e in run(load_states(CROSSINGS_FILE), zones, cfg)
-               if e.entity_ids == ("aircraft:a89076",))
+               if e.entity_ids == ("icao24:a89076",))
     bounds = to_platform_detection(jet).temporal_bounds
 
     assert bounds.start_time is not None and bounds.end_time is not None

@@ -27,8 +27,23 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .adapter import NoFlyZoneDetector
+    from .config import Config
 
 _log = logging.getLogger(__name__)
+
+
+def _build_detector(
+    cfg: Config,
+    airspace_path: str | Path,
+    *,
+    emit_open: bool,
+) -> NoFlyZoneDetector:
+    from .adapter import NoFlyZoneDetector
+    from .geo.terrain import load_terrain
+    from .ingest.airspace_loader import load_filtered_zones
+
+    zones = load_filtered_zones(airspace_path, cfg)
+    return NoFlyZoneDetector(cfg, zones, emit_open=emit_open, terrain=load_terrain())
 
 
 def build_detector(
@@ -41,20 +56,20 @@ def build_detector(
 
     Zero arguments is the runner's call: ``configs/detectors/no_fly_zone.yaml``
     and the airspace file it names. Pass either path to override, exactly like
-    the CLI's ``--config`` and ``--airspace``. Config and zones are loaded once
-    here, not per window. ``emit_open`` turns on live mode (see
-    :func:`build_live_detector`).
+    the CLI's ``--config`` and ``--airspace``. Config, zones, and the offline
+    terrain grid are loaded once here, not per window. ``emit_open`` turns on
+    live mode (see :func:`build_live_detector`).
 
-    Failure causes: whatever ``load_config`` or ``load_zones`` raise for a bad
-    file. The runner reports that and skips NFZ rather than crashing.
+    Failure causes: whatever ``load_config``, ``load_zones`` or ``load_terrain``
+    raise for a bad file. The runner reports that and skips NFZ rather than
+    crashing.
     """
-    from .adapter import NoFlyZoneDetector, configured_airspace_path
+    from .adapter import configured_airspace_path
     from .config import DEFAULT_PATH, load_config
-    from .ingest.airspace_loader import load_zones
 
     cfg = load_config(config_path if config_path is not None else DEFAULT_PATH)
     zones_file = Path(airspace_path) if airspace_path is not None else configured_airspace_path(cfg)
-    return NoFlyZoneDetector(cfg, load_zones(zones_file), emit_open=emit_open)
+    return _build_detector(cfg, zones_file, emit_open=emit_open)
 
 
 def build_live_detector(
@@ -77,8 +92,8 @@ def build_live_detector(
     from .adapter import configured_airspace_path, live_airspace_path
     from .config import DEFAULT_PATH, load_config
 
+    cfg = load_config(config_path if config_path is not None else DEFAULT_PATH)
     if airspace_path is None:
-        cfg = load_config(config_path if config_path is not None else DEFAULT_PATH)
         live = live_airspace_path(cfg)
         if live is not None and live.is_file():
             airspace_path = live
@@ -89,7 +104,7 @@ def build_live_detector(
                 "Generate it with scripts/make_faa_airspace.py (docs/RUN_PIPELINE.md).",
                 live, airspace_path,
             )
-    detector = build_detector(config_path, airspace_path, emit_open=True)
+    detector = _build_detector(cfg, airspace_path, emit_open=True)
     _log.info("NFZ live: %d zones loaded from %s", len(detector.zones), airspace_path)
     return detector
 

@@ -96,9 +96,9 @@ def run(
     # Stage B - zones.
     zones: list[Any] = []
     try:
-        from .ingest.airspace_loader import load_zones
+        from .ingest.airspace_loader import load_filtered_zones
 
-        zones = load_zones(airspace_path)
+        zones = load_filtered_zones(airspace_path, cfg)
         _report("B airspace_loader", _STAGE_OK, f"{len(zones)} zones")
     except NotImplementedError as exc:
         todo += 1
@@ -126,10 +126,19 @@ def run(
     exit_counts: Counter[Any] = Counter()
     pipeline_ran = False
     try:
+        from .geo.terrain import load_terrain
         from .logic.detector import run as run_pipeline
 
+        terrain = load_terrain()
         detections = list(
-            run_pipeline(states, zones, cfg, exit_counts=exit_counts, per_report=per_report)
+            run_pipeline(
+                states,
+                zones,
+                cfg,
+                exit_counts=exit_counts,
+                per_report=per_report,
+                terrain=terrain,
+            )
         )
         pipeline_ran = True
         unit = "per-report detections" if per_report else "episodes"

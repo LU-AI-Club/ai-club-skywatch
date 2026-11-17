@@ -49,6 +49,43 @@ def test_full_run_on_the_fixture_exits_0(tmp_path: Path) -> None:
     assert summary["firing_reports"] == 2
 
 
+def test_cli_excluding_moa_filters_zones_and_detections(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw["airspace"]["include_types"] = [
+        "PROHIBITED", "RESTRICTED", "TFR", "WARNING", "ALERT"
+    ]
+    config_path = tmp_path / "without_moa.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    out = tmp_path / "filtered"
+
+    assert main([
+        "run",
+        "--input", str(TRACKS_FILE),
+        "--out", str(out),
+        "--airspace", str(AIRSPACE_FILE),
+        "--config", str(config_path),
+    ]) == 0
+
+    output = capsys.readouterr().out
+    stage_line = next(
+        line for line in output.splitlines() if line.strip().startswith("B airspace_loader")
+    )
+    assert "2 zones" in stage_line
+    detections = [
+        json.loads(line) for line in (out / "detections.jsonl").read_text().splitlines()
+    ]
+    assert sorted(d["metadata"]["extras"]["zone_id"] for d in detections) == [
+        "P-901", "TFR-6/1234"
+    ]
+    assert all(d["metadata"]["extras"]["zone_type"] != "MOA" for d in detections)
+
+
 def test_per_report_flag_writes_one_line_per_firing_report(tmp_path: Path) -> None:
     """--per-report bypasses episode grouping (for debugging the stages)."""
     crossings = TRACKS_FILE.parent / "lynchburg_crossings.csv"

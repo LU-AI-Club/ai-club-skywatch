@@ -43,6 +43,18 @@ def _validate(raw: Mapping[str, Any]) -> None:
     for section in ("detector", "scope", "sampling", "airspace", "geometry", "scoring", "severity", "dedup"):
         if section not in raw:
             raise ValueError(f"config missing section: {section}")
+    include_types = raw["airspace"].get("include_types", [zone_type.value for zone_type in ZoneType])
+    if not isinstance(include_types, list):
+        raise ValueError("airspace.include_types must be a list")
+    validated_types: set[ZoneType] = set()
+    for zone_type in include_types:
+        try:
+            parsed_type = ZoneType(zone_type)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"invalid airspace.include_types value: {zone_type!r}") from exc
+        if parsed_type in validated_types:
+            raise ValueError(f"duplicate airspace.include_types value: {zone_type!r}")
+        validated_types.add(parsed_type)
     bases = raw["scoring"]["base_by_zone_type"]
     missing = {z.value for z in ZoneType} - set(bases)
     if missing:

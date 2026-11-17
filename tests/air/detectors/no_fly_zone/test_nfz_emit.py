@@ -32,7 +32,7 @@ def _internal(**overrides: object) -> Detection:
     base: dict[str, object] = {
         "detector_id": "skywatch.no_fly_zone",
         "detector_version": "0.1.0",
-        "entity_ids": ("aircraft:a1b2c3",),
+        "entity_ids": ("icao24:a1b2c3",),
         "detection_type": "restricted_airspace_incursion",
         "severity": Severity.HIGH,
         "anomaly_score": 0.91,

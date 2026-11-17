@@ -16,7 +16,8 @@ pytest.importorskip("shapely")
 pytest.importorskip("h3")
 
 from air.detectors.no_fly_zone import build_detector, build_live_detector  # noqa: E402
-from air.detectors.no_fly_zone.config import DEFAULT_PATH  # noqa: E402
+from air.detectors.no_fly_zone.adapter import NoFlyZoneDetector  # noqa: E402
+from air.detectors.no_fly_zone.config import DEFAULT_PATH, Config  # noqa: E402
 
 AIRSPACE = Path(__file__).resolve().parents[4] / "air/detectors/no_fly_zone/fixtures/airspace"
 FIXTURE_IDS = {"P-901", "TFR-6/1234", "LYNCHBURG-MOA"}
@@ -30,7 +31,7 @@ def _config(tmp_path: Path, live_path: object) -> Path:
     return out
 
 
-def _ids(detector) -> set[str]:
+def _ids(detector: NoFlyZoneDetector) -> set[str]:
     return {zone.zone_id for zone in detector.zones}
 
 
@@ -38,6 +39,53 @@ def test_live_runner_uses_the_real_faa_file_when_present(tmp_path: Path) -> None
     cfg = _config(tmp_path, str(AIRSPACE / "klyh-faa-sample.geojson"))
     ids = _ids(build_live_detector(cfg))
     assert ids and not ids & FIXTURE_IDS
+
+
+@pytest.mark.parametrize(
+    ("text", "expected", "unknown_outside"),
+    [
+        (
+            "0800 - 1700, MON - FRI; O/T BY NOTAM",
+            {"start_time": "08:00", "end_time": "17:00", "weekdays": [0, 1, 2, 3, 4]},
+            True,
+        ),
+        (
+            "0630 - SUNSET, DAILY, BY NOTAM; OTHER TIMES BY NOTAM",
+            {"start_time": "06:30", "end_sunset": True},
+            True,
+        ),
+        (
+            "INTERMITTENT, SUNRISE - SUNSET, DAILY",
+            {"start_sunrise": True, "end_sunset": True},
+            False,
+        ),
+        (
+            "MAY 1 - SEP 15, CONTINUOUS; OTHER TIMES BY NOTAM 24 HRS IN ADVANCE",
+            {
+                "all_day": True,
+                "start_month_day": "05-01",
+                "end_month_day": "09-15",
+            },
+            True,
+        ),
+    ],
+)
+def test_local_faa_schedule_phrasings_are_parsed(
+    text: str, expected: dict[str, object], unknown_outside: bool
+) -> None:
+    from scripts.make_faa_airspace import recurring_schedule_for
+
+    windows, remains_unknown = recurring_schedule_for(text)
+
+    assert windows == [expected]
+    assert remains_unknown is unknown_outside
+
+
+def test_unrecognized_faa_schedule_is_not_guessed() -> None:
+    from scripts.make_faa_airspace import activation_for, recurring_schedule_for
+
+    assert recurring_schedule_for("INTERMITTENT BY NOTAM") == ([], False)
+    assert activation_for("INTERMITTENT BY NOTAM") == "NOTAM"
 
 
 def test_missing_faa_file_falls_back_to_test_zones_and_warns(
@@ -48,6 +96,27 @@ def test_missing_faa_file_falls_back_to_test_zones_and_warns(
         detector = build_live_detector(cfg)
     assert _ids(detector) == FIXTURE_IDS
     assert "TEST zones" in caplog.text
+
+
+def test_live_builder_loads_config_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config_path = _config(tmp_path, str(AIRSPACE / "klyh-faa-sample.geojson"))
+    from air.detectors.no_fly_zone import config as config_module
+
+    original_load_config = config_module.load_config
+    load_count = 0
+
+    def counted_load_config(path: str | Path = DEFAULT_PATH) -> Config:
+        nonlocal load_count
+        load_count += 1
+        return original_load_config(path)
+
+    monkeypatch.setattr(config_module, "load_config", counted_load_config)
+
+    build_live_detector(config_path)
+
+    assert load_count == 1
 
 
 def test_no_live_path_configured_means_fixture_zones(tmp_path: Path) -> None:

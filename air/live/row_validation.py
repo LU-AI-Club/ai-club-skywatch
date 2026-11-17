@@ -90,9 +90,11 @@ def unusable_reason(row: Mapping[str, Any]) -> str | None:
         return "MISSING_POSITION"
 
     # 4. Is the position real?
-    for value in (lat, lon):
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            return "BAD_POSITION"
+    if (
+        isinstance(lat, bool) or not isinstance(lat, (int, float))
+        or isinstance(lon, bool) or not isinstance(lon, (int, float))
+    ):
+        return "BAD_POSITION"
     if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
         return "BAD_POSITION"  # also catches +/- infinity
 

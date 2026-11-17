@@ -31,7 +31,7 @@ One :class:`Detection`. ``baseline_or_model_version`` must come from
 :meth:`Config.baseline_version`, which pins both the rules version and the
 airspace publication cycle. ``explanation_facts`` must be reconstructable from
 the inputs, and ``limitations`` must state what the detector could not check
-(unknown activation, barometric-only altitude, AGL floor not evaluated).
+(unknown activation, barometric-only altitude, or terrain-based AGL floors).
 
 Confidence
 ----------
@@ -94,6 +94,18 @@ from ..types import (
 )
 
 _METERS_PER_NAUTICAL_MILE = 1852.0
+
+# Entity id prefix. MUST match the `observations.entity_id` form ('icao24:a1b2c3'):
+# it is the only field downstream can join a detection back to a position on.
+# air/live/payload.py strips this prefix on the way in, leaving AircraftState.icao24
+# as bare hex, so the same one goes back on here. A different prefix silently
+# matches nothing. See docs/live_integration/DETECTION_TABLE_COLUMNS.md.
+ENTITY_PREFIX = "icao24:"
+
+
+def entity_id_for(icao24: str) -> str:
+    """``'a1b2c3'`` -> ``'icao24:a1b2c3'``, the id every consumer joins on."""
+    return f"{ENTITY_PREFIX}{icao24}"
 
 
 def build_detection(
@@ -229,9 +241,13 @@ def build_detection(
             "Geometric altitude is referenced to the WGS84 ellipsoid and was "
             "compared with an MSL/SFC limit without geoid correction."
         )
-    if zone.floor_datum is Datum.AGL or zone.ceiling_datum is Datum.AGL:
+    if zone.floor_datum is Datum.AGL:
         limitations.append(
-            "AGL floor or ceiling was not evaluated because terrain data is unavailable."
+            "AGL floor was evaluated against bilinearly interpolated terrain from the offline grid."
+        )
+    if zone.ceiling_datum is Datum.AGL:
+        limitations.append(
+            "AGL ceiling was not evaluated because terrain-relative ceilings are unsupported."
         )
     if vertical.altitude_source is AltitudeSource.NONE or vertical.altitude_ft is None:
         limitations.append("No usable altitude was available.")
@@ -257,7 +273,7 @@ def build_detection(
     return Detection(
         detector_id=str(cfg["detector"]["id"]),
         detector_version=str(cfg["detector"]["version"]),
-        entity_ids=(f"aircraft:{state.icao24}",),
+        entity_ids=(entity_id_for(state.icao24),),
         detection_type=str(cfg["detector"]["detection_type"]),
         severity=severity,
         anomaly_score=anomaly_score,

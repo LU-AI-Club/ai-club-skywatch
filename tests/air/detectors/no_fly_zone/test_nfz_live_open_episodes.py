@@ -179,7 +179,7 @@ def test_aircraft_is_the_first_entity_and_the_zone_follows(live: NoFlyZoneDetect
     """entities_involved[0] is the aircraft: the dashboard and entity_id column read it."""
     [entry] = live.detect_observations([inside(0)])
     aircraft, zone = entry.entities_involved
-    assert (aircraft.entity_id, aircraft.entity_type) == ("aircraft:a1b2c3", "aircraft")
+    assert (aircraft.entity_id, aircraft.entity_type) == ("icao24:a1b2c3", "aircraft")
     assert (zone.entity_id, zone.entity_type, zone.domain) == ("zone:P-901", "airspace_zone", "air")
 
 

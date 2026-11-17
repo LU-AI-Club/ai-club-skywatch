@@ -111,7 +111,7 @@ no_fly_zone/
 ├── adapter.py            LEAD-OWNED. Shared-runner entry: AdsbObservation -> pipeline
 ├── config.py             loads the config below into a frozen Config
 ├── ingest/
-│   └── airspace_loader.py    B  load_zones(path) -> list[AirspaceZone]
+│   └── airspace_loader.py    B  load_zones(path), load_filtered_zones(path, cfg)
 ├── geo/
 │   ├── zone_index.py         C  candidate_zone_ids(state, zones, cfg)
 │   ├── containment.py        C  check_containment(state, zones, cfg)

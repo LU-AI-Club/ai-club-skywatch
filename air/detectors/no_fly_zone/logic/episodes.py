@@ -391,7 +391,7 @@ def _merge(episode: _OpenEpisode, *, still_open: bool = False) -> Detection:
 
 
 def _aircraft(det: Detection) -> str:
-    entity = det.entity_ids[0] if det.entity_ids else "aircraft:unknown"
+    entity = det.entity_ids[0] if det.entity_ids else "icao24:unknown"
     return entity.split(":", 1)[-1]
 
 
