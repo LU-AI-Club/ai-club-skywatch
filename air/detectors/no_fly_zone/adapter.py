@@ -66,7 +66,9 @@ span a window edge. The detector therefore keeps one
 
 * each call feeds its reports to the tracker and returns only the episodes
   that closed (two clear reports, or ``sampling.max_gap_sec`` of silence,
-  measured against the newest report seen so far);
+  measured against the newest report seen so far less
+  ``sampling.feed_lateness_sec``, so an aircraft whose reports arrive behind
+  everyone else's is not closed while they are still on their way);
 * a report at or before the newest one already processed **for the same
   aircraft** is skipped (counted in ``skipped_reports``), so sliding windows
   that overlap do not feed the same report twice. The check is per aircraft,
@@ -108,7 +110,7 @@ from .config import Config
 from .emit import DOMAIN, to_platform_detection
 from .logic import detector as pipeline
 from .logic.episodes import EpisodeTracker
-from .types import AircraftState, AirspaceZone, Detection, ExitReason
+from .types import AircraftState, AirspaceZone, Detection, ExitReason, TerrainGrid
 
 # Registry identity, checked by BaseDetector.validate_metadata() against the
 # class. The instance overrides both from configs/detectors/no_fly_zone.yaml, which stays the
@@ -132,6 +134,15 @@ def configured_airspace_path(cfg: Config) -> Path:
 def live_airspace_path(cfg: Config) -> Path | None:
     """Resolve ``airspace.live_path`` like ``fixture_path``; None if not configured."""
     configured = cfg["airspace"].get("live_path")
+    if not configured:
+        return None
+    path = Path(configured)
+    return path if path.is_absolute() else _PACKAGE_DIR / path
+
+
+def demo_airspace_path(cfg: Config) -> Path | None:
+    """Resolve ``airspace.demo_path`` like ``fixture_path``; None if not configured."""
+    configured = cfg["airspace"].get("demo_path")
     if not configured:
         return None
     path = Path(configured)
@@ -178,7 +189,12 @@ class NoFlyZoneDetector(BaseDetector):
     implementation_type = DetectorImplementationType.RULE_BASED
 
     def __init__(
-        self, cfg: Config, zones: Sequence[AirspaceZone], *, emit_open: bool = False
+        self,
+        cfg: Config,
+        zones: Sequence[AirspaceZone],
+        *,
+        emit_open: bool = False,
+        terrain: TerrainGrid | None = None,
     ) -> None:
         super().__init__()
         self.cfg = cfg
@@ -188,6 +204,7 @@ class NoFlyZoneDetector(BaseDetector):
         # and the CLI keep returning only finished episodes.
         self.emit_open = emit_open
         self.zones: list[AirspaceZone] = list(zones)
+        self.terrain = terrain
         # Instance values from config win over the class-level registry identity.
         self.detector_id = str(cfg["detector"]["id"])
         self.detector_version = str(cfg["detector"]["version"])
@@ -203,6 +220,11 @@ class NoFlyZoneDetector(BaseDetector):
         self._clock: datetime | None = None
         self._seen_retention = timedelta(
             seconds=float(cfg["sampling"]["seen_retention_sec"])
+        )
+        # Silence is judged this far behind the newest report, so an aircraft
+        # whose reports arrive late is not closed while they are still coming.
+        self._feed_lateness = timedelta(
+            seconds=float(cfg["sampling"].get("feed_lateness_sec", 0))
         )
         # Reports skipped because that aircraft's report at or after the same
         # time had already been processed (the overlap of sliding windows).
@@ -242,11 +264,11 @@ class NoFlyZoneDetector(BaseDetector):
                 self._clock = state.timestamp
 
         reports = pipeline.evaluate_reports(
-            fresh, self.zones, self.cfg, exit_counts=self.exit_counts
+            fresh, self.zones, self.cfg, exit_counts=self.exit_counts, terrain=self.terrain
         )
         closed: list[Detection] = self._episodes.feed(reports)
         if fresh and self._clock is not None:
-            closed += self._episodes.close_silent(self._clock)
+            closed += self._episodes.close_silent(self._clock - self._feed_lateness)
             self._forget_quiet_aircraft(self._clock)
         if self.emit_open:
             closed += self._episodes.snapshot_open()

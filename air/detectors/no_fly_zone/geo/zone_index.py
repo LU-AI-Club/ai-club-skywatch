@@ -88,13 +88,58 @@ def _cells_for_geometry(wkb: bytes, res: int) -> frozenset[str]:
     return frozenset(h3.h3shape_to_cells_experimental(shape, res, contain="overlap"))
 
 
+# Inverted index: H3 cell -> positions (in ``zones``) of the zones covering it.
+# Built once per zone list and resolution, so a report costs seven dict lookups
+# however many zones there are, instead of one set intersection per zone.
+#
+# Keyed on the identity of the ``zones`` sequence: every caller passes the same
+# list for a whole run (the adapter's ``self.zones``, the CLI's loaded list), and
+# hashing every zone on every report to build a content key would bring back the
+# per-zone cost this index removes. Each entry holds a reference to its list, so
+# an id cannot be reused while the entry exists, and records the list's length
+# as a cheap guard against in-place edits. Treat ``zones`` as read-only for the
+# life of a run; pass a new list to change the zones. A few entries are kept
+# (tests build many lists), oldest dropped first.
+_INDEX_CACHE_SIZE = 8  # structural, not tunable: bounds memory held by stale lists
+_ZoneIndex = dict[str, tuple[int, ...]]
+_INDEXES: dict[tuple[int, int], tuple[Sequence[AirspaceZone], int, _ZoneIndex]] = {}
+
+
+def _build_index(zones: Sequence[AirspaceZone], res: int) -> _ZoneIndex:
+    positions_by_cell: dict[str, list[int]] = {}
+    for position, zone in enumerate(zones):
+        for cell in _zone_cells(zone, res):
+            positions_by_cell.setdefault(cell, []).append(position)
+    return {cell: tuple(positions) for cell, positions in positions_by_cell.items()}
+
+
+def _index_for(zones: Sequence[AirspaceZone], res: int) -> _ZoneIndex:
+    key = (id(zones), res)
+    entry = _INDEXES.get(key)
+    if entry is not None and entry[0] is zones and entry[1] == len(zones):
+        return entry[2]
+    index = _build_index(zones, res)
+    _INDEXES.pop(key, None)
+    while len(_INDEXES) >= _INDEX_CACHE_SIZE:
+        del _INDEXES[next(iter(_INDEXES))]
+    _INDEXES[key] = (zones, len(zones), index)
+    return index
+
+
 def candidate_zone_ids(
     state: AircraftState, zones: Sequence[AirspaceZone], cfg: Config
 ) -> tuple[str, ...]:
-    """Return ids of zones close enough to deserve an exact test."""
+    """Return ids of zones close enough to deserve an exact test.
+
+    Same result, in the same order (the order of ``zones``), as testing every
+    zone's cells against the aircraft's buffered cell; see the index notes above.
+    """
     res = _resolution(cfg)
+    index = _index_for(zones, res)
     plane_cell = h3.latlng_to_cell(state.lat, state.lon, res)
     # Buffering the plane's cell is equivalent to buffering every zone cell,
     # and costs one disk instead of one per zone cell.
-    nearby = set(h3.grid_disk(plane_cell, _BUFFER_RINGS))
-    return tuple(zone.zone_id for zone in zones if nearby & _zone_cells(zone, res))
+    positions: set[int] = set()
+    for cell in h3.grid_disk(plane_cell, _BUFFER_RINGS):
+        positions.update(index.get(cell, ()))
+    return tuple(zones[position].zone_id for position in sorted(positions))

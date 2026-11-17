@@ -8,6 +8,7 @@ fixture zone P-901 from data/lynchburg_adsb.csv.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -36,6 +37,7 @@ def _det(
     signals: Sequence[str] = (),
     limitations: Sequence[str] = (),
     penetration: float | None = 0.5,
+    confidence: float | None = None,
 ) -> Detection:
     extras: dict[str, Any] = {
         "observed_at": at, "source_row_id": row, "lat": 37.42, "lon": -79.21,
@@ -45,9 +47,12 @@ def _det(
         extras["penetration_nm"] = penetration
     return Detection(
         detector_id="skywatch.no_fly_zone", detector_version="0.1.0",
-        entity_ids=("aircraft:a89076",), detection_type="restricted_airspace_incursion",
+        entity_ids=("icao24:a89076",), detection_type="restricted_airspace_incursion",
         severity=severity, anomaly_score=score,
-        raw_model_confidence=1.0 if severity is Severity.HIGH else 0.0,
+        raw_model_confidence=(
+            confidence if confidence is not None
+            else 1.0 if severity is Severity.HIGH else 0.0
+        ),
         evidence_refs=(f"adsb:{row}", f"airspace:{zone}"),
         feature_schema_version="air-features-v1", baseline_or_model_version="test",
         explanation_facts=(f"fact for {row}",) + tuple(signals),
@@ -92,6 +97,117 @@ def test_one_clear_report_does_not_split_the_episode(cfg: Config) -> None:
     assert episode.extras["report_count"] == 4
 
 
+def test_irregular_report_timestamps_use_elapsed_time_not_report_count(cfg: Config) -> None:
+    raw = deepcopy(cfg.raw)
+    raw["scoring"]["confidence"]["persistence_saturation_sec"] = 20.0
+    timed_cfg = Config(raw)
+    reports = [_hit(0), _hit(3), _hit(11), _hit(16)]
+
+    (episode,) = list(group_episodes(reports, timed_cfg))
+
+    assert episode.extras["dwell_sec"] == 16.0
+    assert episode.raw_model_confidence == pytest.approx(0.3 + 0.7 * (16 / 20))
+
+
+def test_lower_confidence_fired_report_does_not_reset_persistence_run(cfg: Config) -> None:
+    raw = deepcopy(cfg.raw)
+    raw["scoring"]["confidence"]["persistence_saturation_sec"] = 20.0
+    timed_cfg = Config(raw)
+    reports = [
+        _hit(0),
+        _hit(3),
+        _hit(5, penetration=None, confidence=0.35),
+        _hit(11),
+        _hit(16),
+    ]
+
+    (episode,) = list(group_episodes(reports, timed_cfg))
+
+    assert episode.extras["dwell_sec"] == 16.0
+    assert episode.raw_model_confidence == pytest.approx(0.3 + 0.7 * (16 / 20))
+
+
+def test_stronger_run_survives_a_later_run(cfg: Config) -> None:
+    reports = [
+        _hit(0),
+        _hit(15),
+        _clear(16),
+        _hit(17),
+    ]
+
+    (episode,) = list(group_episodes(reports, cfg))
+
+    assert episode.raw_model_confidence == 1.0
+
+
+def test_clear_report_resets_persistence_run_but_keeps_episode_open(cfg: Config) -> None:
+    raw = deepcopy(cfg.raw)
+    raw["scoring"]["confidence"]["persistence_saturation_sec"] = 20.0
+    timed_cfg = Config(raw)
+    reports = [_hit(0), _hit(10), _clear(12), _hit(14), _hit(26)]
+
+    (episode,) = list(group_episodes(reports, timed_cfg))
+
+    assert episode.extras["report_count"] == 4
+    assert episode.raw_model_confidence == pytest.approx(0.3 + 0.7 * (12 / 20))
+
+
+def test_short_fired_run_receives_persistence_weighting(cfg: Config) -> None:
+    reports = [
+        _hit(0, penetration=None, confidence=0.4),
+        _hit(2, penetration=None, confidence=0.35),
+    ]
+
+    (episode,) = list(group_episodes(reports, cfg))
+
+    minimum = float(cfg["scoring"]["confidence"]["persistence_min_factor"])
+    saturation = float(cfg["scoring"]["confidence"]["persistence_saturation_sec"])
+    factor = minimum + (1.0 - minimum) * (2 / saturation)
+    assert episode.raw_model_confidence == pytest.approx(0.4 * factor)
+
+
+def test_open_and_closed_confidence_only_changes_on_new_fired_reports(cfg: Config) -> None:
+    tracker = EpisodeTracker(cfg)
+    tracker.feed([_hit(0)])
+    (first_snapshot,) = tracker.snapshot_open()
+    assert first_snapshot.raw_model_confidence == pytest.approx(0.3)
+    assert tracker.snapshot_open() == []
+
+    tracker.feed([_hit(5)])
+    (updated_snapshot,) = tracker.snapshot_open()
+    (closed_episode,) = tracker.flush()
+
+    expected = 0.3 + 0.7 * (5 / 15)
+    assert updated_snapshot.raw_model_confidence == pytest.approx(expected)
+    assert closed_episode.raw_model_confidence == pytest.approx(expected)
+
+
+def test_shared_confidence_aggregation_matches_all_close_paths(cfg: Config) -> None:
+    raw = deepcopy(cfg.raw)
+    raw["scoring"]["confidence"]["persistence_saturation_sec"] = 20.0
+    timed_cfg = Config(raw)
+    strict_reports = [_hit(0), _hit(8)]
+    expected_confidence = 0.3 + 0.7 * (8 / 20)
+
+    (flushed,) = list(group_episodes(strict_reports, timed_cfg))
+
+    clear_tracker = EpisodeTracker(timed_cfg)
+    clear_tracker.feed(strict_reports)
+    (clear_closed,) = clear_tracker.feed([_clear(10), _clear(12)])
+
+    silence_tracker = EpisodeTracker(timed_cfg)
+    silence_tracker.feed(strict_reports)
+    (silence_closed,) = silence_tracker.close_silent(
+        T0 + timedelta(seconds=8 + float(timed_cfg["sampling"]["max_gap_sec"]) + 1)
+    )
+
+    assert flushed.raw_model_confidence == pytest.approx(expected_confidence)
+    assert clear_closed.raw_model_confidence == pytest.approx(expected_confidence)
+    assert silence_closed.raw_model_confidence == pytest.approx(expected_confidence)
+    assert flushed.raw_model_confidence == clear_closed.raw_model_confidence
+    assert flushed.raw_model_confidence == silence_closed.raw_model_confidence
+
+
 def test_riding_the_boundary_stays_one_episode(cfg: Config) -> None:
     """In, out, in, out, in: every hit resets the clear count, so isolated
     clear fixes never add up to an exit."""
@@ -110,6 +226,26 @@ def test_silence_longer_than_max_gap_closes_it(cfg: Config) -> None:
     gap = float(cfg["sampling"]["max_gap_sec"])
     reports = [_hit(0), _hit(2), _hit(2 + gap + 1)]
     assert [e.extras["report_count"] for e in group_episodes(reports, cfg)] == [2, 1]
+
+
+def test_max_gap_boundary_controls_persistence_credit(cfg: Config) -> None:
+    max_gap = float(cfg["sampling"]["max_gap_sec"])
+    confidence_cfg = cfg["scoring"]["confidence"]
+    saturation = float(confidence_cfg["persistence_saturation_sec"])
+    minimum = float(confidence_cfg["persistence_min_factor"])
+    expected_confidence = minimum + (1.0 - minimum) * min(max_gap / saturation, 1.0)
+
+    (at_boundary,) = list(group_episodes([_hit(0), _hit(max_gap)], cfg))
+    after_gap = list(group_episodes([_hit(0), _hit(max_gap + 1)], cfg))
+
+    assert at_boundary.extras["report_count"] == 2
+    assert at_boundary.raw_model_confidence == pytest.approx(expected_confidence)
+    assert [episode.extras["report_count"] for episode in after_gap] == [1, 1]
+    assert all(episode.extras["dwell_sec"] == 0.0 for episode in after_gap)
+    assert all(
+        episode.raw_model_confidence == pytest.approx(0.3)
+        for episode in after_gap
+    )
 
 
 def test_a_slow_reporter_inside_the_gap_stays_one_episode(cfg: Config) -> None:
@@ -136,7 +272,8 @@ def test_peak_score_and_highest_severity_are_kept_separately(cfg: Config) -> Non
 
     assert episode.anomaly_score == 0.90
     assert episode.severity is Severity.HIGH
-    assert episode.raw_model_confidence == 1.0
+    assert episode.raw_model_confidence == pytest.approx(0.3 + 0.7 * (4 / 15))
+    assert "persistence weighting" in episode.explanation_facts[0]
     assert episode.extras["penetration_nm"] == 1.2      # deepest, not the representative's
     assert episode.extras["peak_score_at"] == T0
     assert episode.explanation_facts[1] == "fact for r2"  # the worst moment's facts
@@ -169,7 +306,7 @@ def test_each_zone_and_each_aircraft_gets_its_own_episode(cfg: Config) -> None:
     episodes = list(group_episodes([both, other], cfg))
 
     keys = sorted((e.entity_ids[0], e.extras["zone_id"]) for e in episodes)
-    assert len(keys) == 3 and ("aircraft:a89076", "TFR-6/1234") in keys
+    assert len(keys) == 3 and ("icao24:a89076", "TFR-6/1234") in keys
 
 
 def test_an_episode_still_open_at_the_end_is_emitted(cfg: Config) -> None:
@@ -247,19 +384,21 @@ def test_lynchburg_crossings_per_report_vs_episodes(cfg: Config) -> None:
     episodes = {e.entity_ids[0]: e for e in run(load_states(CROSSINGS_FILE), zones, cfg)}
 
     assert len(per_report) == 21
-    assert set(episodes) == {"aircraft:a89076", "aircraft:ac8438"}
+    assert set(episodes) == {"icao24:a89076", "icao24:ac8438"}
 
-    jet = episodes["aircraft:a89076"]                    # PDT5877
+    jet = episodes["icao24:a89076"]                    # PDT5877
     assert jet.severity is Severity.HIGH
     assert jet.extras["report_count"] == 19
     assert jet.extras["dwell_sec"] == pytest.approx(41.3, abs=0.1)
     assert jet.anomaly_score == pytest.approx(0.909, abs=0.001)
+    assert jet.raw_model_confidence == 1.0
     assert any("squawk 2240" in f and "14 s after entry" in f for f in jet.explanation_facts)
 
-    small = episodes["aircraft:ac8438"]                  # N90508
+    small = episodes["icao24:ac8438"]                  # N90508
     assert small.severity is Severity.HIGH
     assert small.extras["report_count"] == 2
     assert small.extras["dwell_sec"] == pytest.approx(6.0, abs=0.1)
+    assert 0.0 < small.raw_model_confidence < jet.raw_model_confidence
 
 
 def test_episode_time_bounds_reach_the_platform_record(cfg: Config) -> None:
@@ -267,7 +406,7 @@ def test_episode_time_bounds_reach_the_platform_record(cfg: Config) -> None:
 
     zones = load_zones(AIRSPACE_FILE)
     jet = next(e for e in run(load_states(CROSSINGS_FILE), zones, cfg)
-               if e.entity_ids == ("aircraft:a89076",))
+               if e.entity_ids == ("icao24:a89076",))
     bounds = to_platform_detection(jet).temporal_bounds
 
     assert bounds.start_time is not None and bounds.end_time is not None

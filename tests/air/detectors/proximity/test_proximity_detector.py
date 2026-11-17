@@ -54,7 +54,7 @@ def test_one_encounter_is_one_detection_not_one_per_second():
 def test_detection_is_the_real_contract_with_two_entities():
     det = ProximityDetector().detect_observations(load_observations("proximity_head_on.json"))[0]
     assert isinstance(det, Detection)
-    assert sorted(e.entity_id for e in det.entities_involved) == ["aircraft:aaa001", "aircraft:bbb002"]
+    assert sorted(e.entity_id for e in det.entities_involved) == ["icao24:aaa001", "icao24:bbb002"]
     d = det.to_dict()  # must serialise cleanly for TCE/CAATS
     assert d["detector_id"] == "skywatch.proximity"
     assert d["metadata"]["feature_schema_version"] == "air-features-v1"

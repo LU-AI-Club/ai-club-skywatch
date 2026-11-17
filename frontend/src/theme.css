@@ -1,0 +1,266 @@
+/* SkyWatch dark theme. Logo is monochrome (white on black), so the base is
+   white-on-near-black and the accent is Circuit cyan. Change --accent to
+   re-skin the whole app. Severity colors are independent of the accent and are
+   used consistently for all detections. */
+:root {
+  --bg: #0a0a0c;
+  --surface: #141418;
+  --raised: #1c1c22;
+  --border: #2a2a32;
+  --text: #f4f4f6;
+  --muted: #9a9aa5;
+
+  --accent: #22d3ee;
+  --accent-hover: #0891b2;
+  --on-accent: #06333b;
+
+  --sev-info: #3b82f6;
+  --sev-low: #10b981;
+  --sev-medium: #f59e0b;
+  --sev-high: #f97316;
+  --sev-critical: #ef4444;
+
+  --nav-h: 56px;
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* ---- top nav ---- */
+.nav {
+  height: var(--nav-h);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 18px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+.nav .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.nav .brand .mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+.nav .links {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+.nav .links a {
+  color: var(--muted);
+  padding: 7px 12px;
+  border-radius: var(--radius);
+  font-size: 14px;
+}
+.nav .links a:hover {
+  color: var(--text);
+  background: var(--raised);
+}
+.nav .links a.active {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+/* ---- page scaffold ---- */
+.content {
+  min-height: calc(100% - var(--nav-h));
+}
+.page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 20px 60px;
+}
+.page-head h1 {
+  margin: 0 0 4px;
+  font-size: 26px;
+}
+.page-head .owner {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* ---- cards / stats ---- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+.stat {
+  background: var(--raised);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+.stat .label {
+  color: var(--muted);
+  font-size: 13px;
+}
+.stat .value {
+  font-size: 24px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+/* ---- badges ---- */
+.badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: #0a0a0c;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* ---- table ---- */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.table th,
+.table td {
+  text-align: left;
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+.table tbody tr:hover {
+  background: var(--raised);
+}
+
+/* ---- buttons ---- */
+.btn {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 0;
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--accent-hover);
+}
+.btn.ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+/* ---- empty / error states ---- */
+.empty {
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 14px;
+}
+.error {
+  border-color: var(--sev-critical);
+  color: #fecaca;
+}
+
+/* ---- map page ---- */
+.map-page {
+  position: relative;
+  height: calc(100vh - var(--nav-h));
+}
+.map-toggles {
+  position: absolute;
+  top: 14px;
+  left: 60px;
+  z-index: 900;
+  background: rgba(20, 20, 24, 0.94);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  display: grid;
+  gap: 7px;
+}
+.map-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.map-toggles .swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.map-status {
+  position: absolute;
+  right: 14px;
+  bottom: 18px;
+  z-index: 900;
+  background: rgba(20, 20, 24, 0.94);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 11px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Leaflet popups on a dark map. */
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--surface);
+  color: var(--text);
+}
+.leaflet-popup-content {
+  font-size: 13px;
+}

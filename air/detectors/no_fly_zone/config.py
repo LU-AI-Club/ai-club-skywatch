@@ -7,6 +7,7 @@ its own config.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import isfinite
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -42,6 +43,24 @@ def _validate(raw: Mapping[str, Any]) -> None:
     for section in ("detector", "scope", "sampling", "airspace", "geometry", "scoring", "severity", "dedup"):
         if section not in raw:
             raise ValueError(f"config missing section: {section}")
+    off_grid = raw["geometry"].get("off_grid_terrain_ft")
+    if off_grid is not None:
+        if not isinstance(off_grid, Mapping) or set(off_grid) != {"min", "max"}:
+            raise ValueError("geometry.off_grid_terrain_ft must have exactly min and max")
+        if float(off_grid["min"]) > float(off_grid["max"]):
+            raise ValueError("geometry.off_grid_terrain_ft.min must not exceed max")
+    include_types = raw["airspace"].get("include_types", [zone_type.value for zone_type in ZoneType])
+    if not isinstance(include_types, list):
+        raise ValueError("airspace.include_types must be a list")
+    validated_types: set[ZoneType] = set()
+    for zone_type in include_types:
+        try:
+            parsed_type = ZoneType(zone_type)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"invalid airspace.include_types value: {zone_type!r}") from exc
+        if parsed_type in validated_types:
+            raise ValueError(f"duplicate airspace.include_types value: {zone_type!r}")
+        validated_types.add(parsed_type)
     bases = raw["scoring"]["base_by_zone_type"]
     missing = {z.value for z in ZoneType} - set(bases)
     if missing:
@@ -49,14 +68,86 @@ def _validate(raw: Mapping[str, Any]) -> None:
     for z, v in bases.items():
         if not 0.0 <= float(v) <= 1.0:
             raise ValueError(f"base score for {z} out of range: {v}")
+    confidence = raw["scoring"].get("confidence")
+    if not isinstance(confidence, Mapping):
+        raise ValueError("scoring.confidence must be a mapping")
+    for key in (
+        "active_activation_factor",
+        "unknown_activation_factor",
+        "strict_position_min_factor",
+        "buffered_position_factor",
+        "preferred_altitude_factor",
+        "fallback_altitude_factor",
+        "persistence_min_factor",
+    ):
+        value = confidence.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"scoring.confidence.{key} must be a number in [0, 1]")
+        lower_bound_ok = (
+            value > 0.0
+            if key == "persistence_min_factor"
+            else value >= 0.0
+        )
+        if not isfinite(value) or not lower_bound_ok or value > 1.0:
+            if key == "persistence_min_factor":
+                raise ValueError(
+                    "scoring.confidence.persistence_min_factor must be in (0, 1]"
+                )
+            raise ValueError(f"scoring.confidence.{key} must be a number in [0, 1]")
+    if confidence["unknown_activation_factor"] >= confidence["active_activation_factor"]:
+        raise ValueError(
+            "scoring.confidence.unknown_activation_factor must be less than "
+            "active_activation_factor"
+        )
+    if confidence["buffered_position_factor"] >= confidence["strict_position_min_factor"]:
+        raise ValueError(
+            "scoring.confidence.buffered_position_factor must be less than "
+            "strict_position_min_factor"
+        )
+    if confidence["fallback_altitude_factor"] >= confidence["preferred_altitude_factor"]:
+        raise ValueError(
+            "scoring.confidence.fallback_altitude_factor must be less than "
+            "preferred_altitude_factor"
+        )
+    saturation = confidence.get("persistence_saturation_sec")
+    if (
+        isinstance(saturation, bool)
+        or not isinstance(saturation, (int, float))
+        or not isfinite(saturation)
+        or saturation <= 0.0
+    ):
+        raise ValueError("scoring.confidence.persistence_saturation_sec must be positive")
+    uncertainty = raw["geometry"]["default_uncertainty_m"]
+    if (
+        isinstance(uncertainty, bool)
+        or not isinstance(uncertainty, (int, float))
+        or not isfinite(uncertainty)
+        or uncertainty <= 0.0
+    ):
+        raise ValueError("geometry.default_uncertainty_m must be positive")
     for key in ("unknown_activation_cap", "buffered_only"):
         Severity(raw["severity"][key])  # raises if not a valid severity
+    zone_type_cap = raw["severity"].get("zone_type_cap", {})
+    if not isinstance(zone_type_cap, Mapping):
+        raise ValueError("severity.zone_type_cap must map zone types to severities")
+    for zone_type, cap in zone_type_cap.items():
+        ZoneType(zone_type)  # raises if not a valid zone type
+        Severity(cap)  # raises if not a valid severity
     if raw["sampling"]["target_hz"] <= 0:
         raise ValueError("sampling.target_hz must be positive")
     if float(raw["sampling"]["max_gap_sec"]) <= 0:
         raise ValueError("sampling.max_gap_sec must be positive")
     if float(raw["sampling"]["seen_retention_sec"]) <= float(raw["sampling"]["max_gap_sec"]):
         raise ValueError("sampling.seen_retention_sec must exceed sampling.max_gap_sec")
+    lateness = float(raw["sampling"].get("feed_lateness_sec", 0))
+    if lateness < 0:
+        raise ValueError("sampling.feed_lateness_sec must not be negative")
+    if lateness + float(raw["sampling"]["max_gap_sec"]) >= float(
+        raw["sampling"]["seen_retention_sec"]
+    ):
+        raise ValueError(
+            "sampling.seen_retention_sec must exceed feed_lateness_sec + max_gap_sec"
+        )
     clears = raw["dedup"]["clear_observations_to_close"]
     if isinstance(clears, bool) or not isinstance(clears, int) or clears < 1:
         raise ValueError("dedup.clear_observations_to_close must be an integer >= 1")

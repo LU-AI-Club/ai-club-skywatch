@@ -19,14 +19,27 @@ from types import ModuleType, SimpleNamespace
 from typing import Any
 
 import pytest
-from nfz_support import AIRSPACE_FILE, TRACKS_FILE
+from nfz_support import AIRSPACE_FILE, TRACKS_FILE, make_state
+from shapely.geometry import Polygon
 
-from air.detectors.no_fly_zone import build_detector
+from air.detectors.no_fly_zone import build_detector, build_live_detector
 from air.detectors.no_fly_zone.adapter import NoFlyZoneDetector, observation_to_state
+from air.detectors.no_fly_zone.config import Config
 from air.detectors.no_fly_zone.emit import to_platform_detection
-from air.detectors.no_fly_zone.ingest.airspace_loader import load_zones
+from air.detectors.no_fly_zone.ingest.airspace_loader import (
+    filter_zones,
+    load_filtered_zones,
+    load_zones,
+)
 from air.detectors.no_fly_zone.logic.detector import run
-from air.detectors.no_fly_zone.types import AircraftState, ExitReason
+from air.detectors.no_fly_zone.types import (
+    Activation,
+    AircraftState,
+    AirspaceZone,
+    Datum,
+    ExitReason,
+    ZoneType,
+)
 from air.models.observation import AdsbObservation
 from air.normalizers.no_fly_zone_adsb import load_states
 from contracts import DetectionContext
@@ -114,10 +127,99 @@ def test_build_detector_zero_args_loads_config_and_zones(detector: NoFlyZoneDete
     assert detector.detector_id == detector.cfg["detector"]["id"]
     assert detector.detector_version == detector.cfg["detector"]["version"]
     assert {z.zone_id for z in detector.zones} == {z.zone_id for z in load_zones(AIRSPACE_FILE)}
+    assert ZoneType.MOA in {zone.zone_type for zone in detector.zones}
 
 
 def test_build_detector_accepts_an_airspace_override() -> None:
     assert len(build_detector(airspace_path=AIRSPACE_FILE).zones) == len(load_zones(AIRSPACE_FILE))
+
+
+@pytest.mark.parametrize("builder", [build_detector, build_live_detector])
+def test_detector_builders_apply_configured_zone_types(
+    tmp_path: Path, builder: Any
+) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw["airspace"]["include_types"] = [
+        "PROHIBITED", "RESTRICTED", "TFR", "WARNING", "ALERT"
+    ]
+    config_path = tmp_path / "without_moa.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    detector = builder(config_path=config_path, airspace_path=AIRSPACE_FILE)
+
+    assert {zone.zone_id for zone in detector.zones} == {"P-901", "TFR-6/1234"}
+    assert all(zone.zone_type is not ZoneType.MOA for zone in detector.zones)
+
+
+def test_excluding_moa_prevents_a_moa_detection(tmp_path: Path) -> None:
+    import yaml
+
+    from air.detectors.no_fly_zone.config import DEFAULT_PATH
+
+    raw = yaml.safe_load(DEFAULT_PATH.read_text(encoding="utf-8"))
+    raw["airspace"]["include_types"] = [
+        "PROHIBITED", "RESTRICTED", "TFR", "WARNING", "ALERT"
+    ]
+    config_path = tmp_path / "without_moa.yaml"
+    config_path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    state = make_state(lat=37.4, lon=-79.55, alt_baro_ft=10000.0, alt_geom_ft=10000.0)
+
+    default_detector = build_detector(airspace_path=AIRSPACE_FILE)
+    default_detections = list(run([state], default_detector.zones, default_detector.cfg))
+    assert [detection.extras["zone_id"] for detection in default_detections] == [
+        "LYNCHBURG-MOA"
+    ]
+
+    filtered_detector = build_detector(config_path=config_path, airspace_path=AIRSPACE_FILE)
+    filtered_detections = list(
+        run([state], filtered_detector.zones, filtered_detector.cfg)
+    )
+    assert filtered_detections == []
+
+
+def test_filter_zones_keeps_only_configured_types() -> None:
+    geometry = Polygon([(-79.3, 37.3), (-79.2, 37.3), (-79.2, 37.4), (-79.3, 37.4)])
+    moa = AirspaceZone(
+        zone_id="MOA-1", name="Test MOA", zone_type=ZoneType.MOA, geometry=geometry,
+        floor_ft=0, floor_datum=Datum.SFC, ceiling_ft=18000, ceiling_datum=Datum.MSL,
+        activation=Activation.ALWAYS,
+    )
+    prohibited = AirspaceZone(
+        zone_id="P-1", name="Test Prohibited", zone_type=ZoneType.PROHIBITED, geometry=geometry,
+        floor_ft=0, floor_datum=Datum.SFC, ceiling_ft=18000, ceiling_datum=Datum.MSL,
+        activation=Activation.ALWAYS,
+    )
+    zones = [moa, prohibited]
+    cfg = Config({"airspace": {"include_types": ["PROHIBITED"]}})
+
+    filtered = filter_zones(zones, cfg)
+    assert [zone.zone_id for zone in filtered] == ["P-1"]
+    assert all(zone.zone_type is not ZoneType.MOA for zone in filtered)
+    assert zones == [moa, prohibited]
+
+
+def test_filter_zones_includes_all_types_when_setting_is_missing() -> None:
+    zones = load_zones(AIRSPACE_FILE)
+    assert filter_zones(zones, Config({"airspace": {}})) == zones
+
+
+def test_filter_zones_with_empty_include_types_returns_no_zones() -> None:
+    zones = load_zones(AIRSPACE_FILE)
+    cfg = Config({"airspace": {"include_types": []}})
+
+    assert filter_zones(zones, cfg) == []
+
+
+def test_load_filtered_zones_combines_loading_and_type_filtering() -> None:
+    cfg = Config({"airspace": {"include_types": ["PROHIBITED", "TFR"]}})
+
+    zones = load_filtered_zones(AIRSPACE_FILE, cfg)
+
+    assert {zone.zone_id for zone in zones} == {"P-901", "TFR-6/1234"}
 
 
 def test_package_import_stays_light() -> None:
@@ -146,7 +248,7 @@ def test_fires_inside_zone_and_emits_platform_detection(detector: NoFlyZoneDetec
     assert detector.open_episodes == 0
     assert detection.geospatial_context.risk_zone_ids == ["P-901"]
     assert detection.provenance.raw_source_ref == "test.csv:7"
-    assert [e.entity_id for e in detection.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]
+    assert [e.entity_id for e in detection.entities_involved] == ["icao24:a1b2c3", "zone:P-901"]
     assert detection.temporal_bounds.start_time == _TS
 
 
@@ -312,15 +414,25 @@ def test_episode_open_at_a_window_edge_is_held_not_emitted(detector: NoFlyZoneDe
 
 
 def test_silence_closes_an_episode_in_a_later_window(detector: NoFlyZoneDetector) -> None:
-    """The aircraft stops reporting; another aircraft moves the stream clock on."""
-    max_gap = float(detector.cfg["sampling"]["max_gap_sec"])
+    """The aircraft stops reporting; another aircraft moves the stream clock on.
+
+    Silence counts from the newest report less sampling.feed_lateness_sec, so
+    the other aircraft has to get max_gap + lateness ahead before it closes.
+    """
+    sampling = detector.cfg["sampling"]
+    wait = float(sampling["max_gap_sec"]) + float(sampling["feed_lateness_sec"])
     assert detector.detect_observations([make_obs()]) == []
+    not_yet = make_obs(
+        icao24="ffffff", latitude=36.0, longitude=-81.0, source_row_id="test.csv:8",
+        observed_at=_TS + timedelta(seconds=wait),
+    )
+    assert detector.detect_observations([not_yet]) == []
     later = make_obs(
         icao24="ffffff", latitude=36.0, longitude=-81.0, source_row_id="test.csv:9",
-        observed_at=_TS + timedelta(seconds=max_gap + 1),
+        observed_at=_TS + timedelta(seconds=wait + 1),
     )
     [closed] = detector.detect_observations([later])
-    assert [e.entity_id for e in closed.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]
+    assert [e.entity_id for e in closed.entities_involved] == ["icao24:a1b2c3", "zone:P-901"]
     assert detector.open_episodes == 0
 
 
@@ -364,7 +476,7 @@ def test_late_reports_from_another_aircraft_are_not_dropped(detector: NoFlyZoneD
     detector.detect_observations([_outside("aaaaaa", 9), _outside("aaaaaa", 10), *late])
     assert detector.skipped_reports == 2  # only A's re-read overlap
     [incursion] = detector.flush()
-    assert incursion.entities_involved[0].entity_id == "aircraft:bbbbbb"
+    assert incursion.entities_involved[0].entity_id == "icao24:bbbbbb"
     assert incursion.metadata["extras"]["report_count"] == 5
 
 
@@ -400,7 +512,7 @@ def test_replay_runner_flushes_nfz_after_the_last_window(tmp_path: Path) -> None
     assert replay.main(args) == 0
     lines = out.read_text().splitlines()
     entities = sorted(json.loads(line)["entities_involved"][0]["entity_id"] for line in lines)
-    assert entities == ["aircraft:a89076", "aircraft:ac8438"]
+    assert entities == ["icao24:a89076", "icao24:ac8438"]
 
 
 def test_run_detectors_flushes_after_the_last_window(detector: NoFlyZoneDetector) -> None:
@@ -408,4 +520,4 @@ def test_run_detectors_flushes_after_the_last_window(detector: NoFlyZoneDetector
     from air.windowing import run_detectors
 
     [episode] = list(run_detectors([[make_obs()]], [detector]))
-    assert [e.entity_id for e in episode.entities_involved] == ["aircraft:a1b2c3", "zone:P-901"]
+    assert [e.entity_id for e in episode.entities_involved] == ["icao24:a1b2c3", "zone:P-901"]

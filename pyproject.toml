@@ -13,6 +13,7 @@ dependencies = [
     # when a lane genuinely needs one (e.g. pandas/pyarrow for EDA).
     "pyyaml>=6.0",  # configs/detectors/*.yaml -> frozen config dataclasses
     "pandas>=2.0",  # air/normalizers reads recorded ADS-B CSVs
+    "tzdata>=2024.1",  # IANA zones for recurring FAA schedules, including on Windows
 ]
 
 [project.optional-dependencies]
@@ -110,8 +111,10 @@ exclude = "^(contracts|build|\\.venv)/"
 
 [[tool.mypy.overrides]]
 # Third-party libraries without type stubs. pandas is here because no extra
-# installs pandas-stubs; without it mypy fails on the dashboard in CI.
-module = ["h3.*", "shapely.*", "pyarrow.*", "streamlit.*", "folium.*", "pydeck.*", "pandas.*"]
+# installs pandas-stubs; without it mypy fails on the dashboard in CI. psycopg
+# is in the db extra only, which the NFZ CI job does not install; runner.py
+# imports it lazily.
+module = ["h3.*", "shapely.*", "pyarrow.*", "streamlit.*", "folium.*", "pydeck.*", "pandas.*", "psycopg.*"]
 ignore_missing_imports = true
 
 # numpy arrives via shapely. Its bundled stubs use 3.12+ `type` statements,

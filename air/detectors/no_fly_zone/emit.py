@@ -96,6 +96,8 @@ from contracts import (
 
 from .types import Detection
 
+_METERS_PER_NAUTICAL_MILE = 1852.0
+
 DOMAIN = "air"
 SOURCE_SYSTEM = "skywatch"
 STEP_NAME = "no_fly_zone_detection"
@@ -194,7 +196,9 @@ def to_platform_detection(detection: Detection) -> PlatformDetection:
         risk_zone_ids=[str(zone_id)] if zone_id else [],
         # Contract requires non-negative; penetration is a depth, never signed.
         distance_meters=(
-            abs(float(penetration_nm)) * 1852.0 if penetration_nm is not None else None
+            abs(float(penetration_nm)) * _METERS_PER_NAUTICAL_MILE
+            if penetration_nm is not None
+            else None
         ),
     )
 

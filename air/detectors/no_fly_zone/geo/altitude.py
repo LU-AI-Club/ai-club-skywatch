@@ -8,11 +8,13 @@ both on a common reference.
 Inputs
 ------
 state:
-    Supplies ``alt_geom_ft`` and ``alt_baro_ft``. Geometric altitude is preferred
-    for MSL / SFC limits because MSL floors and ceilings are true heights above
-    sea level. Barometric (pressure) altitude is preferred for FL (Flight Level)
-    limits because Flight Levels are standard pressure altitudes (referenced to
-    1013.25 hPa / 29.92 inHg). Each falls back to the other when unavailable.
+    Supplies ``alt_geom_ft`` and ``alt_baro_ft``. readsb defines geometric
+    altitude as GNSS/INS height referenced to the WGS84 ellipsoid; this module
+    currently uses it as an uncorrected proxy for MSL / SFC limits because no
+    geoid model is available. Barometric (pressure) altitude is preferred for
+    FL (Flight Level) limits because Flight Levels are standard pressure
+    altitudes (referenced to 1013.25 hPa / 29.92 inHg). Each falls back to the
+    other when unavailable.
 zone:
     Supplies ``floor_ft``/``floor_datum`` and ``ceiling_ft``/``ceiling_datum``.
 
@@ -27,9 +29,12 @@ Both altitude fields ``None``
     Returns ``within=False``, ``altitude_source=NONE``,
     ``reason=ExitReason.BAD_INPUT``. Abstain; never guess an altitude.
 :attr:`Datum.AGL`
-    Needs a terrain model this detector does not have. Abstain with
-    ``BAD_INPUT`` rather than silently comparing an AGL floor to an MSL
-    altitude, which would be wrong by the terrain elevation.
+    A floor is checked against aircraft altitude minus interpolated terrain
+    elevation. Where terrain is outside the grid or has a missing sample, the
+    floor is placed with the area-wide bound ``geometry.off_grid_terrain_ft``
+    instead: clear of the range it allows the answer is certain, inside it
+    (or with no bound configured) abstain with ``BAD_INPUT``. An AGL ceiling
+    still needs a terrain model and is not supported by this task.
 
 Notes
 -----
@@ -39,12 +44,15 @@ back to ``state.alt_geom_ft``). :attr:`Datum.SFC` is stored as 0.
 """
 from __future__ import annotations
 
+from math import isclose
+
 from ..types import (
     AircraftState,
     AirspaceZone,
     AltitudeSource,
     Datum,
     ExitReason,
+    TerrainGrid,
     VerticalResult,
 )
 
@@ -55,7 +63,8 @@ def _resolve_altitude(
     """Resolve the aircraft altitude and source appropriate for ``datum``.
 
     FL limits are standard pressure altitudes, so barometric altitude is preferred.
-    MSL and SFC limits are geometric heights, so geometric altitude is preferred.
+    MSL and SFC limits use geometric altitude as an uncorrected proxy; the input
+    is ellipsoid-referenced and has not been converted with a geoid model.
     Each falls back to the other available altitude if the preferred one is None.
     """
     if datum == Datum.FL:
@@ -70,8 +79,70 @@ def _resolve_altitude(
         return state.alt_baro_ft, AltitudeSource.BAROMETRIC
 
 
-def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
-    """Compare ``state``'s altitude to ``zone``'s floor/ceiling band."""
+def terrain_elevation_ft(grid: TerrainGrid, lat: float, lon: float) -> float | None:
+    """Bilinearly interpolate terrain elevation, or return ``None`` off-grid.
+
+    All four surrounding samples must be available; partial cells are treated
+    as unknown so a no-data value can never be mistaken for ground level.
+    """
+    rows = len(grid.elevations_ft)
+    columns = len(grid.elevations_ft[0])
+    row_position = (lat - grid.lat_min) / grid.lat_step
+    column_position = (lon - grid.lon_min) / grid.lon_step
+    if row_position < 0 and isclose(row_position, 0.0, abs_tol=1e-9):
+        row_position = 0.0
+    if column_position < 0 and isclose(column_position, 0.0, abs_tol=1e-9):
+        column_position = 0.0
+    if row_position > rows - 1 and isclose(row_position, rows - 1, abs_tol=1e-9):
+        row_position = float(rows - 1)
+    if column_position > columns - 1 and isclose(
+        column_position, columns - 1, abs_tol=1e-9
+    ):
+        column_position = float(columns - 1)
+    if (
+        row_position < 0
+        or column_position < 0
+        or row_position > rows - 1
+        or column_position > columns - 1
+    ):
+        return None
+
+    row = min(int(row_position), rows - 2)
+    column = min(int(column_position), columns - 2)
+    row_fraction = row_position - row
+    column_fraction = column_position - column
+    corners = (
+        grid.elevations_ft[row][column],
+        grid.elevations_ft[row][column + 1],
+        grid.elevations_ft[row + 1][column],
+        grid.elevations_ft[row + 1][column + 1],
+    )
+    if any(value is None for value in corners):
+        return None
+    southwest, southeast, northwest, northeast = corners
+    assert southwest is not None
+    assert southeast is not None
+    assert northwest is not None
+    assert northeast is not None
+    south = southwest + column_fraction * (southeast - southwest)
+    north = northwest + column_fraction * (northeast - northwest)
+    return south + row_fraction * (north - south)
+
+
+def vertical_check(
+    state: AircraftState,
+    zone: AirspaceZone,
+    terrain: TerrainGrid | None = None,
+    off_grid_terrain_ft: tuple[float, float] | None = None,
+) -> VerticalResult:
+    """Compare ``state``'s altitude to ``zone``'s floor/ceiling band.
+
+    ``off_grid_terrain_ft`` is the (lowest, highest) ground elevation in ft MSL
+    that holds anywhere the zones are. It places an AGL floor where the terrain
+    grid has no value: the floor is then somewhere between ``floor + lowest``
+    and ``floor + highest``, so an aircraft outside that range is decided and
+    one inside it still abstains.
+    """
     # -------------------------------------------------------------------------
     # 1. Validate available altitudes
     # If neither altitude is available, abstain with BAD_INPUT (never guess).
@@ -85,12 +156,10 @@ def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
         )
 
     # -------------------------------------------------------------------------
-    # 2. Validate zone datums
-    # AGL (Above Ground Level) requires a terrain elevation model that this
-    # detector lacks. Comparing AGL directly against MSL/FL would produce
-    # significant errors, so abstain with BAD_INPUT when AGL is encountered.
+    # 2. An AGL ceiling needs a separate terrain-relative ceiling policy.
+    # This task only supports AGL floors.
     # -------------------------------------------------------------------------
-    if zone.floor_datum == Datum.AGL or zone.ceiling_datum == Datum.AGL:
+    if zone.ceiling_datum == Datum.AGL:
         default_alt = (
             state.alt_geom_ft
             if state.alt_geom_ft is not None
@@ -109,14 +178,59 @@ def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
         )
 
     # -------------------------------------------------------------------------
-    # 3. Resolve altitude values for each boundary datum
-    # MSL/SFC boundaries are geometric heights above sea level, so geometric
-    # altitude is preferred, falling back to barometric.
-    # FL (Flight Level) boundaries are pressure altitudes, so barometric
-    # altitude is preferred, falling back to geometric.
+    # 3. Resolve the floor. AGL floors compare height above the interpolated
+    # terrain. Where the grid has no value, step 3a falls back to the area-wide
+    # terrain bound, and abstains with BAD_INPUT when that cannot decide.
     # -------------------------------------------------------------------------
-    floor_alt, floor_source = _resolve_altitude(state, zone.floor_datum)
-    ceiling_alt, ceiling_source = _resolve_altitude(state, zone.ceiling_datum)
+    if zone.floor_datum is Datum.AGL:
+        terrain_ft = (
+            terrain_elevation_ft(terrain, state.lat, state.lon)
+            if terrain is not None
+            else None
+        )
+        floor_altitude, floor_source = (
+            (state.alt_geom_ft, AltitudeSource.GEOMETRIC)
+            if state.alt_geom_ft is not None
+            else (state.alt_baro_ft, AltitudeSource.BAROMETRIC)
+        )
+        assert floor_altitude is not None
+        if terrain_ft is None:
+            # 3a. No terrain value here (off the grid, or a no-data cell).
+            # Above the ceiling is clear wherever the ground is.
+            ceiling_alt, ceiling_source = _resolve_altitude(state, zone.ceiling_datum)
+            if ceiling_alt > zone.ceiling_ft:
+                return VerticalResult(
+                    within=False,
+                    altitude_ft=ceiling_alt,
+                    altitude_source=ceiling_source,
+                    reason=ExitReason.VERTICAL_CLEAR,
+                )
+            unknown = VerticalResult(
+                within=False,
+                altitude_ft=floor_altitude,
+                altitude_source=floor_source,
+                reason=ExitReason.BAD_INPUT,
+            )
+            if off_grid_terrain_ft is None:
+                return unknown
+            lowest_ft, highest_ft = off_grid_terrain_ft
+            # Below the floor even over the lowest ground: clear.
+            if floor_altitude - lowest_ft < zone.floor_ft:
+                return VerticalResult(
+                    within=False,
+                    altitude_ft=floor_altitude - lowest_ft,
+                    altitude_source=floor_source,
+                    reason=ExitReason.VERTICAL_CLEAR,
+                )
+            # Above it only over low ground: cannot tell, so abstain.
+            if floor_altitude - highest_ft < zone.floor_ft:
+                return unknown
+            # Above the floor even over the highest ground.
+            floor_alt = floor_altitude - highest_ft
+        else:
+            floor_alt = floor_altitude - terrain_ft
+    else:
+        floor_alt, floor_source = _resolve_altitude(state, zone.floor_datum)
 
     # -------------------------------------------------------------------------
     # 4. Check vertical containment within the [floor_ft, ceiling_ft] band
@@ -131,6 +245,7 @@ def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
             reason=ExitReason.VERTICAL_CLEAR,
         )
 
+    ceiling_alt, ceiling_source = _resolve_altitude(state, zone.ceiling_datum)
     if ceiling_alt > zone.ceiling_ft:
         return VerticalResult(
             within=False,
@@ -158,4 +273,3 @@ def vertical_check(state: AircraftState, zone: AirspaceZone) -> VerticalResult:
         altitude_source=within_source,
         reason=None,
     )
-

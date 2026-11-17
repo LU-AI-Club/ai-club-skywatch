@@ -9,7 +9,7 @@ nothing else in the package. Rules:
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import date, datetime
+from datetime import date, datetime, time
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
@@ -102,6 +102,29 @@ class TimeWindow:
 
 
 @dataclass(frozen=True, slots=True)
+class RecurringWindow:
+    """A recurring local-time activation window."""
+    start_time: time | None = None
+    end_time: time | None = None
+    weekdays: tuple[int, ...] = ()   # Python weekday numbers; empty means every day
+    start_month_day: tuple[int, int] | None = None
+    end_month_day: tuple[int, int] | None = None
+    start_sunrise: bool = False
+    end_sunset: bool = False
+    all_day: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class TerrainGrid:
+    """Regular-grid terrain elevations in feet MSL, ordered south-to-north."""
+    lat_min: float
+    lon_min: float
+    lat_step: float
+    lon_step: float
+    elevations_ft: tuple[tuple[float | None, ...], ...]
+
+
+@dataclass(frozen=True, slots=True)
 class AirspaceZone:
     """One restricted volume. Produced by stream B."""
     zone_id: str                     # "P-56", "R-6601A", "TFR-5/0668"
@@ -114,6 +137,13 @@ class AirspaceZone:
     ceiling_datum: Datum
     activation: Activation
     active_windows: tuple[TimeWindow, ...] = ()
+    recurring_windows: tuple[RecurringWindow, ...] = ()
+    schedule_timezone: str = "UTC"
+    unknown_outside_schedule: bool = False
+    # True when the published hours only bound when the zone *may* be in use
+    # ("0630 - SUNSET, DAILY, BY NOTAM", "INTERMITTENT ..."): inside them the
+    # zone is live only if a NOTAM or the using agency says so.
+    unknown_within_schedule: bool = False
     controlling_agency: str | None = None
     source: str = ""                 # e.g. "faa_sua"
     source_asof: date | None = None  # publication cycle of the source file
@@ -167,7 +197,7 @@ class Detection:
     """Common SENTINEL Detection contract (syllabus section 6). Stream G."""
     detector_id: str
     detector_version: str
-    entity_ids: tuple[str, ...]              # ("aircraft:ace81d",)
+    entity_ids: tuple[str, ...]              # ("icao24:ace81d",)
     detection_type: str
     severity: Severity
     anomaly_score: float

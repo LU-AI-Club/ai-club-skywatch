@@ -86,6 +86,28 @@ Refresh them each FAA cycle (8 weeks; needs internet) and commit the result:
 python scripts/make_faa_airspace.py --radius-nm 65 --also "P-56" --out air/detectors/no_fly_zone/fixtures/airspace/klyh-local-faa.geojson
 ```
 
+**Demo zone (for demos and frontend testing).** The real zones fire rarely, so
+there is one synthetic zone you can switch on: **DEMO-1**, a 1 nm prohibited
+circle 3 nm west of KLYH, surface to 5,000 ft MSL, always active
+(`fixtures/airspace/klyh-demo.geojson`). It sits where local arrivals and
+departures fly: on the recorded hour (`data/lynchburg_adsb.csv`) it gave 6 HIGH
+incursions from 6 aircraft, roughly one every 5-10 minutes. It is **not real
+airspace**; its name says so and its `zone_id` starts with `DEMO-`, so the
+frontend can badge it.
+
+It is added on top of the real zones, never instead of them, and only when
+`SKYWATCH_NFZ_DEMO_ZONES=1` is set (off by default; replay, tests and the CLI
+never load it). The runner logs a WARNING when it is on.
+
+```bash
+SKYWATCH_NFZ_DEMO_ZONES=1 docker compose --profile runners up -d --build no-fly-zone-runner
+docker compose --profile runners run --rm -e SKYWATCH_NFZ_DEMO_ZONES=1 no-fly-zone-runner --detector no_fly_zone --once
+```
+
+Turn it off by restarting without the variable. Rows it wrote stay in
+`no_fly_zone_detections`; clear them with
+`DELETE FROM no_fly_zone_detections WHERE zone_id LIKE 'DEMO-%';`
+
 ### One-shot (recommended for testing)
 
 Run a single read→detect→persist pass and exit. Add `--build` on the first run so

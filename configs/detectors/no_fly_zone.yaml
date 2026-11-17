@@ -21,6 +21,14 @@ sampling:
                           # (logic/episodes.py); small planes may report every 5-10 s
   seen_retention_sec: 3600  # adapter forgets an aircraft's last-processed time after
                           # this much silence; must exceed the live runner's window_s
+  # How far behind the newest report a report may arrive and still extend its
+  # incursion. Silence is measured against (newest report - this), so a report
+  # that arrives late, while other aircraft are already further ahead, does not
+  # find its episode closed and open a second row for the same incursion.
+  # The cost is that a finished incursion closes up to this much later.
+  # Keep it below the live runner's window_s - step_s (300 - 30 s): reports
+  # later than that are never re-read anyway.
+  feed_lateness_sec: 120
 
 airspace:
   # Relative to air/detectors/no_fly_zone/ (the CLI resolves it there), not to this file.
@@ -31,6 +39,13 @@ airspace:
   # it each FAA cycle with the command in docs/RUN_PIPELINE.md.
   # Tests, replay and the CLI always use fixture_path.
   live_path: fixtures/airspace/klyh-local-faa.geojson
+  # SYNTHETIC demo zone(s), NOT real airspace: DEMO-1, a 1 nm prohibited circle
+  # 3 nm west of KLYH (SFC-5000 ft MSL, always active) where local traffic flies,
+  # so a live demo or frontend test gets HIGH incursions on real aircraft. Added
+  # ON TOP of the live zones only when SKYWATCH_NFZ_DEMO_ZONES=1 (see
+  # build_live_detector and docs/RUN_PIPELINE.md). Off by default; tests, replay
+  # and the CLI never load it.
+  demo_path: fixtures/airspace/klyh-demo.geojson
   source_asof: "2026-08-07"   # SUA publication cycle; update with the file
   include_types: [PROHIBITED, RESTRICTED, TFR, WARNING, ALERT, MOA]
   # Community-reported U.S. DoD block; heuristic, not authoritative identity proof.
@@ -40,6 +55,17 @@ airspace:
 geometry:
   h3_resolution: 7        # ~5 km cells, matches SENTINEL
   default_uncertainty_m: 185   # used when NIC/NACp are missing
+  # Ground elevation, ft MSL, that holds anywhere our zones are. Used to place
+  # an AGL floor only where the terrain grid has no value. The grid covers
+  # 65 nm around KLYH, and Evers East, Evers Low and Barfoot 1 reach past it.
+  # There, an aircraft above floor + max is above the floor wherever it is,
+  # one below floor + min is below it, and anything between abstains.
+  # max is set above Mount Rogers (5,729 ft), the highest ground in Virginia;
+  # West Virginia's highest, Spruce Knob, is 4,863 ft. Deliberately loose:
+  # widening the grid to the zones' bounds is the real fix and makes this moot.
+  off_grid_terrain_ft:
+    min: 0
+    max: 5800
 
 filters:
   drop_on_ground: true
@@ -54,6 +80,18 @@ scoring:
     MOA: 0.2
   depth_bump_per_nm: 0.01
   depth_bump_max: 0.1
+  # Confidence is evidence strength, not threat severity or a calibrated probability.
+  # Per-report factors multiply; persistence then scales every episode by the elapsed
+  # time of its uninterrupted run of fired reports.
+  confidence:
+    active_activation_factor: 1.0
+    unknown_activation_factor: 0.6
+    strict_position_min_factor: 0.5
+    buffered_position_factor: 0.35
+    preferred_altitude_factor: 1.0
+    fallback_altitude_factor: 0.8
+    persistence_min_factor: 0.3
+    persistence_saturation_sec: 15.0
   context_weights:        # subtracted from the score
     atc_discrete_squawk: 0.4
     military_hex: 0.3
@@ -63,6 +101,12 @@ scoring:
 severity:
   unknown_activation_cap: LOW
   buffered_only: INFO
+  # The highest severity a zone type can reach, whatever else is true.
+  # A MOA is not closed airspace: flying through one is legal even while it is
+  # in use, so an aircraft inside an active MOA is context, never an alarm.
+  # Types not listed are uncapped (HIGH when the zone is known to be active).
+  zone_type_cap:
+    MOA: LOW
 
 dedup:
   # One Detection per incursion episode (logic/episodes.py). An episode closes

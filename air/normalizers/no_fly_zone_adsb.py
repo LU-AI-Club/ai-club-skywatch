@@ -6,12 +6,13 @@ file extension:
 ``.csv``
     A readsb/tar1090 field dump, the format of ``data/lynchburg_adsb.csv``.
     Columns used: ``h`` icao24, ``timestamp``, ``la``/``lo``, ``ab`` baro and
-    ``ag`` geometric altitude (feet), ``gs`` knots, ``tr`` track, ``f``
+    ``ag`` geometric altitude (feet, WGS84 ellipsoid referenced), ``gs`` knots, ``tr`` track, ``f``
     callsign, ``sq`` squawk, ``c`` emitter category, ``n`` NIC, ``np`` NACp,
     ``og`` on-ground flag. Every other column is ignored. Streamed row by row,
     so a large file is never held in memory. The shared
     ``air.normalizers.adsb_csv`` reads the same file but drops ``ag``, ``og``
-    and ``c``, which this detector needs (geometric altitude for MSL bands,
+    and ``c``, which this detector needs (geometric altitude as an uncorrected
+    proxy for MSL bands,
     the on-ground filter), so this detector keeps its own mapping;
     ``COLUMN_MAP.md`` in this folder documents each column.
 ``.parquet``

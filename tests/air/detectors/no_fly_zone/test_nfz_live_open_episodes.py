@@ -93,6 +93,7 @@ def test_incursion_is_emitted_on_entry(live: NoFlyZoneDetector) -> None:
     assert extras["episode_status"] == "OPEN"
     assert extras["episode_end"] is None
     assert extras["report_count"] == 1
+    assert entry.confidence == pytest.approx(0.3)
     assert entry.temporal_bounds.start_time == _TS
     assert entry.temporal_bounds.end_time is None
     summary = entry.evidence[0].summary
@@ -109,6 +110,8 @@ def test_open_snapshots_and_the_closed_episode_share_one_dedup_key(live: NoFlyZo
     assert second.metadata["extras"]["episode_status"] == "OPEN"
     assert second.metadata["extras"]["report_count"] == 3
     assert second.metadata["extras"]["dwell_sec"] == 10.0
+    assert first.confidence < second.confidence
+    assert closed.confidence == second.confidence
 
     assert closed.metadata["extras"]["episode_status"] == "CLOSED"
     assert closed.metadata["extras"]["report_count"] == 3
@@ -117,6 +120,28 @@ def test_open_snapshots_and_the_closed_episode_share_one_dedup_key(live: NoFlyZo
     keys = {detection_dedup_key(d) for d in (first, second, closed)}
     assert len(keys) == 1, "an upsert on the dedup key must keep one row per incursion"
     assert live.open_episodes == 0
+
+
+def test_time_confidence_is_only_updated_when_a_new_report_arrives(
+    live: NoFlyZoneDetector,
+) -> None:
+    [first] = live.detect_observations([inside(0)])
+    first_confidence = first.confidence
+
+    # A different aircraft advances the stream without adding a report to this
+    # episode; the detector must not grow confidence based on wall-clock time.
+    other = make_obs(
+        icao24="ffffff",
+        latitude=36.0,
+        longitude=-81.0,
+        observed_at=_TS + timedelta(seconds=10),
+        source_row_id="test.csv:other10",
+    )
+    assert live.detect_observations([other]) == []
+    assert live.open_episodes == 1
+
+    [updated] = live.detect_observations([inside(5)])
+    assert updated.confidence > first_confidence
 
 
 def test_an_episode_with_no_new_reports_is_not_re_emitted(live: NoFlyZoneDetector) -> None:
@@ -154,7 +179,7 @@ def test_aircraft_is_the_first_entity_and_the_zone_follows(live: NoFlyZoneDetect
     """entities_involved[0] is the aircraft: the dashboard and entity_id column read it."""
     [entry] = live.detect_observations([inside(0)])
     aircraft, zone = entry.entities_involved
-    assert (aircraft.entity_id, aircraft.entity_type) == ("aircraft:a1b2c3", "aircraft")
+    assert (aircraft.entity_id, aircraft.entity_type) == ("icao24:a1b2c3", "aircraft")
     assert (zone.entity_id, zone.entity_type, zone.domain) == ("zone:P-901", "airspace_zone", "air")
 
 

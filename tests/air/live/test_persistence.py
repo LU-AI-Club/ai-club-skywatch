@@ -15,23 +15,25 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
 
 from air.detectors.proximity import ProximityDetector
 from air.live.persistence import PersistResult, dedup_key, persist
+from contracts import Detection
 from tests.conftest import load_observations
 
 TABLE = "proximity_detections"
 
 
-def _detection():
+def _detection() -> Detection:
     [d] = ProximityDetector().detect_observations(load_observations("proximity_head_on.json"))
     return d
 
 
-def _extra(det) -> dict[str, Any]:
+def _extra(det: Detection) -> dict[str, Any]:
     ev = next(e for e in det.evidence if e.evidence_type == "predicted_closest_approach")
     return {
         "member_entity_ids": [e.entity_id for e in det.entities_involved],
@@ -92,7 +94,7 @@ class FakeDB:
 
 
 # --- Always-on tests ------------------------------------------------------------
-def test_same_detection_twice_is_one_insert_then_one_update():
+def test_same_detection_twice_is_one_insert_then_one_update() -> None:
     db, det = FakeDB(), _detection()
     first = persist(db, TABLE, [det])
     second = persist(db, TABLE, [det])
@@ -101,7 +103,7 @@ def test_same_detection_twice_is_one_insert_then_one_update():
     assert len(db.tables[TABLE]) == 1
 
 
-def test_update_keeps_first_seen_and_bumps_last_seen():
+def test_update_keeps_first_seen_and_bumps_last_seen() -> None:
     db, det = FakeDB(), _detection()
     persist(db, TABLE, [det])
     [before] = db.tables[TABLE].values()
@@ -113,7 +115,7 @@ def test_update_keeps_first_seen_and_bumps_last_seen():
     assert after["updated_at"] is not None
 
 
-def test_a_rerun_of_the_detector_updates_instead_of_duplicating():
+def test_a_rerun_of_the_detector_updates_instead_of_duplicating() -> None:
     # A fresh detector run makes a NEW Detection object with a new random
     # detection_id -- the dedup_key is what makes it the same row.
     db = FakeDB()
@@ -124,7 +126,7 @@ def test_a_rerun_of_the_detector_updates_instead_of_duplicating():
     assert row["detection_id"] == str(a.detection_id)  # primary key never changes
 
 
-def test_shared_columns_filled_from_to_dict():
+def test_shared_columns_filled_from_to_dict() -> None:
     db, det = FakeDB(), _detection()
     persist(db, TABLE, [det], run_id="11111111-1111-1111-1111-111111111111")
     [row] = db.tables[TABLE].values()
@@ -133,7 +135,7 @@ def test_shared_columns_filled_from_to_dict():
     assert (row["detector_id"], row["detector_version"]) == ("skywatch.proximity", "0.1.0")
     assert (row["detection_type"], row["severity"]) == ("predicted_proximity", "HIGH")
     assert row["confidence"] == pytest.approx(d["confidence"])
-    assert row["entity_id"] == "aircraft:aaa001"
+    assert row["entity_id"] == "icao24:aaa001"
     assert row["temporal_bounds_start"] == d["temporal_bounds"]["start_time"]
     assert row["temporal_bounds_end"] == d["temporal_bounds"]["end_time"]
     assert row["latitude"] == pytest.approx(37.4154655)
@@ -145,29 +147,29 @@ def test_shared_columns_filled_from_to_dict():
     assert json.loads(row["metadata"])["explanation_facts"]
 
 
-def test_extra_columns_hook_is_merged():
+def test_extra_columns_hook_is_merged() -> None:
     db, det = FakeDB(), _detection()
     persist(db, TABLE, [det], extra_columns=_extra)
     [row] = db.tables[TABLE].values()
-    assert row["member_entity_ids"] == ["aircraft:aaa001", "aircraft:bbb002"]
+    assert row["member_entity_ids"] == ["icao24:aaa001", "icao24:bbb002"]
     assert row["predicted_horizontal_nm"] == pytest.approx(0.2, abs=1e-3)
     assert row["predicted_vertical_ft"] == pytest.approx(200.0)
     assert row["t_cpa_seconds"] == pytest.approx(58.0, abs=0.1)
 
 
-def test_extra_columns_may_not_overwrite_shared_ones():
+def test_extra_columns_may_not_overwrite_shared_ones() -> None:
     with pytest.raises(ValueError, match="severity"):
         persist(FakeDB(), TABLE, [_detection()], extra_columns=lambda d: {"severity": "LOW"})
 
 
-def test_unsafe_table_or_column_names_are_rejected():
+def test_unsafe_table_or_column_names_are_rejected() -> None:
     with pytest.raises(ValueError):
         persist(FakeDB(), "proximity_detections; DROP TABLE x", [_detection()])
     with pytest.raises(ValueError):
         persist(FakeDB(), TABLE, [_detection()], extra_columns=lambda d: {"bad name": 1})
 
 
-def test_detection_without_entities_is_skipped_not_guessed():
+def test_detection_without_entities_is_skipped_not_guessed() -> None:
     det = _detection()
     det.entities_involved = []
     db = FakeDB()
@@ -175,7 +177,7 @@ def test_detection_without_entities_is_skipped_not_guessed():
     assert db.statements == []
 
 
-def test_nothing_to_write_is_a_no_op():
+def test_nothing_to_write_is_a_no_op() -> None:
     db = FakeDB()
     assert persist(db, TABLE, []) == PersistResult()
     assert db.statements == []
@@ -209,7 +211,7 @@ CREATE TEMP TABLE proximity_detections_test (
 
 
 @pytest.fixture
-def pg():
+def pg() -> Iterator[Any]:
     psycopg = pytest.importorskip("psycopg")
     with psycopg.connect(DSN) as conn:
         conn.execute(_TEMP_TABLE)
@@ -218,7 +220,7 @@ def pg():
 
 
 @needs_db
-def test_real_postgres_same_detection_twice_is_one_row(pg):
+def test_real_postgres_same_detection_twice_is_one_row(pg: Any) -> None:
     det = _detection()
     write = lambda: persist(pg, "proximity_detections_test", [det], extra_columns=_extra)  # noqa: E731
     assert write() == PersistResult(inserted=1)
@@ -229,11 +231,11 @@ def test_real_postgres_same_detection_twice_is_one_row(pg):
         " bool_and(updated_at IS NOT NULL), "
         "min(raw_detection->>'detector_id') FROM proximity_detections_test"
     ).fetchone()
-    assert rows == (1, "HIGH", "{aircraft:aaa001,aircraft:bbb002}", True, "skywatch.proximity")
+    assert rows == (1, "HIGH", "{icao24:aaa001,icao24:bbb002}", True, "skywatch.proximity")
 
 
 @needs_db
-def test_real_postgres_rerun_keeps_first_seen(pg):
+def test_real_postgres_rerun_keeps_first_seen(pg: Any) -> None:
     a, b = _detection(), _detection()
     persist(pg, "proximity_detections_test", [a])
     pg.commit()  # the runner commits once per tick; now() is per-transaction
