@@ -1,13 +1,13 @@
 # Detector Design Card — Dangerous / Unusual Proximity
 
-**Owners:** Caroline, Faith. **Reviewer:** Paul. **Status:** v0.1
+**Owners:** Caroline, Faith. **Reviewer:** Paul. **Status:** v0.2
 
 | | |
 |---|---|
 | **Detector ID** | `skywatch.proximity` |
 | **Team** | Proximity — Paul (lead), Erik, Manni, CalebG, CalebK, Caroline, Faith |
 | **Maritime lineage** | SENTINEL M-003 Proximity / Rendezvous |
-| **Version** | 0.1.0 |
+| **Version** | 0.2.0 |
 
 ## 1. Problem
 
@@ -63,7 +63,7 @@ conditions must hold.
 | HIGH | < 0.5 nm | < 400 ft |
 | MEDIUM | < 1.5 nm | < 700 ft |
 | LOW | < 3 nm | < 1,000 ft |
-| INFO | < 5 nm | < 1,000 ft |
+
 
 **Where the numbers live:** every threshold is stored in a versioned
 configuration file, never hardcoded — `configs/detectors/proximity.yaml`.
@@ -71,20 +71,18 @@ configuration file, never hardcoded — `configs/detectors/proximity.yaml`.
 ## 5. Output
 
 A SENTINEL `Detection` naming the two aircraft, a severity
-(INFO / LOW / MEDIUM / HIGH), a confidence score, factual explanation
-statements and known limitations.
-
+(LOW / MEDIUM / HIGH), a confidence score, factual explanation
 **Governance:** we never say "dangerous" or "violation." We report the
 distance, the altitude gap and the time to closest approach as observations. A
 separate Xenith service decides what those observations mean.
+- **Maximum Current Separation (10 nautical miles):** Aircraft pairs more than 10 nautical miles apart are excluded because straight-line predictions become less reliable as the time to closest approach increases. The 10-nautical-mile limit keeps even the fastest-closing pairs to approximately 40 seconds of lookahead, improving prediction reliability.
+- **Minimum Altitude (5,000 feet MSL):** The detector excludes aircraft below 5,000 feet MSL because this traffic is primarily associated with pattern work, approaches, and departures. These situations require airport and runway context that the detector does not currently have; this detector is designed to identify en route proximity instead.
 
 ## 6. Ground truth & evaluation
 
 Two approaches:
 
-1. **Synthetic scenarios** — we script encounters where the correct outcome is
-   known by construction. We already have five: head-on, diverging, stacked,
-   crossing and ground. These verify the detector identifies qualifying
+ verify the detector identifies qualifying
    encounters and does not flag scenarios that fall outside its rules.
 2. **Manual review of real data** — we review flagged pairs from real ADS-B
    data and record the judgements in a labeled evaluation set.
@@ -127,9 +125,7 @@ Detection for a scripted converging pair.
 
 **Deferred to Weeks 9–11:**
 
-- Approach-traffic context filters, to cut false positives from aircraft
-  following the same landing approach
-- De-duplication, so one encounter produces one detection
+- Approach-traffic context filters, to cut false positives from aircraft  following the same landing approach
 - Further context filtering and integration with the wider platform
 
 ## Known limitations (carry these into every demo)
