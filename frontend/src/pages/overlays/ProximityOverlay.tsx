@@ -36,6 +36,11 @@ interface Evidence {
 // live pair always has a fix well inside this.
 const MAX_FIX_GAP_S = 60;
 const MAX_LOOKBACK_HOURS = 168; // the API's cap on /observations/tracks
+// The track comes back OLDEST first and is cut at `limit` (default 2000). The
+// poller stores a fix about every 10 s (~360/h), so at a 24 h lookback the
+// default would return only the oldest ~5 h and miss recent detections. 10000
+// is the API's maximum (~27 h of fixes).
+const TRACK_LIMIT = 10000;
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -123,8 +128,10 @@ export function ProximityOverlay({
     const controller = new AbortController();
 
     // One track request per aircraft, even if it appears in several detections.
-    // Look back far enough to reach the oldest detection on screen.
-    const oldest = Math.min(...detections.map((d) => evaluatedAt(d).getTime()), Date.now());
+    // Look back far enough to reach the oldest detection on screen (ignoring any
+    // unparseable time, which would otherwise make every request NaN).
+    const times = detections.map((d) => evaluatedAt(d).getTime()).filter(Number.isFinite);
+    const oldest = Math.min(...times, Date.now());
     const lookbackHours = Math.min(MAX_LOOKBACK_HOURS, (Date.now() - oldest) / 3_600_000 + 0.5);
     const tracks = new Map<string, Promise<TrackPoint[]>>();
     const trackOf = (entityId: string) => {
@@ -133,7 +140,7 @@ export function ProximityOverlay({
           entityId,
           fetchJSON<FeatureCollection<TrackFeature>>(
             "/observations/tracks",
-            { entity_id: entityId, lookback_hours: lookbackHours },
+            { entity_id: entityId, lookback_hours: lookbackHours, limit: TRACK_LIMIT },
             controller.signal,
           ).then((fc) => fc.features[0]?.properties.points ?? []),
         );
