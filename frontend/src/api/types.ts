@@ -60,3 +60,14 @@ export interface DetectorRun {
   counts: Record<string, unknown>;
   error: string | null;
 }
+
+// --- Spoofing team ---------------------------------------------------------
+// One row of GET /spoofing-gates: how many findings each rule produced. Rules
+// with no findings come back with count 0 rather than being absent, so the
+// page can show "live but quiet" instead of hiding the rule.
+export interface SpoofingGateCount {
+  gate: string;
+  count: number;
+  latest: string | null;
+  avg_confidence: number | null;
+}
