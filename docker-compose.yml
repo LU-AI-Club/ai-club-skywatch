@@ -87,6 +87,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # React single-page app (Vite build served by nginx). See docs/FRONTEND_PLAN.md.
+  #   docker compose up -d db api frontend   ->  http://localhost:8081
+  # For day-to-day UI work, run the Vite dev server instead (cd frontend; npm run dev).
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: skywatch/frontend:local
+    container_name: skywatch-frontend
+    ports:
+      - "${FRONTEND_PORT:-8081}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
   # One runner per detector. All three share the image above; each sets its
   # detector via `command` (args to the Dockerfile ENTRYPOINT). Override
   # window/step/poll by appending flags, e.g. ["--detector","proximity","--window-s","180"].
