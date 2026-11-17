@@ -10,6 +10,7 @@ import { useProximityDetections } from "../api/hooks";
 import { DetectionTable } from "../components/DetectionTable";
 import { StatCard } from "../components/StatCard";
 import { EmptyState } from "../components/EmptyState";
+import DetectorHealth from "../components/DetectorHealth";
 
 export function ProximityPage() {
   const { data, loading, error, reload } = useProximityDetections({ since_hours: 24 });
@@ -28,8 +29,10 @@ export function ProximityPage() {
           starting point.
         </p>
       </div>
-
-      {error && <EmptyState kind="error" message={`Couldn't load detections: ${error}`} />}
+	
+	<DetectorHealth />
+      
+	{error && <EmptyState kind="error" message={`Couldn't load detections: ${error}`} />}
 
       <div className="stat-grid">
         <StatCard label="Detections (24h)" value={loading ? "…" : rows.length} />
