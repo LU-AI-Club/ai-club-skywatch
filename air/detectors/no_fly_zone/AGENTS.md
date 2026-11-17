@@ -43,6 +43,10 @@ Stream G must populate `extras` with `observed_at`, `source_row_id`, `lat` and `
 because the platform contract requires a timestamp and provenance that `types.Detection`
 does not carry. See emit.py for the full field mapping.
 Each stage records an ExitReason when a state leaves without a detection.
+The committed `fixtures/terrain/klyh-65nm.json` grid is loaded once when a
+detector is built and passed to stream D. AGL floors are checked only where
+terrain is available; off-grid or no-data locations abstain with `BAD_INPUT`.
+Recurring FAA schedules are stored in the zone contract in their local timezone.
 
 ## Module map and signatures
 | Stream | File | Signature |
@@ -51,7 +55,7 @@ Each stage records an ExitReason when a state leaves without a detection.
 | B | ingest/airspace_loader.py | load_zones(path) -> list[AirspaceZone]; load_filtered_zones(path, cfg) -> list[AirspaceZone] |
 | C | geo/zone_index.py | candidate_zone_ids(state, zones, cfg) -> tuple[str, ...] |
 | C | geo/containment.py | check_containment(state, zones, cfg) -> ContainmentResult |
-| D | geo/altitude.py | vertical_check(state, zone) -> VerticalResult |
+| D | geo/altitude.py | vertical_check(state, zone, terrain=None) -> VerticalResult |
 | E | logic/activation.py | is_active(zone, ts) -> ActivationResult |
 | F | logic/context.py | gather_signals(state, cfg) -> list[ContextSignal] |
 | G | logic/scoring.py | build_detection(...) -> Detection |
@@ -59,10 +63,10 @@ Each stage records an ExitReason when a state leaves without a detection.
 | H | cli.py, fixtures/ | python -m air.detectors.no_fly_zone run --input x --out y |
 | I | collect/collector.py | collect(url, out_dir) -> None |
 | J | dashboard/app.py | streamlit run air/detectors/no_fly_zone/dashboard/app.py |
-| Lead | logic/detector.py | run(states, zones, cfg, *, exit_counts, per_report) — wiring only |
+| Lead | logic/detector.py | run(states, zones, cfg, *, exit_counts, per_report, terrain=None) — wiring only |
 | Lead | emit.py | to_platform_detection(detection) -> contracts.Detection |
 | Lead | adapter.py | NoFlyZoneDetector.detect_observations(list[AdsbObservation]) -> list[contracts.Detection]; flush() at end of stream; emit_open=True also returns open episodes (OPEN, no end time) |
-| Lead | `__init__.py` | build_detector(config_path=None, airspace_path=None, *, emit_open=False) -> NoFlyZoneDetector; build_live_detector(...) = emit_open=True, used by scripts/run_live_detector.py |
+| Lead | `__init__.py` | build_detector(config_path=None, airspace_path=None, *, emit_open=False) -> NoFlyZoneDetector; loads terrain once; build_live_detector(...) = emit_open=True, used by scripts/run_live_detector.py |
 
 ## Input data
 Two routes in, one pipeline. They must give identical detections (test_nfz_adapter.py

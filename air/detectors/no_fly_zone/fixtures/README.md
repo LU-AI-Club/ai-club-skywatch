@@ -49,3 +49,17 @@ and positions are real; the zone is not.
 No fixture yet covers `on_ground`, `bad_input` (both altitudes null) or
 `buffered_only` (just outside the fence with a poor NIC). Whoever owns the
 false-positive lane should add them.
+
+## Local FAA schedules and terrain
+
+`airspace/klyh-local-faa.geojson` carries parsed recurring schedules in
+`America/New_York`. The Farmville, Evers, Barfoot, and R-6602A schedule
+phrasings are active during their published windows; outside windows that
+allow additional NOTAM activation, status stays unknown. Thirteen of the 15
+local zones now have known activation.
+
+`terrain/klyh-65nm.json` is a committed USGS 3DEP elevation grid covering the
+65 nm KLYH operating area. Its approximately 2 km cells are stored in feet
+MSL and bilinearly interpolated for AGL floors. It is loaded once at detector
+construction; the detector makes no network requests. Locations outside the
+grid or interpolation cells containing no-data are skipped.

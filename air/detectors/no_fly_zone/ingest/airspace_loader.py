@@ -8,7 +8,9 @@ Inputs
 path:
     A GeoJSON FeatureCollection. Each feature needs a polygon geometry in
     EPSG:4326 (lon/lat order) and properties carrying the zone id, name, type,
-    altitude floor/ceiling with their datums, and activation rule.
+    altitude floor/ceiling with their datums, and activation rule. Recurring
+    schedules may include a timezone, weekdays, seasonal bounds, and solar
+    events.
 
 Outputs
 -------
@@ -43,14 +45,22 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from shapely.geometry import shape
 
 from ..config import Config
-from ..types import Activation, AirspaceZone, Datum, TimeWindow, ZoneType
+from ..types import (
+    Activation,
+    AirspaceZone,
+    Datum,
+    RecurringWindow,
+    TimeWindow,
+    ZoneType,
+)
 
 _POLYGON_TYPES = ("Polygon", "MultiPolygon")
 
@@ -69,6 +79,33 @@ def _limit(value: Any, datum_raw: Any, missing: tuple[float, Datum]) -> tuple[fl
     if value is None:
         return missing
     return float(value), Datum(datum_raw) if datum_raw is not None else Datum.MSL
+
+
+def _month_day(raw: str | None) -> tuple[int, int] | None:
+    if raw is None:
+        return None
+    month, day = (int(part) for part in raw.split("-", maxsplit=1))
+    date(2000, month, day)
+    return month, day
+
+
+def _recurring_window(raw: dict[str, Any]) -> RecurringWindow:
+    """Parse one JSON recurring window into the immutable zone contract."""
+    start_raw = raw.get("start_time")
+    end_raw = raw.get("end_time")
+    weekdays = tuple(int(day) for day in raw.get("weekdays", []))
+    if any(day < 0 or day > 6 for day in weekdays):
+        raise ValueError(f"recurring window has an invalid weekday: {weekdays!r}")
+    return RecurringWindow(
+        start_time=time.fromisoformat(start_raw) if start_raw is not None else None,
+        end_time=time.fromisoformat(end_raw) if end_raw is not None else None,
+        weekdays=weekdays,
+        start_month_day=_month_day(raw.get("start_month_day")),
+        end_month_day=_month_day(raw.get("end_month_day")),
+        start_sunrise=bool(raw.get("start_sunrise", False)),
+        end_sunset=bool(raw.get("end_sunset", False)),
+        all_day=bool(raw.get("all_day", False)),
+    )
 
 
 def load_zones(path: str | Path) -> list[AirspaceZone]:
@@ -103,6 +140,18 @@ def load_zones(path: str | Path) -> list[AirspaceZone]:
             TimeWindow(start=_utc(w["start"]), end=_utc(w["end"]))
             for w in props.get("active_windows", [])
         )
+        recurring_windows = tuple(
+            _recurring_window(window) for window in props.get("recurring_windows", [])
+        )
+        schedule_timezone = str(props.get("schedule_timezone") or "UTC")
+        if recurring_windows:
+            try:
+                ZoneInfo(schedule_timezone)
+            except ZoneInfoNotFoundError as exc:
+                raise ValueError(
+                    f"unknown schedule timezone {schedule_timezone!r} "
+                    f"for zone {props['zone_id']!r}"
+                ) from exc
 
         source_asof_raw = props.get("source_asof")
         source_asof = date.fromisoformat(source_asof_raw) if source_asof_raw else None
@@ -118,6 +167,9 @@ def load_zones(path: str | Path) -> list[AirspaceZone]:
             ceiling_datum=ceiling_datum,
             activation=Activation(props["activation"]),
             active_windows=active_windows,
+            recurring_windows=recurring_windows,
+            schedule_timezone=schedule_timezone,
+            unknown_outside_schedule=bool(props.get("unknown_outside_schedule", False)),
             controlling_agency=props.get("controlling_agency"),
             source=props.get("source", ""),
             source_asof=source_asof,
