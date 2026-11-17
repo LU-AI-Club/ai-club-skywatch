@@ -8,19 +8,14 @@
 //   - Map:    render <MapView> (import from ../map/MapView) and use
 //             useLeafletMap() inside it to draw on the raw Leaflet map.
 //   - Styling: the shared tokens live in theme.css, but you may bring your own.
-import { useMemo } from "react";
 import { useSpoofingDetections } from "../api/hooks";
 import { DetectionTable } from "../components/DetectionTable";
-import { StatCard } from "../components/StatCard";
 import { EmptyState } from "../components/EmptyState";
+import SpoofingSummary from "../components/SpoofingSummary";
 
 export function SpoofingPage() {
   const { data, loading, error, reload } = useSpoofingDetections({ since_hours: 24 });
   const rows = data ?? [];
-  const highOrWorse = useMemo(
-    () => rows.filter((d) => ["high", "critical"].includes(String(d.severity).toLowerCase())).length,
-    [rows],
-  );
 
   return (
     <div className="page">
@@ -34,10 +29,7 @@ export function SpoofingPage() {
 
       {error && <EmptyState kind="error" message={`Couldn't load detections: ${error}`} />}
 
-      <div className="stat-grid">
-        <StatCard label="Detections (24h)" value={loading ? "…" : rows.length} />
-        <StatCard label="High / critical" value={loading ? "…" : highOrWorse} />
-      </div>
+      <SpoofingSummary detections={rows} windowHours={24} />
 
       <div style={{ margin: "10px 0 16px" }}>
         <button className="btn ghost" onClick={reload} disabled={loading}>
