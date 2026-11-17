@@ -225,9 +225,13 @@ class EpisodeTracker:
     def close_silent(self, now: datetime) -> list[Detection]:
         """Close episodes of aircraft silent for more than ``max_gap_sec`` before ``now``.
 
-        Safe to call at any time: an aircraft silent that long would have its
-        episodes closed by the gap rule on its next report anyway, so closing
-        them now changes when they are emitted, never what they contain.
+        An aircraft silent that long would have its episodes closed by the gap
+        rule on its next report anyway, so closing them now changes when they
+        are emitted, never what they contain, provided no report older than
+        ``now`` is still to come. Callers whose reports can arrive late pass a
+        ``now`` held back by that lateness (the adapter's
+        ``sampling.feed_lateness_sec``); a report later than that finds its
+        episode closed and starts a new one.
         """
         closed: list[Detection] = []
         for aircraft in list(self._last_seen):

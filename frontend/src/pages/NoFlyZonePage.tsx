@@ -7,8 +7,11 @@
 // The airspace polygons are NOT served by the API — fetch the static GeoJSON
 // directly and overlay it (inside a <MapView>, add it with L.geoJSON). The
 // fixtures live under air/detectors/no_fly_zone/fixtures/airspace/ in the repo;
-// copy the one you want into public/ so the app can fetch it, e.g.
-//   const zones = await fetch("/airspace/klyh-150nm.geojson").then((r) => r.json());
+// copy the two the live detector uses into public/airspace/ so the app can fetch
+// them: klyh-local-faa.geojson (the 15 real zones) and klyh-demo.geojson (DEMO-1).
+//   const zones = await fetch("/airspace/klyh-local-faa.geojson").then((r) => r.json());
+// Each feature's properties.zone_id matches the zone_id column on a row. Not
+// klyh-150nm.geojson: those are made-up test zones the live detector never loads.
 import { useMemo } from "react";
 import { useNoFlyZoneDetections } from "../api/hooks";
 import { DetectionTable } from "../components/DetectionTable";

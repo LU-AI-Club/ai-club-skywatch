@@ -139,6 +139,15 @@ def _validate(raw: Mapping[str, Any]) -> None:
         raise ValueError("sampling.max_gap_sec must be positive")
     if float(raw["sampling"]["seen_retention_sec"]) <= float(raw["sampling"]["max_gap_sec"]):
         raise ValueError("sampling.seen_retention_sec must exceed sampling.max_gap_sec")
+    lateness = float(raw["sampling"].get("feed_lateness_sec", 0))
+    if lateness < 0:
+        raise ValueError("sampling.feed_lateness_sec must not be negative")
+    if lateness + float(raw["sampling"]["max_gap_sec"]) >= float(
+        raw["sampling"]["seen_retention_sec"]
+    ):
+        raise ValueError(
+            "sampling.seen_retention_sec must exceed feed_lateness_sec + max_gap_sec"
+        )
     clears = raw["dedup"]["clear_observations_to_close"]
     if isinstance(clears, bool) or not isinstance(clears, int) or clears < 1:
         raise ValueError("dedup.clear_observations_to_close must be an integer >= 1")

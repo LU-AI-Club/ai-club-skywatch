@@ -66,7 +66,9 @@ span a window edge. The detector therefore keeps one
 
 * each call feeds its reports to the tracker and returns only the episodes
   that closed (two clear reports, or ``sampling.max_gap_sec`` of silence,
-  measured against the newest report seen so far);
+  measured against the newest report seen so far less
+  ``sampling.feed_lateness_sec``, so an aircraft whose reports arrive behind
+  everyone else's is not closed while they are still on their way);
 * a report at or before the newest one already processed **for the same
   aircraft** is skipped (counted in ``skipped_reports``), so sliding windows
   that overlap do not feed the same report twice. The check is per aircraft,
@@ -219,6 +221,11 @@ class NoFlyZoneDetector(BaseDetector):
         self._seen_retention = timedelta(
             seconds=float(cfg["sampling"]["seen_retention_sec"])
         )
+        # Silence is judged this far behind the newest report, so an aircraft
+        # whose reports arrive late is not closed while they are still coming.
+        self._feed_lateness = timedelta(
+            seconds=float(cfg["sampling"].get("feed_lateness_sec", 0))
+        )
         # Reports skipped because that aircraft's report at or after the same
         # time had already been processed (the overlap of sliding windows).
         self.skipped_reports = 0
@@ -261,7 +268,7 @@ class NoFlyZoneDetector(BaseDetector):
         )
         closed: list[Detection] = self._episodes.feed(reports)
         if fresh and self._clock is not None:
-            closed += self._episodes.close_silent(self._clock)
+            closed += self._episodes.close_silent(self._clock - self._feed_lateness)
             self._forget_quiet_aircraft(self._clock)
         if self.emit_open:
             closed += self._episodes.snapshot_open()
