@@ -15,6 +15,12 @@ import { SeverityBadge } from "../components/SeverityBadge";
 import { StatCard } from "../components/StatCard";
 import { EmptyState } from "../components/EmptyState";
 import { NoFlyZoneOverlay } from "./overlays/NoFlyZoneOverlay";
+// Sectional-chart look: fonts bundled with the app, styles scoped under .nfz.
+import "@fontsource/barlow-condensed/500.css";
+import "@fontsource/barlow-condensed/700.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/600.css";
+import "./NoFlyZonePage.css";
 
 const DETECTOR_ID = "skywatch.no_fly_zone";
 const RANGES = [
@@ -25,6 +31,16 @@ const RANGES = [
   { label: "30 days", hours: 720 },
 ];
 const SEVERITIES = ["", "info", "low", "medium", "high", "critical"];
+const ZONE_FILES = ["/airspace/klyh-local-faa.geojson", "/airspace/klyh-demo.geojson"];
+const TYPE_ORDER: Record<string, number> = { PROHIBITED: 0, RESTRICTED: 1, MOA: 2 };
+
+// Chart colors: blue for prohibited/restricted, magenta for MOAs.
+function typeClass(t: unknown): string {
+  const s = String(t ?? "").toUpperCase();
+  if (s === "MOA") return "moa";
+  if (s === "PROHIBITED" || s === "RESTRICTED") return "restricted";
+  return "other";
+}
 
 // ---------------------------------------------------------------- formatting
 
@@ -81,9 +97,10 @@ function DetectorStatus({ runs, error }: { runs: DetectorRun[] | null; error: st
       (found !== undefined ? ` · found ${String(found)}` : "") +
       (last.error ? ` · ${last.error}` : "");
   }
+  const live = !error && !!last && last.status.toUpperCase() !== "FAILED";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--muted)", fontSize: 14 }}>
-      <span style={{ width: 9, height: 9, borderRadius: "50%", background: color, flex: "none" }} />
+    <div className="nfz-status">
+      <span className={`nfz-dot${live ? " nfz-dot--live" : ""}`} style={{ background: color, color }} />
       {text}
     </div>
   );
@@ -110,7 +127,7 @@ function TrackLayer({ detection }: { detection: Detection }) {
         if (coords.length < 2) return;
         const line = L.polyline(
           coords.map(([lon, lat]) => [lat, lon] as [number, number]),
-          { color: "#22d3ee", weight: 2, opacity: 0.9 },
+          { color: "#f4f4f6", weight: 2, opacity: 0.9, dashArray: "6 4" },
         ).addTo(layer);
         if (!hasPoint) map.fitBounds(line.getBounds(), { padding: [20, 20] });
       })
@@ -130,13 +147,13 @@ function JsonBlock({ label, value }: { label: string; value: unknown }) {
   if (typeof value === "object" && Object.keys(value as object).length === 0) return null;
   return (
     <div style={{ marginTop: 14 }}>
-      <div style={{ color: "var(--muted)", fontSize: 12, textTransform: "uppercase", marginBottom: 4 }}>
+      <div className="nfz-label">
         {label}
       </div>
       {typeof value === "string" ? (
-        <div>{value}</div>
+        <div className="nfz-notam-text">{value}</div>
       ) : (
-        <pre style={preStyle}>{JSON.stringify(value, null, 2)}</pre>
+        <pre className="nfz-pre">{JSON.stringify(value, null, 2)}</pre>
       )}
     </div>
   );
@@ -168,7 +185,7 @@ function DetailPanel({ detection, onClose }: { detection: Detection; onClose: ()
     ["Confidence", typeof d.confidence === "number" ? d.confidence.toFixed(2) : "—"],
   ];
   return (
-    <aside className="card" style={panelStyle}>
+    <aside className="card nfz-panel" style={panelStyle}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
           <SeverityBadge severity={d.severity} />
@@ -177,7 +194,7 @@ function DetailPanel({ detection, onClose }: { detection: Detection; onClose: ()
         <button className="btn ghost" onClick={onClose}>Close</button>
       </div>
 
-      {summary && <p style={{ margin: "12px 0 0" }}>{summary}</p>}
+      {summary && <p className="nfz-notam-text" style={{ marginTop: 12 }}>{summary}</p>}
 
       <div style={{ height: 260, marginTop: 12, borderRadius: "var(--radius)", overflow: "hidden" }}>
         <MapView showAircraft={false}>
@@ -186,10 +203,10 @@ function DetailPanel({ detection, onClose }: { detection: Detection; onClose: ()
         </MapView>
       </div>
       <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
-        Cyan line: the aircraft's track over the last 24 h (if any). Red: zone entered.
+        Dashed white line: the aircraft's track over the last 24 h (if any). Ring: where the incursion was detected, colored by severity.
       </div>
 
-      <dl style={dlStyle}>
+      <dl className="nfz-facts">
         {facts.map(([k, v]) => (
           <div key={k} style={{ display: "contents" }}>
             <dt style={{ color: "var(--muted)" }}>{k}</dt>
@@ -206,6 +223,43 @@ function DetailPanel({ detection, onClose }: { detection: Detection; onClose: ()
   );
 }
 
+// ------------------------------------------------------------ zone board
+
+type ZoneInfo = { id: string; name: string; type: string; demo: boolean };
+type ZoneFile = { features?: { properties?: Record<string, unknown> }[] };
+
+// Every zone the live detector loads, read from the same files as the overlay.
+function useZones(): ZoneInfo[] {
+  const [zones, setZones] = useState<ZoneInfo[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(ZONE_FILES.map((f) => fetch(f).then((r) => r.json() as Promise<ZoneFile>)))
+      .then((files) => {
+        if (cancelled) return;
+        const seen = new Map<string, ZoneInfo>();
+        for (const fc of files) {
+          for (const f of fc.features ?? []) {
+            const p = f.properties ?? {};
+            const id = String(p.zone_id ?? "");
+            if (!id || seen.has(id)) continue;
+            seen.set(id, {
+              id,
+              name: String(p.name ?? id),
+              type: String(p.zone_type ?? ""),
+              demo: id.startsWith("DEMO-"),
+            });
+          }
+        }
+        setZones([...seen.values()]);
+      })
+      .catch(() => !cancelled && setZones([]));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return zones;
+}
+
 // --------------------------------------------------------------------- page
 
 export function NoFlyZonePage() {
@@ -214,6 +268,8 @@ export function NoFlyZonePage() {
   const [search, setSearch] = useState("");
   const [zoneType, setZoneType] = useState("");
   const [selected, setSelected] = useState<Detection | null>(null);
+  const [zoneFilter, setZoneFilter] = useState("");
+  const zones = useZones();
 
   const { data, loading, error, reload } = useNoFlyZoneDetections({
     since_hours: hours,
@@ -241,12 +297,13 @@ export function NoFlyZonePage() {
     return all.filter(
       (d) =>
         (!zoneType || d.zone_type === zoneType) &&
+        (!zoneFilter || d.zone_id === zoneFilter) &&
         (!q ||
           d.entity_id.toLowerCase().includes(q) ||
           String(d.zone_id ?? "").toLowerCase().includes(q) ||
           String(d.zone_name ?? "").toLowerCase().includes(q)),
     );
-  }, [all, search, zoneType]);
+  }, [all, search, zoneType, zoneFilter]);
 
   const stats = useMemo(() => {
     const zones = new Set(rows.map((d) => String(d.zone_id ?? "unknown")));
@@ -256,60 +313,123 @@ export function NoFlyZonePage() {
     return { zones: zones.size, aircraft: aircraft.size, open, longest };
   }, [rows]);
 
+  // Incursions per zone (time range + severity applied, other filters not), so
+  // the board always shows the whole picture.
+  const zoneCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const d of all) {
+      const k = String(d.zone_id ?? "");
+      m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return m;
+  }, [all]);
+  const board = useMemo(
+    () =>
+      [...zones].sort(
+        (a, b) =>
+          (zoneCounts.get(b.id) ?? 0) - (zoneCounts.get(a.id) ?? 0) ||
+          (TYPE_ORDER[a.type] ?? 9) - (TYPE_ORDER[b.type] ?? 9) ||
+          a.id.localeCompare(b.id),
+      ),
+    [zones, zoneCounts],
+  );
+  const activeZones = board.filter((z) => (zoneCounts.get(z.id) ?? 0) > 0).length;
+
   const rangeLabel = RANGES.find((r) => r.hours === hours)?.label ?? `${hours} h`;
   const dash = (v: string | number) => (loading && !data ? "…" : v);
 
   return (
+    <div className="nfz">
     <div className="page">
-      <div className="page-head">
-        <h1>No-fly zone</h1>
-        <p className="owner">Aircraft that entered restricted, prohibited, or MOA airspace.</p>
-      </div>
-
-      <DetectorStatus runs={runs.data} error={runs.error} />
+      <header className="nfz-head">
+        <div className="nfz-notam">NOTAM // KLYH // SKYWATCH-NFZ</div>
+        <h1 className="nfz-title">No-Fly Zone Monitor</h1>
+        <p className="nfz-sub">Aircraft that entered restricted, prohibited, or MOA airspace.</p>
+        <DetectorStatus runs={runs.data} error={runs.error} />
+      </header>
 
       {error && <EmptyState kind="error" message={`Couldn't load detections: ${error}`} />}
 
       <div className="stat-grid" style={{ marginTop: 14 }}>
         <StatCard label={`Incursions (${rangeLabel})`} value={dash(rows.length)} />
-        <StatCard label="Zones involved" value={dash(stats.zones)} />
+        <StatCard
+          label="Active zones"
+          value={dash(zones.length ? `${activeZones} / ${zones.length}` : stats.zones)}
+        />
         <StatCard label="Aircraft involved" value={dash(stats.aircraft)} />
         <StatCard label="Longest time inside" value={dash(duration(stats.longest))} />
       </div>
 
-      <div style={controlsStyle}>
-        <label style={labelStyle}>
+      <section>
+        <div className="nfz-section-head">
+          <span>Zone board</span>
+          {zoneFilter ? (
+            <button className="nfz-clear" onClick={() => setZoneFilter("")}>
+              Showing {zoneFilter} only · show all
+            </button>
+          ) : (
+            <span className="nfz-meta">click a zone to filter</span>
+          )}
+        </div>
+        <div className="nfz-zones">
+          {board.map((z) => {
+            const n = zoneCounts.get(z.id) ?? 0;
+            return (
+              <button
+                key={z.id}
+                className={
+                  `nfz-zone nfz-zone--${typeClass(z.type)}` +
+                  (n ? " is-active" : "") +
+                  (zoneFilter === z.id ? " is-selected" : "")
+                }
+                onClick={() => setZoneFilter(zoneFilter === z.id ? "" : z.id)}
+                title={z.name}
+              >
+                <span className="nfz-zone-id">
+                  {z.id}
+                  {z.demo && <em className="nfz-demo">DEMO</em>}
+                </span>
+                <span className="nfz-zone-type">{z.type}</span>
+                <span className="nfz-zone-count">{n}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="nfz-controls">
+        <label className="nfz-field">
           Time range
-          <select value={hours} onChange={(e) => setHours(Number(e.target.value))} style={inputStyle}>
+          <select value={hours} onChange={(e) => setHours(Number(e.target.value))} className="nfz-input">
             {RANGES.map((r) => (
               <option key={r.hours} value={r.hours}>Last {r.label}</option>
             ))}
           </select>
         </label>
-        <label style={labelStyle}>
+        <label className="nfz-field">
           Severity
-          <select value={severity} onChange={(e) => setSeverity(e.target.value)} style={inputStyle}>
+          <select value={severity} onChange={(e) => setSeverity(e.target.value)} className="nfz-input">
             {SEVERITIES.map((s) => (
               <option key={s} value={s}>{s || "All"}</option>
             ))}
           </select>
         </label>
-        <label style={labelStyle}>
+        <label className="nfz-field">
           Zone type
-          <select value={zoneType} onChange={(e) => setZoneType(e.target.value)} style={inputStyle}>
+          <select value={zoneType} onChange={(e) => setZoneType(e.target.value)} className="nfz-input">
             <option value="">All</option>
             {zoneTypes.map((t) => (
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
         </label>
-        <label style={{ ...labelStyle, flex: "1 1 200px" }}>
+        <label className="nfz-field nfz-field--grow">
           Search aircraft or zone
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="icao24:a1b2c3, P-56, DEMO-1…"
-            style={inputStyle}
+            className="nfz-input"
           />
         </label>
         <button className="btn ghost" onClick={reload} disabled={loading} style={{ alignSelf: "flex-end" }}>
@@ -317,6 +437,10 @@ export function NoFlyZonePage() {
         </button>
       </div>
 
+      <div className="nfz-section-head">
+        <span>Incursion feed</span>
+        <span className="nfz-meta">{rows.length} shown</span>
+      </div>
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 520px", minWidth: 0, overflowX: "auto" }}>
           {rows.length === 0 && !loading ? (
@@ -328,7 +452,7 @@ export function NoFlyZonePage() {
               }
             />
           ) : (
-            <table className="table">
+            <table className="table nfz-table">
               <thead>
                 <tr>
                   <th>Severity</th>
@@ -352,8 +476,15 @@ export function NoFlyZonePage() {
                   >
                     <td><SeverityBadge severity={d.severity} /></td>
                     <td>{d.entity_id}</td>
-                    <td title={String(d.zone_name ?? "")}>{String(d.zone_id ?? "—")}</td>
-                    <td>{String(d.zone_type ?? "—")}</td>
+                    <td title={String(d.zone_name ?? "")}>
+                      {String(d.zone_id ?? "—")}
+                      {String(d.zone_id ?? "").startsWith("DEMO-") && <em className="nfz-demo">DEMO</em>}
+                    </td>
+                    <td>
+                      <span className={`nfz-type nfz-type--${typeClass(d.zone_type)}`}>
+                        {String(d.zone_type ?? "—")}
+                      </span>
+                    </td>
                     <td>
                       {duration(d.duration_seconds)}
                       {!d.temporal_bounds_end && (
@@ -371,53 +502,16 @@ export function NoFlyZonePage() {
         {selected && <DetailPanel detection={selected} onClose={() => setSelected(null)} />}
       </div>
     </div>
+    </div>
   );
 }
 
 // ------------------------------------------------------------------- styles
 
-const controlsStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 12,
-  margin: "16px 0",
-};
-const labelStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 4,
-  fontSize: 12,
-  color: "var(--muted)",
-};
-const inputStyle: CSSProperties = {
-  background: "var(--surface)",
-  color: "var(--text)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius)",
-  padding: "7px 10px",
-  fontSize: 14,
-};
 const panelStyle: CSSProperties = {
   flex: "1 1 380px",
   maxWidth: 520,
   minWidth: 0,
   position: "sticky",
   top: 16,
-};
-const dlStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "max-content 1fr",
-  gap: "6px 14px",
-  margin: "14px 0 0",
-  fontSize: 14,
-};
-const preStyle: CSSProperties = {
-  margin: 0,
-  padding: 10,
-  background: "var(--bg)",
-  border: "1px solid var(--border)",
-  borderRadius: "var(--radius)",
-  fontSize: 12,
-  overflowX: "auto",
-  maxHeight: 260,
 };

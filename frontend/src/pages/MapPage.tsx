@@ -18,7 +18,7 @@ import { NoFlyZoneOverlay } from "./overlays/NoFlyZoneOverlay";
 const OVERLAYS = [
   { key: "spoofing", label: "Spoofing", color: "#a855f7" },
   { key: "proximity", label: "Proximity", color: "#22d3ee" },
-  { key: "no-fly-zone", label: "No-fly zone", color: "#f59e0b" },
+  { key: "no-fly-zone", label: "No-fly zone", color: "#e040fb" },
 ] as const;
 
 type OverlayKey = (typeof OVERLAYS)[number]["key"];

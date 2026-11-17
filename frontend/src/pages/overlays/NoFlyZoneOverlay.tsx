@@ -8,8 +8,25 @@ import { useObservations } from "../../api/observations";
 import type { Detection } from "../../api/types";
 
 const ZONE_FILES = ["/airspace/klyh-local-faa.geojson", "/airspace/klyh-demo.geojson"];
-const COLOR = "#f59e0b";
-const HOT = "#ef4444";
+// Sectional-chart colors (match NoFlyZonePage.css): blue for prohibited and
+// restricted airspace, magenta for MOAs. Leaflet needs real hex values here,
+// not CSS variables.
+const CHART_BLUE = "#4f8bff";
+const CHART_MAGENTA = "#e040fb";
+function zoneColor(type: unknown): string {
+  return String(type ?? "").toUpperCase() === "MOA" ? CHART_MAGENTA : CHART_BLUE;
+}
+// Shared severity scale (same values as --sev-* in theme.css).
+const SEVERITY: Record<string, string> = {
+  info: "#3b82f6",
+  low: "#10b981",
+  medium: "#f59e0b",
+  high: "#f97316",
+  critical: "#ef4444",
+};
+function severityColor(sev: unknown): string {
+  return SEVERITY[String(sev ?? "").toLowerCase()] ?? "#64748b";
+}
 
 type ZoneCollection = { type: string; features: unknown[] };
 
@@ -49,14 +66,31 @@ export function NoFlyZoneOverlay({
     const hotZones = new Set(detections.map((d) => String(d.zone_id ?? "")));
 
     for (const fc of zones) {
+      // Chart-style "hatched" border: a wide dotted stroke under the outline
+      // reads as the tick marks sectional charts draw inside restricted areas.
       L.geoJSON(fc as never, {
+        interactive: false,
         style: (f) => {
           const hot = hotZones.has(String(f?.properties?.zone_id));
           return {
-            color: hot ? HOT : COLOR,
-            weight: hot ? 2.5 : 1,
-            fillColor: hot ? HOT : COLOR,
-            fillOpacity: hot ? 0.18 : 0.05,
+            color: zoneColor(f?.properties?.zone_type),
+            weight: hot ? 10 : 7,
+            opacity: hot ? 0.55 : 0.3,
+            dashArray: "1 5",
+            fill: false,
+          };
+        },
+      }).addTo(layer);
+      L.geoJSON(fc as never, {
+        style: (f) => {
+          const hot = hotZones.has(String(f?.properties?.zone_id));
+          const c = zoneColor(f?.properties?.zone_type);
+          return {
+            color: c,
+            weight: hot ? 2.5 : 1.2,
+            opacity: hot ? 1 : 0.7,
+            fillColor: c,
+            fillOpacity: hot ? 0.16 : 0.04,
           };
         },
         onEachFeature: (f, l) => {
@@ -76,11 +110,12 @@ export function NoFlyZoneOverlay({
           : null;
       if (!pos) continue;
       const selected = d.detection_id === selectedId;
+      const sev = severityColor(d.severity);
       L.circleMarker(pos, {
         radius: live ? 12 : 8,
-        color: HOT,
+        color: sev,
         weight: selected ? 4 : 2,
-        fillColor: HOT,
+        fillColor: sev,
         fillOpacity: live ? 0.15 : 0.5,
         dashArray: live ? undefined : "3 3",
       })
