@@ -38,6 +38,9 @@ x-runner: &runner
   environment:
     # `db` is the compose service hostname on the shared network (not localhost).
     SKYWATCH_DB_DSN: ${SKYWATCH_DB_DSN:-postgresql://skywatch:skywatch@db:5432/skywatch}
+    # NFZ only: 1 adds the synthetic demo zone (DEMO-1) on top of the real zones.
+    # Off unless set: SKYWATCH_NFZ_DEMO_ZONES=1 docker compose --profile runners up -d
+    SKYWATCH_NFZ_DEMO_ZONES: ${SKYWATCH_NFZ_DEMO_ZONES:-0}
   depends_on:
     db:
       condition: service_healthy
