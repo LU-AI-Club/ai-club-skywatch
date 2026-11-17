@@ -264,3 +264,16 @@ a {
 .leaflet-popup-content {
   font-size: 13px;
 }
+
+/* Proximity map overlay: the miss-distance label at the pair's midpoint. */
+.leaflet-tooltip.proximity-label {
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+}
+.leaflet-tooltip-top.proximity-label::before {
+  border-top-color: var(--accent);
+}
