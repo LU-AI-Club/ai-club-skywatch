@@ -31,7 +31,7 @@ One :class:`Detection`. ``baseline_or_model_version`` must come from
 :meth:`Config.baseline_version`, which pins both the rules version and the
 airspace publication cycle. ``explanation_facts`` must be reconstructable from
 the inputs, and ``limitations`` must state what the detector could not check
-(unknown activation, barometric-only altitude, AGL floor not evaluated).
+(unknown activation, barometric-only altitude, or terrain-based AGL floors).
 
 Required ``extras`` keys
 ------------------------
@@ -167,9 +167,13 @@ def build_detection(
         limitations.append(
             "Only barometric altitude was available; geometric altitude was unavailable."
         )
-    if zone.floor_datum is Datum.AGL or zone.ceiling_datum is Datum.AGL:
+    if zone.floor_datum is Datum.AGL:
         limitations.append(
-            "AGL floor or ceiling was not evaluated because terrain data is unavailable."
+            "AGL floor was evaluated against bilinearly interpolated terrain from the offline grid."
+        )
+    if zone.ceiling_datum is Datum.AGL:
+        limitations.append(
+            "AGL ceiling was not evaluated because terrain-relative ceilings are unsupported."
         )
     if vertical.altitude_source is AltitudeSource.NONE:
         limitations.append("No usable altitude was available.")

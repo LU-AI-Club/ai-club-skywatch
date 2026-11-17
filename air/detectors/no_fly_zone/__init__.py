@@ -50,6 +50,7 @@ def _build_detector(
     extra_airspace_paths: tuple[Path, ...] = (),
 ) -> NoFlyZoneDetector:
     from .adapter import NoFlyZoneDetector
+    from .geo.terrain import load_terrain
     from .ingest.airspace_loader import load_filtered_zones
 
     zones = load_filtered_zones(airspace_path, cfg)
@@ -61,6 +62,7 @@ def _build_detector(
             raise ValueError(f"zone ids in {extra} clash with {airspace_path}: {sorted(clash)}")
         zones = zones + added
     return NoFlyZoneDetector(cfg, zones, emit_open=emit_open)
+    return NoFlyZoneDetector(cfg, zones, emit_open=emit_open, terrain=load_terrain())
 
 
 def build_detector(
@@ -73,12 +75,13 @@ def build_detector(
 
     Zero arguments is the runner's call: ``configs/detectors/no_fly_zone.yaml``
     and the airspace file it names. Pass either path to override, exactly like
-    the CLI's ``--config`` and ``--airspace``. Config and zones are loaded once
-    here, not per window. ``emit_open`` turns on live mode (see
-    :func:`build_live_detector`).
+    the CLI's ``--config`` and ``--airspace``. Config, zones, and the offline
+    terrain grid are loaded once here, not per window. ``emit_open`` turns on
+    live mode (see :func:`build_live_detector`).
 
-    Failure causes: whatever ``load_config`` or ``load_zones`` raise for a bad
-    file. The runner reports that and skips NFZ rather than crashing.
+    Failure causes: whatever ``load_config``, ``load_zones`` or ``load_terrain``
+    raise for a bad file. The runner reports that and skips NFZ rather than
+    crashing.
     """
     from .adapter import configured_airspace_path
     from .config import DEFAULT_PATH, load_config

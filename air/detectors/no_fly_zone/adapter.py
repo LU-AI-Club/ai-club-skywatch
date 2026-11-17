@@ -108,7 +108,7 @@ from .config import Config
 from .emit import DOMAIN, to_platform_detection
 from .logic import detector as pipeline
 from .logic.episodes import EpisodeTracker
-from .types import AircraftState, AirspaceZone, Detection, ExitReason
+from .types import AircraftState, AirspaceZone, Detection, ExitReason, TerrainGrid
 
 # Registry identity, checked by BaseDetector.validate_metadata() against the
 # class. The instance overrides both from configs/detectors/no_fly_zone.yaml, which stays the
@@ -187,7 +187,12 @@ class NoFlyZoneDetector(BaseDetector):
     implementation_type = DetectorImplementationType.RULE_BASED
 
     def __init__(
-        self, cfg: Config, zones: Sequence[AirspaceZone], *, emit_open: bool = False
+        self,
+        cfg: Config,
+        zones: Sequence[AirspaceZone],
+        *,
+        emit_open: bool = False,
+        terrain: TerrainGrid | None = None,
     ) -> None:
         super().__init__()
         self.cfg = cfg
@@ -197,6 +202,7 @@ class NoFlyZoneDetector(BaseDetector):
         # and the CLI keep returning only finished episodes.
         self.emit_open = emit_open
         self.zones: list[AirspaceZone] = list(zones)
+        self.terrain = terrain
         # Instance values from config win over the class-level registry identity.
         self.detector_id = str(cfg["detector"]["id"])
         self.detector_version = str(cfg["detector"]["version"])
@@ -251,7 +257,7 @@ class NoFlyZoneDetector(BaseDetector):
                 self._clock = state.timestamp
 
         reports = pipeline.evaluate_reports(
-            fresh, self.zones, self.cfg, exit_counts=self.exit_counts
+            fresh, self.zones, self.cfg, exit_counts=self.exit_counts, terrain=self.terrain
         )
         closed: list[Detection] = self._episodes.feed(reports)
         if fresh and self._clock is not None:
