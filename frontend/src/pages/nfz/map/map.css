@@ -1,0 +1,940 @@
+/* NFZ map styles: zones, traffic, markers, legend, chart decorations, and the
+   dashboard map's HUD. Leaflet puts most of these inside the map, outside our
+   page wrapper, so every class is prefixed nfz- to stay out of the way of the
+   other teams. */
+
+/* ================================================================ zones */
+/* Hatch fills come from svgDefs.ts; CSS beats Leaflet's fill attributes. */
+.nfz-zfill { fill-opacity: 1; transition: stroke-width 0.2s; }
+.nfz-zfill--moa { fill: url(#nfz-hatch-moa); }
+.nfz-zfill--moa.is-hot { fill: url(#nfz-hatch-moa-hot); }
+.nfz-zfill--restricted { fill: url(#nfz-hatch-restricted); }
+.nfz-zfill--restricted.is-hot { fill: url(#nfz-hatch-restricted-hot); }
+.nfz-zfill.is-focus { stroke-dasharray: 6 4; }
+.nfz-zfill:hover { stroke-width: 3; }
+.nfz-zglow { filter: blur(4px); }
+@media (prefers-reduced-motion: no-preference) {
+  .nfz-zglow { animation: nfz-zglow 2.4s ease-in-out infinite; }
+  @keyframes nfz-zglow { 50% { stroke-opacity: 0.12; } }
+}
+
+/* Zone labels: a hatched diamond at the center of small zones with the name
+   above it, or plain centered text for MOAs; floor/ceiling underneath once
+   zoomed in. ZoneLayer.tsx stacks labels that would overlap. */
+.nfz-ml { --zc: #4f8bff; pointer-events: none; }
+.nfz-ml--moa { --zc: #e040fb; }
+.nfz-ml-text {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  white-space: nowrap;
+  line-height: 1.15;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--zc);
+  text-shadow: 0 0 3px #000, 0 0 2px #000, 0 0 1px #000;
+}
+.nfz-ml.is-text .nfz-ml-text {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.nfz-ml-text em {
+  font-style: normal;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+/* Limits printed like a sectional chart: ceiling over floor. */
+.nfz-frac {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 2px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+.nfz-frac b { font-weight: inherit; padding: 0 3px; }
+.nfz-frac b:first-child { border-bottom: 1px solid currentColor; }
+.nfz-ml-dia {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  border: 1.5px solid var(--zc);
+  background: repeating-linear-gradient(90deg, var(--zc) 0 1.5px, transparent 1.5px 3.5px);
+  box-shadow: 0 0 0 1px #000;
+}
+.nfz-ml.is-hot .nfz-ml-dia { background: var(--zc); }
+@media (prefers-reduced-motion: no-preference) {
+  .nfz-ml.is-hot .nfz-ml-dia { animation: nfz-ml-pulse 1.8s ease-out infinite; }
+  @keyframes nfz-ml-pulse {
+    0% { box-shadow: 0 0 0 0 var(--zc); }
+    80% { box-shadow: 0 0 0 8px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+}
+
+/* ============================================================ tooltips */
+.leaflet-tooltip.nfz-tip {
+  background: rgba(13, 13, 20, 0.96);
+  color: #f4f4f6;
+  border: 1px solid #2a2a32;
+  border-top: 2px solid #e040fb;
+  border-radius: 0;
+  padding: 6px 9px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  text-transform: uppercase;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+}
+.leaflet-tooltip.nfz-tip::before { display: none; }
+.nfz-tip b { font-weight: 600; margin-right: 8px; }
+.nfz-tip-type { font-family: "Barlow Condensed", sans-serif; letter-spacing: 0.08em; }
+.nfz-tip-type--moa { color: #e040fb; }
+.nfz-tip-type--restricted { color: #4f8bff; }
+.nfz-tip-hint { color: #9a9aa5; font-size: 10px; text-transform: none; }
+
+/* ============================================================== popups */
+.leaflet-popup.nfz-popup .leaflet-popup-content-wrapper {
+  background: rgba(13, 13, 20, 0.97);
+  color: #d4d4dc;
+  border: 1px solid #2a2a32;
+  border-top: 2px solid #e040fb;
+  border-radius: 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+.leaflet-popup.nfz-popup .leaflet-popup-tip { background: rgba(13, 13, 20, 0.97); border: 1px solid #2a2a32; }
+.leaflet-popup.nfz-popup .leaflet-popup-content {
+  margin: 9px 12px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.leaflet-popup.nfz-popup a.leaflet-popup-close-button { color: #9a9aa5; }
+.nfz-pop-title { font-weight: 600; font-size: 13px; color: #f4f4f6; margin-bottom: 2px; }
+.nfz-pop-sev {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 0 5px;
+  background: var(--sc);
+  color: #0a0a0c;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.nfz-pop-hint { color: #9a9aa5; font-size: 10px; }
+
+/* ========================================================= plane icons */
+.nfz-ac { overflow: visible; }
+.nfz-ac-inner { position: absolute; left: 0; top: 0; transition: opacity 0.2s; }
+.nfz-ac-inner svg {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+}
+/* Body: altitude color, a dark keyline, and a glow while the sweep paints it. */
+.nfz-ac-body {
+  fill: var(--ac);
+  stroke: #05060a;
+  stroke-width: 1;
+  filter:
+    drop-shadow(0 0 calc(1px + var(--lit, 0) * 7px) color-mix(in srgb, var(--ac) calc(35% + var(--lit, 0) * 65%), transparent))
+    brightness(calc(0.92 + var(--lit, 0) * 0.35));
+}
+/* Shadow: offset grows with altitude (set inline), soft and dark. */
+.nfz-ac-shadow { fill: #000; opacity: 0.55; filter: blur(1.4px); }
+.nfz-ac-dot {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ac);
+  border: 1px solid #05060a;
+  box-shadow: 0 0 calc(var(--lit, 0) * 8px) var(--ac);
+}
+.nfz-ac:hover .nfz-ac-body { filter: drop-shadow(0 0 6px var(--ac)) drop-shadow(0 0 1px #000); }
+
+/* ATC-style data tag with a leader line: callsign, then altitude (hundreds
+   of ft) with a climb/descend arrow, and ground speed. */
+.nfz-tag {
+  display: none;
+  position: absolute;
+  left: 17px;
+  top: -30px;
+  padding: 2px 6px 2px 6px;
+  background: linear-gradient(90deg, rgba(5, 7, 12, 0.72), rgba(5, 7, 12, 0.35));
+  border-left: 1px solid var(--ac);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: #c9c9d1;
+  text-shadow: 0 0 3px #000, 0 0 2px #000;
+  pointer-events: none;
+}
+/* The leader: a short diagonal from the plane up to the tag. */
+.nfz-tag::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  bottom: -9px;
+  width: 15px;
+  height: 1px;
+  background: var(--ac);
+  opacity: 0.8;
+  transform: rotate(-45deg);
+  transform-origin: right center;
+}
+.nfz-tag b { display: block; font-weight: 600; color: #f4f4f6; letter-spacing: 0.02em; }
+.nfz-tag i { display: block; font-style: normal; font-weight: 600; color: #fecaca; }
+.nfz-tags .nfz-tag,
+.nfz-ac:hover .nfz-tag,
+.nfz-ac-inner.is-hot .nfz-tag,
+.nfz-ac-inner.is-picked .nfz-tag,
+.nfz-ac-inner.is-emerg .nfz-tag { display: block; }
+
+/* Spotlight: dim every plane except the one under the mouse. */
+.nfz-spotlight .nfz-ac-inner { opacity: 0.18; }
+.nfz-spotlight .nfz-ac:hover .nfz-ac-inner { opacity: 1; }
+
+/* Selected plane: a white ring with four ticks. */
+.nfz-pick {
+  position: absolute;
+  left: -16px;
+  top: -16px;
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid #f4f4f6;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #000, 0 0 14px rgba(244, 244, 246, 0.35);
+  background:
+    linear-gradient(#f4f4f6, #f4f4f6) 50% 0 / 1.5px 5px no-repeat,
+    linear-gradient(#f4f4f6, #f4f4f6) 50% 100% / 1.5px 5px no-repeat,
+    linear-gradient(#f4f4f6, #f4f4f6) 0 50% / 5px 1.5px no-repeat,
+    linear-gradient(#f4f4f6, #f4f4f6) 100% 50% / 5px 1.5px no-repeat;
+}
+
+/* Emergency squawk: red, with a pulsing ring. */
+.nfz-emerg-ring {
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid #ef4444;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.7);
+}
+.nfz-ac-inner.is-emerg .nfz-tag { border-left-color: #ef4444; background: linear-gradient(90deg, rgba(60, 6, 6, 0.85), rgba(60, 6, 6, 0.4)); }
+@media (prefers-reduced-motion: no-preference) {
+  .nfz-emerg-ring { animation: nfz-emerg 1s ease-in-out infinite; }
+  @keyframes nfz-emerg { 50% { transform: scale(1.35); opacity: 0.35; } }
+}
+
+/* Lock-on brackets around aircraft flagged by a detector recently. */
+.nfz-lock {
+  position: absolute;
+  left: -15px;
+  top: -15px;
+  width: 30px;
+  height: 30px;
+  pointer-events: none;
+}
+.nfz-lock i { position: absolute; width: 8px; height: 8px; border: 0 solid var(--lc); filter: drop-shadow(0 0 3px var(--lc)); }
+.nfz-lock i:nth-child(1) { left: 0; top: 0; border-left-width: 2px; border-top-width: 2px; }
+.nfz-lock i:nth-child(2) { right: 0; top: 0; border-right-width: 2px; border-top-width: 2px; }
+.nfz-lock i:nth-child(3) { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; }
+.nfz-lock i:nth-child(4) { left: 0; bottom: 0; border-left-width: 2px; border-bottom-width: 2px; }
+.nfz-lock.is-selected { left: -19px; top: -19px; width: 38px; height: 38px; }
+.nfz-lock.is-selected i { width: 10px; height: 10px; border-width: 0; }
+.nfz-lock.is-selected i:nth-child(1) { border-left-width: 3px; border-top-width: 3px; }
+.nfz-lock.is-selected i:nth-child(2) { border-right-width: 3px; border-top-width: 3px; }
+.nfz-lock.is-selected i:nth-child(3) { border-right-width: 3px; border-bottom-width: 3px; }
+.nfz-lock.is-selected i:nth-child(4) { border-left-width: 3px; border-bottom-width: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .nfz-lock { animation: nfz-lock 6s linear infinite; }
+  .nfz-lock.is-selected { animation: nfz-lock 6s linear infinite, nfz-lock-pulse 1.2s ease-in-out infinite; }
+  @keyframes nfz-lock { to { transform: rotate(360deg); } }
+  @keyframes nfz-lock-pulse { 50% { opacity: 0.45; } }
+}
+
+/* Velocity vector labels (1m / 2m / 3m ahead of the selected plane). */
+.nfz-vec-label { pointer-events: none; }
+.nfz-vec-label span {
+  position: absolute;
+  left: 7px;
+  top: -6px;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 9px;
+  color: #f4f4f6;
+  opacity: 0.85;
+  text-shadow: 0 0 3px #000, 0 0 2px #000;
+}
+
+/* ================================================= incursion markers */
+.nfz-hit-icon { overflow: visible; }
+.nfz-hit {
+  position: absolute;
+  left: -6px;
+  top: -6px;
+  width: 12px;
+  height: 12px;
+  transform: rotate(45deg);
+  border: 2px solid var(--sc);
+  background: rgba(10, 10, 12, 0.7);
+  box-shadow: 0 0 0 1px #000, 0 0 8px var(--sc);
+  cursor: pointer;
+}
+.nfz-hit::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: var(--sc);
+}
+.nfz-hit.is-selected { left: -9px; top: -9px; width: 18px; height: 18px; border-color: #f4f4f6; }
+@media (prefers-reduced-motion: no-preference) {
+  .nfz-hit.is-open { animation: nfz-hit-pulse 1.6s ease-in-out infinite; }
+  @keyframes nfz-hit-pulse { 50% { box-shadow: 0 0 0 1px #000, 0 0 18px var(--sc); } }
+}
+
+/* New-incursion ripple. */
+.nfz-ping { pointer-events: none; }
+.nfz-ping i {
+  position: absolute;
+  left: -9px;
+  top: -9px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--pc);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nfz-ping i { animation: nfz-ripple 2.4s ease-out infinite; opacity: 0; }
+  .nfz-ping i:nth-child(2) { animation-delay: 0.8s; }
+  .nfz-ping i:nth-child(3) { animation-delay: 1.6s; }
+  @keyframes nfz-ripple {
+    from { transform: scale(1); opacity: 1; }
+    to { transform: scale(6); opacity: 0; }
+  }
+}
+
+/* Replay: where the aircraft entered and left the zone. */
+.nfz-gate { pointer-events: none; }
+.nfz-gate i {
+  position: absolute;
+  left: -5px;
+  top: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #f4f4f6;
+  background: #0a0a0c;
+}
+.nfz-gate.is-in i { border-color: #ef4444; }
+.nfz-gate.is-out i { border-color: #10b981; }
+.nfz-gate span {
+  position: absolute;
+  left: 8px;
+  top: -16px;
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #f4f4f6;
+  text-shadow: 0 0 3px #000;
+}
+
+/* ============================================================== legend */
+.nfz-legend {
+  max-width: 250px;
+  background: rgba(10, 11, 18, 0.9);
+  backdrop-filter: blur(6px);
+  border: 1px solid #2a2a32;
+  border-top: 2px solid #e040fb;
+  padding: 8px 11px;
+  color: #c9c9d1;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+.nfz-legend-title {
+  cursor: pointer;
+  user-select: none;
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f4f4f6;
+}
+.nfz-legend-title::after { content: " \25BE"; color: #9a9aa5; }
+.nfz-legend.is-closed .nfz-legend-title::after { content: " \25B8"; }
+.nfz-legend.is-closed > :not(.nfz-legend-title) { display: none; }
+.nfz-legend div { display: flex; align-items: center; gap: 8px; }
+.nfz-sw { flex: none; width: 16px; height: 11px; border: 1.5px solid var(--c); background: repeating-linear-gradient(-45deg, var(--c) 0 1.5px, transparent 1.5px 4px); }
+.nfz-sw--restricted { --c: #4f8bff; }
+.nfz-sw--moa { --c: #e040fb; }
+.nfz-ln { flex: none; width: 16px; height: 0; }
+.nfz-ln--trail { border-top: 2px solid #22d3ee; opacity: 0.85; }
+.nfz-ln--ring { border-top: 1px dashed #cfe3ff; opacity: 0.7; }
+.nfz-ln--head { position: relative; width: 13px; margin-right: 3px; border-top: 1.5px solid #f4f4f6; }
+.nfz-ln--head::after {
+  content: "";
+  position: absolute;
+  right: -5px;
+  top: -4.25px;
+  border-left: 5px solid #f4f4f6;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+}
+.nfz-lg-plane { flex: none; width: 15px; height: 15px; fill: #67e8f9; transform: rotate(45deg); }
+.nfz-lg-lock {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  /* four corner brackets */
+  background:
+    linear-gradient(#f97316, #f97316) 0 0 / 5px 2px no-repeat,
+    linear-gradient(#f97316, #f97316) 0 0 / 2px 5px no-repeat,
+    linear-gradient(#f97316, #f97316) 100% 0 / 5px 2px no-repeat,
+    linear-gradient(#f97316, #f97316) 100% 0 / 2px 5px no-repeat,
+    linear-gradient(#f97316, #f97316) 0 100% / 5px 2px no-repeat,
+    linear-gradient(#f97316, #f97316) 0 100% / 2px 5px no-repeat,
+    linear-gradient(#f97316, #f97316) 100% 100% / 5px 2px no-repeat,
+    linear-gradient(#f97316, #f97316) 100% 100% / 2px 5px no-repeat;
+}
+.nfz-lg-hit {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  margin: 0 3.5px;
+  transform: rotate(45deg);
+  border: 2px solid #f97316;
+  background: #f97316;
+  box-shadow: inset 0 0 0 1px #0a0a0c;
+}
+.nfz-legend .nfz-lg-alt { gap: 6px; flex-wrap: wrap; }
+.nfz-lg-alt span { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; color: #9a9aa5; }
+.nfz-lg-alt i { width: 8px; height: 8px; border-radius: 50%; }
+.nfz-lg-hint { margin-top: 2px; font-size: 10px; line-height: 1.4; color: #9a9aa5; }
+
+/* ==================================================== chart decorations */
+.nfz-grid-label, .nfz-ring-label, .nfz-rose-label, .nfz-airport { pointer-events: none; }
+.nfz-grid-label span,
+.nfz-ring-label span,
+.nfz-rose-label span {
+  position: absolute;
+  white-space: nowrap;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  color: rgba(200, 220, 255, 0.55);
+  text-shadow: 0 0 3px #000;
+}
+.nfz-grid-label--lat span { transform: translate(0, -110%); }
+.nfz-grid-label--lon span { transform: translate(4px, 0); }
+.nfz-ring-label span { transform: translate(-50%, -120%); color: rgba(207, 227, 255, 0.5); }
+.nfz-rose-label span {
+  transform: translate(-50%, -50%);
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  color: rgba(207, 227, 255, 0.75);
+}
+.nfz-airport svg {
+  position: absolute;
+  left: -12px;
+  top: -12px;
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: #4f8bff;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 2px #000);
+}
+.nfz-airport svg .rwy { stroke: #f4f4f6; stroke-width: 2.4; stroke-linecap: round; }
+.nfz-airport span {
+  position: absolute;
+  left: 0;
+  top: 12px;
+  transform: translateX(-50%);
+  font-family: "Barlow Condensed", sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #8fb4ff;
+  text-shadow: 0 0 3px #000, 0 0 2px #000;
+}
+
+/* ============================================ dashboard map frame + HUD */
+/* The basemap, re-tinted into a deep navy "chart at night". */
+.nfz-chartmap .leaflet-tile-pane { filter: brightness(0.72) contrast(1.18) saturate(0.4) sepia(0.35) hue-rotate(178deg); }
+.nfz-chartmap .leaflet-container { background: #070b14; font-family: "JetBrains Mono", Consolas, monospace; }
+/* Vignette: darker toward the edges, above the map, under the controls. */
+.nfz-chartmap::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 440;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(3, 5, 10, 0.55) 100%);
+}
+.nfz-chartmap .leaflet-control-zoom {
+  border: 1px solid #2a2a32 !important;
+  border-radius: 0;
+  box-shadow: none;
+}
+.nfz-chartmap .leaflet-control-zoom a {
+  width: 30px;
+  height: 30px;
+  line-height: 28px;
+  border-radius: 0 !important;
+  background: rgba(10, 11, 18, 0.92);
+  color: #f4f4f6;
+  border-bottom-color: #2a2a32;
+  font-family: "JetBrains Mono", Consolas, monospace;
+}
+.nfz-chartmap .leaflet-control-zoom a:hover { background: #1c1c22; color: #e040fb; }
+.nfz-chartmap .leaflet-control-attribution {
+  background: rgba(10, 11, 18, 0.7);
+  color: #6b6b75;
+  font-size: 9px;
+}
+.nfz-chartmap .leaflet-control-attribution a { color: #8a8a95; }
+
+/* Corner brackets. */
+.nfz-hud-corners i {
+  position: absolute;
+  z-index: 800;
+  width: 18px;
+  height: 18px;
+  border: 0 solid rgba(224, 64, 251, 0.8);
+  pointer-events: none;
+}
+.nfz-hud-corners i:nth-child(1) { left: 6px; top: 6px; border-left-width: 2px; border-top-width: 2px; }
+.nfz-hud-corners i:nth-child(2) { right: 6px; top: 6px; border-right-width: 2px; border-top-width: 2px; }
+.nfz-hud-corners i:nth-child(3) { right: 6px; bottom: 6px; border-right-width: 2px; border-bottom-width: 2px; }
+.nfz-hud-corners i:nth-child(4) { left: 6px; bottom: 6px; border-left-width: 2px; border-bottom-width: 2px; }
+
+/* Status strip: a second row, right-aligned under the map controls. */
+.nfz-hud-strip {
+  position: absolute;
+  z-index: 800;
+  top: 46px;
+  right: 10px;
+  max-width: calc(100% - 280px);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 1px;
+  pointer-events: none;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.nfz-hud-strip span {
+  padding: 4px 9px;
+  background: rgba(10, 11, 18, 0.88);
+  backdrop-filter: blur(6px);
+  border: 1px solid #2a2a32;
+  color: #9a9aa5;
+}
+.nfz-hud-strip b { color: #f4f4f6; font-weight: 600; margin-right: 4px; }
+.nfz-hud-strip .is-alert { border-color: #f97316; }
+.nfz-hud-strip .is-alert b { color: #f97316; }
+.nfz-hud-strip .is-feed.is-ok { color: #10b981; }
+.nfz-hud-strip .is-feed.is-warn { color: #f59e0b; border-color: #f59e0b; }
+.nfz-hud-strip .is-feed.is-down { color: #ef4444; border-color: #ef4444; }
+
+/* Coordinates + scale bar, bottom right (above the attribution). */
+.nfz-hud-readout {
+  position: absolute;
+  z-index: 800;
+  right: 12px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  pointer-events: none;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  color: #c9c9d1;
+  text-shadow: 0 0 3px #000, 0 0 2px #000;
+}
+.nfz-cursor { padding: 3px 7px; background: rgba(10, 11, 18, 0.75); border: 1px solid #2a2a32; }
+.nfz-scale { display: flex; align-items: center; gap: 6px; }
+.nfz-scale i {
+  display: block;
+  height: 6px;
+  border: 1.5px solid #c9c9d1;
+  border-top: 0;
+  box-shadow: 0 1px 0 #000;
+}
+
+/* Layers + fullscreen, top right. */
+.nfz-layers {
+  position: absolute;
+  z-index: 1000;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.nfz-layers-bar { display: flex; gap: 4px; }
+.nfz-mapbtn {
+  padding: 5px 10px;
+  background: rgba(10, 11, 18, 0.92);
+  color: #f4f4f6;
+  border: 1px solid #2a2a32;
+  border-radius: 0;
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.nfz-mapbtn:hover, .nfz-mapbtn[aria-expanded="true"] { border-color: #e040fb; }
+.nfz-layers-panel {
+  display: grid;
+  gap: 4px;
+  padding: 8px 11px;
+  background: rgba(10, 11, 18, 0.94);
+  backdrop-filter: blur(6px);
+  border: 1px solid #2a2a32;
+  border-top: 2px solid #e040fb;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  color: #c9c9d1;
+}
+.nfz-layers-panel label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.nfz-layers-panel input { accent-color: #e040fb; }
+
+@media (max-width: 640px) {
+  .nfz-hud-strip { top: 46px; right: 8px; max-width: calc(100% - 60px); }
+  .nfz-hud-strip .is-clock { display: none; }
+  .nfz-hud-strip span:nth-child(2) { display: none; }
+  .nfz-hud-readout .nfz-cursor { display: none; }
+  .nfz-legend { max-width: 200px; }
+}
+
+/* ======================================================= popups: link */
+.nfz-pop-link {
+  display: inline-block;
+  margin-top: 5px;
+  color: #e040fb;
+  font-weight: 600;
+}
+.nfz-pop-link:hover { text-decoration: underline; }
+
+/* ====================================================== legend extras */
+.nfz-lg-arrows { flex: none; width: 16px; text-align: center; color: #67e8f9; font-weight: 600; }
+.nfz-lg-emerg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin: 0 2px;
+  border-radius: 50%;
+  border: 2px solid #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+}
+
+/* ========================================================= HUD extras */
+.nfz-hud-strip .is-clock { color: #f4f4f6; font-weight: 600; letter-spacing: 0.08em; border-color: rgba(224, 64, 251, 0.6); }
+.nfz-hud-strip .is-emerg { border-color: #ef4444; color: #fecaca; background: rgba(60, 6, 6, 0.85); }
+.nfz-hud-strip .is-emerg b { color: #ef4444; }
+.nfz-cursor em { font-style: normal; color: #e040fb; margin-right: 4px; letter-spacing: 0.08em; }
+.nfz-reticle {
+  position: absolute;
+  z-index: 790;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  opacity: 0.35;
+}
+.nfz-reticle::before, .nfz-reticle::after {
+  content: "";
+  position: absolute;
+  background: #cfe3ff;
+}
+.nfz-reticle::before { left: 50%; top: 0; bottom: 0; width: 1px; box-shadow: 0 0 0 0 transparent; background: linear-gradient(#cfe3ff 0 35%, transparent 35% 65%, #cfe3ff 65%); }
+.nfz-reticle::after { top: 50%; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, #cfe3ff 0 35%, transparent 35% 65%, #cfe3ff 65%); }
+.nfz-reticle i { position: absolute; inset: 7px; border: 1px solid #cfe3ff; border-radius: 50%; }
+.nfz-mapbtn.is-on { border-color: #fde047; color: #fde047; }
+
+/* ====================================================== radar sweep */
+.nfz-sweep {
+  position: absolute;
+  inset: 0;
+  z-index: 450;
+  overflow: hidden;
+  pointer-events: none;
+}
+.nfz-sweep-beam {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 170%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 280deg,
+    rgba(34, 211, 238, 0.018) 300deg,
+    rgba(34, 211, 238, 0.06) 340deg,
+    rgba(34, 211, 238, 0.14) 357deg,
+    rgba(160, 245, 255, 0.4) 359.6deg,
+    rgba(160, 245, 255, 0) 360deg
+  );
+  will-change: transform;
+}
+/* Faint concentric scope rings centered on the map. */
+.nfz-sweep-rings {
+  position: absolute;
+  inset: 0;
+  background: repeating-radial-gradient(circle at 50% 50%, transparent 0 119px, rgba(160, 245, 255, 0.035) 119px 120px);
+}
+/* CRT scanlines, barely there. */
+.nfz-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.09) 0 1px, transparent 1px 3px);
+  mix-blend-mode: multiply;
+}
+
+/* ===================================================== measuring tool */
+.nfz-measuring, .nfz-measuring .leaflet-interactive { cursor: crosshair !important; }
+.nfz-measure-label { pointer-events: none; }
+.nfz-measure-label span {
+  position: absolute;
+  transform: translate(-50%, -150%);
+  padding: 2px 7px;
+  background: rgba(10, 11, 18, 0.92);
+  border: 1px solid #fde047;
+  color: #fde047;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.nfz-measure-label span:empty { display: none; }
+
+/* ===================================================== aircraft search */
+.nfz-search { position: relative; }
+.nfz-search input {
+  width: 170px;
+  height: 100%;
+  padding: 5px 9px;
+  background: rgba(10, 11, 18, 0.92);
+  color: #f4f4f6;
+  border: 1px solid #2a2a32;
+  border-radius: 0;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+}
+.nfz-search input:focus { outline: none; border-color: #e040fb; }
+.nfz-search-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 1001;
+  width: 240px;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: rgba(10, 11, 18, 0.97);
+  border: 1px solid #2a2a32;
+  border-top: 2px solid #e040fb;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+.nfz-search-list li.is-empty { padding: 6px 10px; color: #9a9aa5; font-family: "JetBrains Mono", monospace; font-size: 11px; }
+.nfz-search-list button {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 10px;
+  background: none;
+  border: 0;
+  color: #c9c9d1;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.nfz-search-list button b { color: #f4f4f6; }
+.nfz-search-list button:hover, .nfz-search-list button.is-hi { background: #1c1c22; }
+
+/* ======================================================= flight strip */
+.nfz-strip {
+  position: absolute;
+  z-index: 1000;
+  bottom: 70px;
+  right: 10px;
+  width: 290px;
+  padding: 10px 12px 10px 16px;
+  background:
+    linear-gradient(90deg, rgba(224, 64, 251, 0.85) 0 4px, transparent 4px),
+    rgba(9, 10, 16, 0.94);
+  backdrop-filter: blur(8px);
+  border: 1px solid #2a2a32;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+  color: #c9c9d1;
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+}
+.nfz-strip.is-emerg { background: linear-gradient(90deg, #ef4444 0 4px, transparent 4px), rgba(24, 6, 8, 0.95); border-color: #7f1d1d; }
+.nfz-strip-head { display: flex; justify-content: space-between; gap: 8px; }
+.nfz-strip-call {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: #f4f4f6;
+}
+.nfz-strip-sub { margin-top: 3px; color: #9a9aa5; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; }
+.nfz-strip-x {
+  align-self: flex-start;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 1px solid #2a2a32;
+  color: #9a9aa5;
+  cursor: pointer;
+}
+.nfz-strip-x:hover { color: #f4f4f6; border-color: #e040fb; }
+.nfz-strip-emerg {
+  margin-top: 8px;
+  padding: 3px 7px;
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid #ef4444;
+  color: #fecaca;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.nfz-strip-lost { margin-top: 6px; color: #f59e0b; font-size: 10px; text-transform: uppercase; }
+.nfz-strip-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin: 10px 0 8px;
+  background: #2a2a32;
+  border: 1px solid #2a2a32;
+}
+.nfz-strip-grid div { padding: 5px 7px; background: rgba(9, 10, 16, 0.96); }
+.nfz-strip-grid dt { color: #e040fb; font-family: "Barlow Condensed", sans-serif; font-size: 11px; letter-spacing: 0.1em; }
+.nfz-strip-grid dd { margin: 1px 0 0; color: #f4f4f6; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.nfz-strip-pos { font-size: 10px; line-height: 1.5; }
+.nfz-strip-pos span { display: block; color: #9a9aa5; }
+.nfz-strip-dets { list-style: none; margin: 8px 0 0; padding: 6px 0 0; border-top: 1px dashed #2a2a32; display: grid; gap: 4px; }
+.nfz-strip-dets li { display: flex; align-items: center; gap: 7px; }
+.nfz-strip-dets li a { margin-left: auto; color: #e040fb; }
+.nfz-strip-dets .badge { font-size: 9px; padding: 1px 6px; }
+.nfz-strip-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.nfz-strip .nfz-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  background: transparent;
+  color: #f4f4f6;
+  border: 1px solid #2a2a32;
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.nfz-strip .nfz-chip.is-on { border-color: #e040fb; color: #e040fb; }
+.nfz-strip .nfz-meta { font-size: 10px; color: #6b6b75; text-transform: uppercase; }
+
+/* =================================================== /map page frame */
+.nfz-mappage .nfz-map { height: 100%; border: 0; box-shadow: none; }
+.nfz-deck {
+  position: absolute;
+  z-index: 1000;
+  top: 10px;
+  left: 52px;
+  min-width: 200px;
+  padding: 7px 10px 8px;
+  background: rgba(9, 10, 16, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid #2a2a32;
+  border-top: 2px solid #e040fb;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  color: #c9c9d1;
+}
+.nfz-deck-title {
+  margin-bottom: 5px;
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #f4f4f6;
+}
+.nfz-deck label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; opacity: 0.55; }
+.nfz-deck label.is-on { opacity: 1; }
+.nfz-deck input { position: absolute; opacity: 0; pointer-events: none; }
+.nfz-deck-swatch {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--dc);
+  background: transparent;
+  box-shadow: inset 0 0 0 2px rgba(9, 10, 16, 0.92);
+}
+.nfz-deck label.is-on .nfz-deck-swatch { background: var(--dc); box-shadow: inset 0 0 0 2px rgba(9, 10, 16, 0.92), 0 0 8px var(--dc); }
+.nfz-deck-name { flex: 1; }
+.nfz-deck-count {
+  min-width: 2.4em;
+  padding: 0 5px;
+  border: 1px solid #2a2a32;
+  text-align: center;
+  color: #f4f4f6;
+  font-variant-numeric: tabular-nums;
+}
+.nfz-deck label:focus-within { outline: 1px solid #e040fb; outline-offset: 2px; }
+
+@media (max-width: 760px) {
+  /* Controls: search on its own row (right of the zoom buttons), buttons under it. */
+  .nfz-layers { left: 50px; right: 8px; }
+  .nfz-layers-bar { flex-wrap: wrap; justify-content: flex-end; }
+  .nfz-search { flex: 1 1 100%; }
+  .nfz-search input { width: 100%; }
+  .nfz-search-list { left: 0; right: 0; width: auto; }
+  .nfz-hud-strip { top: 82px; }
+  .nfz-strip { bottom: 64px; right: 8px; left: 8px; width: auto; max-height: 55%; overflow-y: auto; }
+  .nfz-deck { top: auto; bottom: 44px; left: 8px; min-width: 0; }
+  .nfz-deck-title { display: none; }
+  /* The flight strip takes the bottom of the screen while it's open. */
+  .nfz-mappage:has(.nfz-strip) .nfz-deck { display: none; }
+}
