@@ -15,17 +15,21 @@ Shared-map links: `/map?ac=<icao hex>` selects and follows an aircraft;
 | `zones.ts` | Loading the airspace GeoJSON, zone info, schedule labels, zone outline thumbnails. |
 | `altitude.ts` | Altitude parsing, altitude color bands, floor/ceiling labels. |
 | `severity.ts` | Severity colors (same values as `theme.css`). |
-| `trails.ts` | Building flight trails from the live feed; splitting them at gaps. |
+| `trails.ts` | Recording flight history from the live feed (60 min), drawing trails, climb rate. |
 | `geo.ts` | Small distance/bearing helpers (nautical miles). |
 | `csv.ts` | CSV export of the incursion feed. |
 | `flagged.ts` | Which aircraft a detector flagged recently (lock-on brackets). |
 | `squawk.ts` | Emergency transponder codes (7500 / 7600 / 7700). |
-| `track.ts` | Parsing `/observations/tracks` and reading positions off it (replay). |
+| `track.ts` | Parsing `/observations/tracks` and reading positions off it (incursion replay). |
+| `replay.ts` | Sky replay: every aircraft's position at a past moment, merging fetched history. |
 | `urlState.ts` | Filters + selection kept in the address bar (shareable links). |
 | `hooks/` | Page hooks: new-detection tracking, alerts, keyboard shortcuts, feed health, track fetch, replay clock. |
-| `components/` | `LiveMap` (the shared live map), `FlightStrip`, and the page pieces: header, readouts, timeline, zone board, zone detail, feed, detail panel, altitude profile, replay controls. |
-| `map/` | Leaflet layers and map controls: zones, incursions, traffic (planes, trails, tags, velocity vector, sweep paint), chart grid/rings/rose, radar sweep, HUD, legend, layer switch, aircraft search, measuring tool. |
-| `__tests__/` | Unit tests for the pure helpers (`npm test`). |
+| `components/` | `LiveMap` (the shared live map), `FlightStrip`, `ReplayBar`, and the page pieces: header, readouts, timeline, zone board, zone detail, feed, detail panel, altitude profile, incursion replay controls. |
+| `map/` | Leaflet layers and map controls: zones, incursions, traffic (planes, trails, tags + `labels.ts` placement, velocity vector, sweep paint), chart grid/rings/rose, radar sweep, context layers (weather, airports, navaids, day/night with `sun.ts`, heatmap), HUD, legend, layer switch, aircraft search, measuring tool, `replayContext.ts`. |
+| `__tests__/` | Unit tests for the pure helpers, and `components/` tests that render React components in jsdom (`npm test`). |
+
+A longer walkthrough (architecture, how layers work, replay, testing, calm-by-default
+rules) is in [`docs/NFZ_FRONTEND.md`](../../../../docs/NFZ_FRONTEND.md).
 
 Rules we follow (from the team build guide): the API stays read-only, we only
 edit NFZ files, and the page shows what the detector decided instead of

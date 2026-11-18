@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { LeafletMouseEvent } from "leaflet";
 import { useLeafletMap } from "../../../map/mapContext";
 import { useObservations } from "../../../api/observations";
+import type { AircraftFeature } from "../../../api/types";
 import { altitudeFt } from "../altitude";
 import { dms, zuluClock } from "../format";
 import { project } from "../geo";
@@ -19,13 +20,19 @@ export function MapHud({
   flagged,
   flaggedLabel = "incursions",
   health,
+  aircraft: aircraftProp,
+  replayAt = null,
 }: {
   flagged: number;
   flaggedLabel?: string;
   health: FeedHealth;
+  /** What the map is showing (sky replay passes past positions). */
+  aircraft?: AircraftFeature[];
+  replayAt?: number | null;
 }) {
   const map = useLeafletMap();
-  const { aircraft } = useObservations();
+  const { aircraft: live } = useObservations();
+  const aircraft = aircraftProp ?? live;
   const now = useNow(1000);
   const [cursor, setCursor] = useState<{ lat: number; lng: number } | null>(null);
   const [scale, setScale] = useState<{ nm: number; px: number } | null>(null);
@@ -86,7 +93,13 @@ export function MapHud({
         <i />
       </div>
       <div className="nfz-hud-strip" role="status">
-        <span className="is-clock">{zuluClock(now)}</span>
+        {replayAt != null ? (
+          <span className="is-replay">
+            <b>REPLAY</b> {zuluClock(replayAt)} · −{Math.max(0, Math.round((now - replayAt) / 60_000))} min
+          </span>
+        ) : (
+          <span className="is-clock">{zuluClock(now)}</span>
+        )}
         <span>
           <b>{aircraft.length}</b> traffic
         </span>
@@ -101,7 +114,7 @@ export function MapHud({
             <b>{emergencies}</b> emergency squawk{emergencies > 1 ? "s" : ""}
           </span>
         )}
-        <span className={`is-feed is-${health.level}`}>{feedText}</span>
+        {replayAt == null && <span className={`is-feed is-${health.level}`}>{feedText}</span>}
       </div>
       <div className="nfz-hud-readout" aria-hidden="true">
         {scale && (

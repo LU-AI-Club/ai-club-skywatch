@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { AircraftFeature } from "../../../api/types";
-import { MAX_JUMP_NM, TRAIL_MINUTES, recordFixes, trailRuns, trendArrow, verticalRate, type Fix } from "../trails";
+import {
+  HISTORY_MINUTES,
+  MAX_JUMP_NM,
+  recordFixes,
+  trailMinutesForZoom,
+  trailRuns,
+  trendArrow,
+  verticalRate,
+  type AircraftMeta,
+  type Fix,
+} from "../trails";
 import { nmBetween, project } from "../geo";
 
 function plane(id: string, lat: number, lon: number, iso: string): AircraftFeature {
@@ -43,18 +53,28 @@ describe("recordFixes", () => {
     recordFixes([plane("a", 37.01, -79, "2026-11-17T21:00:10Z")], store);
     expect(store.get("a")).toHaveLength(2);
   });
-  it(`keeps only the last ${TRAIL_MINUTES} minutes`, () => {
+  it(`keeps ${HISTORY_MINUTES} minutes of history for replay`, () => {
     const store = new Map<string, Fix[]>();
     recordFixes([plane("a", 37, -79, "2026-11-17T21:00:00Z")], store);
-    recordFixes([plane("a", 37.01, -79, "2026-11-17T21:20:00Z")], store);
-    expect(store.get("a")).toHaveLength(1);
+    recordFixes([plane("a", 37.01, -79, "2026-11-17T21:40:00Z")], store);
+    expect(store.get("a")).toHaveLength(2);
+    recordFixes([plane("a", 37.02, -79, "2026-11-17T22:10:00Z")], store);
+    expect(store.get("a")).toHaveLength(2); // the 21:00 fix fell out of the hour
   });
-  it("forgets aircraft that have been gone a long time", () => {
+  it("remembers each aircraft's codes for replay, and forgets aircraft gone too long", () => {
     const store = new Map<string, Fix[]>();
-    recordFixes([plane("gone", 37, -79, "2026-11-17T20:00:00Z")], store);
-    recordFixes([plane("here", 37, -79, "2026-11-17T21:00:00Z")], store);
+    const meta = new Map<string, AircraftMeta>();
+    recordFixes([plane("gone", 37, -79, "2026-11-17T19:30:00Z")], store, meta);
+    expect(meta.get("gone")?.icao24).toBe("gone");
+    recordFixes([plane("here", 37, -79, "2026-11-17T21:00:00Z")], store, meta);
     expect(store.has("gone")).toBe(false);
+    expect(meta.has("gone")).toBe(false);
     expect(store.has("here")).toBe(true);
+  });
+  it("records altitude, course and speed with each fix", () => {
+    const store = new Map<string, Fix[]>();
+    recordFixes([plane("a", 37, -79, "2026-11-17T21:00:00Z")], store);
+    expect(store.get("a")![0]).toMatchObject({ alt: 5000, course: 90, sog: 200 });
   });
 });
 
@@ -81,6 +101,20 @@ describe("trailRuns", () => {
         expect(nmBetween({ lat: la, lon: lo }, { lat: lb, lon: lb2 })).toBeLessThanOrEqual(MAX_JUMP_NM);
       }
     }
+  });
+  it("draws only the requested window, ending at a replay moment", () => {
+    const fixes = along(60, 0.5); // one fix every 10 s for 10 minutes
+    const all = trailRuns(fixes, undefined, 15).flatMap((r) => r.points);
+    const recent = trailRuns(fixes, undefined, 3).flatMap((r) => r.points);
+    expect(recent.length).toBeLessThan(all.length);
+    const past = trailRuns(fixes, t(20), 15);
+    const lastRun = past[past.length - 1].points;
+    const end = lastRun[lastRun.length - 1];
+    expect(end).toEqual([fixes[20].lat, fixes[20].lon]); // ends exactly at the replay moment
+  });
+  it("draws shorter trails when zoomed in", () => {
+    expect(trailMinutesForZoom(8)).toBeGreaterThan(trailMinutesForZoom(10));
+    expect(trailMinutesForZoom(12)).toBeLessThanOrEqual(trailMinutesForZoom(10));
   });
   it("needs at least two fixes", () => {
     expect(trailRuns([])).toEqual([]);

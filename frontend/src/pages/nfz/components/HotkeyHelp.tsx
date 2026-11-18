@@ -4,6 +4,7 @@ const KEYS: [string, string][] = [
   ["J / K", "Next / previous incursion in the feed"],
   ["Esc", "Close the detail panel, then the zone"],
   ["F", "Map fullscreen"],
+  ["R", "Sky replay: play back the last hour of traffic"],
   ["/", "Search"],
   ["Space", "Play / pause the replay (detail panel open)"],
   ["?", "Show this list"],
