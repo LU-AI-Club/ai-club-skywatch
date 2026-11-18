@@ -69,7 +69,7 @@ export function NoFlyZoneOverlay({
           hot={hot}
           showPlanes={showPlanes}
           showTrails={showTrails}
-          tagMode={showTags ? "key" : "off"}
+          showTags={showTags}
         />
       )}
       <IncursionLayer

@@ -20,8 +20,3 @@ export function severityColor(sev: unknown): string {
 export function severityRank(sev: unknown): number {
   return SEVERITY_ORDER.indexOf(String(sev ?? "").toLowerCase() as (typeof SEVERITY_ORDER)[number]);
 }
-
-/** Heatmap weight: 0.35 (info) … 0.95 (critical). */
-export function heatWeight(severity: unknown): number {
-  return 0.35 + 0.15 * Math.max(0, severityRank(severity));
-}

@@ -150,23 +150,17 @@
   width: 18px;
   height: 18px;
 }
-/* Body: altitude color and a dark keyline. Filters are expensive with
-   hundreds of planes, so the glow is only switched on while the radar sweep
-   is painting a plane (class is-lit, set by TrafficLayer). */
-.nfz-ac-body { fill: var(--ac); stroke: #05060a; stroke-width: 1; }
-.nfz-ac.is-lit .nfz-ac-body {
+/* Body: altitude color, a dark keyline, and a glow while the sweep paints it. */
+.nfz-ac-body {
+  fill: var(--ac);
+  stroke: #05060a;
+  stroke-width: 1;
   filter:
     drop-shadow(0 0 calc(1px + var(--lit, 0) * 7px) color-mix(in srgb, var(--ac) calc(35% + var(--lit, 0) * 65%), transparent))
     brightness(calc(0.92 + var(--lit, 0) * 0.35));
 }
-/* Shadow: offset grows with altitude (set inline). Soft-edged only when
-   zoomed in, where there are few planes on screen. */
-.nfz-ac-shadow { fill: #000; opacity: 0.4; }
-.nfz-near .nfz-ac-shadow { opacity: 0.55; filter: blur(1.4px); }
-/* Zoomed far out: smaller planes, no shadows. */
-.nfz-far .nfz-ac-shadow { display: none; }
-.nfz-far .nfz-ac-body { transform-box: fill-box; }
-.nfz-far .nfz-ac-inner svg { left: -6px; top: -6px; width: 12px; height: 12px; }
+/* Shadow: offset grows with altitude (set inline), soft and dark. */
+.nfz-ac-shadow { fill: #000; opacity: 0.55; filter: blur(1.4px); }
 .nfz-ac-dot {
   position: absolute;
   left: -4px;
@@ -179,7 +173,6 @@
   box-shadow: 0 0 calc(var(--lit, 0) * 8px) var(--ac);
 }
 .nfz-ac:hover .nfz-ac-body { filter: drop-shadow(0 0 6px var(--ac)) drop-shadow(0 0 1px #000); }
-.nfz-far .nfz-ac-dot { left: -3px; top: -3px; width: 6px; height: 6px; }
 
 /* ATC-style data tag with a leader line: callsign, then altitude (hundreds
    of ft) with a climb/descend arrow, and ground speed. */
@@ -212,32 +205,13 @@
   transform: rotate(-45deg);
   transform-origin: right center;
 }
-/* Placement slots (labels.ts): NE is the default; NW/SE/SW mirror the tag and
-   its leader line; "off" hides it until hovered. */
-.nfz-ac[data-slot="nw"] .nfz-tag { left: auto; right: 17px; border-left: 0; border-right: 1px solid var(--ac); text-align: right; }
-.nfz-ac[data-slot="nw"] .nfz-tag::before { left: auto; right: -12px; transform: rotate(45deg); transform-origin: left center; }
-.nfz-ac[data-slot="se"] .nfz-tag { top: 8px; }
-.nfz-ac[data-slot="se"] .nfz-tag::before { bottom: auto; top: -1px; transform: rotate(45deg); }
-.nfz-ac[data-slot="sw"] .nfz-tag { left: auto; right: 17px; top: 8px; border-left: 0; border-right: 1px solid var(--ac); text-align: right; }
-.nfz-ac[data-slot="sw"] .nfz-tag::before { left: auto; right: -12px; bottom: auto; top: -1px; transform: rotate(-45deg); transform-origin: left center; }
-.nfz-tags .nfz-ac[data-slot="off"] .nfz-tag { display: none; }
-.nfz-tags .nfz-ac[data-slot="off"]:hover .nfz-tag { display: block; }
 .nfz-tag b { display: block; font-weight: 600; color: #f4f4f6; letter-spacing: 0.02em; }
 .nfz-tag i { display: block; font-style: normal; font-weight: 600; color: #fecaca; }
-.nfz-tags.nfz-tags-all .nfz-tag,
-.nfz-tags .nfz-ac-inner.is-low .nfz-tag,
+.nfz-tags .nfz-tag,
 .nfz-ac:hover .nfz-tag,
 .nfz-ac-inner.is-hot .nfz-tag,
 .nfz-ac-inner.is-picked .nfz-tag,
 .nfz-ac-inner.is-emerg .nfz-tag { display: block; }
-
-/* Above FL180 (higher than any zone): smaller and dimmer, unless it matters. */
-.nfz-ac-inner.is-high { opacity: 0.5; }
-.nfz-ac-inner.is-high svg { left: -7px; top: -7px; width: 14px; height: 14px; }
-.nfz-ac-inner.is-high.is-hot,
-.nfz-ac-inner.is-high.is-picked,
-.nfz-ac-inner.is-high.is-emerg,
-.nfz-ac:hover .nfz-ac-inner.is-high { opacity: 1; }
 
 /* Spotlight: dim every plane except the one under the mouse. */
 .nfz-spotlight .nfz-ac-inner { opacity: 0.18; }
@@ -656,56 +630,8 @@
   font-size: 11px;
   color: #c9c9d1;
 }
-.nfz-layers-panel { min-width: 230px; gap: 8px; }
-.nfz-layers-panel fieldset { margin: 0; padding: 0; border: 0; display: grid; gap: 3px; }
-.nfz-layers-panel legend {
-  padding: 0;
-  margin-bottom: 2px;
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #e040fb;
-}
 .nfz-layers-panel label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
-.nfz-layers-panel label em { margin-left: auto; font-style: normal; font-size: 9px; color: #6b6b75; }
 .nfz-layers-panel input { accent-color: #e040fb; }
-.nfz-seg { display: flex; align-items: center; gap: 0; margin-top: 2px; }
-.nfz-seg span { margin-right: 8px; }
-.nfz-seg button {
-  padding: 1px 8px;
-  background: transparent;
-  border: 1px solid #2a2a32;
-  margin-left: -1px;
-  color: #9a9aa5;
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 10px;
-  cursor: pointer;
-}
-.nfz-seg button.is-on { color: #f4f4f6; border-color: #e040fb; position: relative; }
-.nfz-layers-reset {
-  justify-self: start;
-  padding: 0;
-  background: none;
-  border: 0;
-  color: #9a9aa5;
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 10px;
-  text-decoration: underline dotted;
-  cursor: pointer;
-}
-.nfz-layers-reset:hover { color: #e040fb; }
-.nfz-mapbtn-badge {
-  display: inline-block;
-  min-width: 15px;
-  margin-left: 5px;
-  padding: 0 3px;
-  background: #e040fb;
-  color: #0a0a0c;
-  font-size: 10px;
-  text-align: center;
-}
 
 @media (max-width: 640px) {
   .nfz-hud-strip { top: 46px; right: 8px; max-width: calc(100% - 60px); }
@@ -779,11 +705,11 @@
   border-radius: 50%;
   background: conic-gradient(
     from 0deg,
-    transparent 0deg 300deg,
-    rgba(34, 211, 238, 0.012) 320deg,
-    rgba(34, 211, 238, 0.04) 345deg,
-    rgba(34, 211, 238, 0.08) 358deg,
-    rgba(160, 245, 255, 0.22) 359.7deg,
+    transparent 0deg 280deg,
+    rgba(34, 211, 238, 0.018) 300deg,
+    rgba(34, 211, 238, 0.06) 340deg,
+    rgba(34, 211, 238, 0.14) 357deg,
+    rgba(160, 245, 255, 0.4) 359.6deg,
     rgba(160, 245, 255, 0) 360deg
   );
   will-change: transform;
@@ -798,7 +724,7 @@
 .nfz-scanlines {
   position: absolute;
   inset: 0;
-  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.055) 0 1px, transparent 1px 3px);
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.09) 0 1px, transparent 1px 3px);
   mix-blend-mode: multiply;
 }
 
@@ -1010,142 +936,5 @@
   .nfz-deck { top: auto; bottom: 44px; left: 8px; min-width: 0; }
   .nfz-deck-title { display: none; }
   /* The flight strip takes the bottom of the screen while it's open. */
-  .nfz-mappage:has(.nfz-strip) .nfz-deck,
-  .nfz-mappage:has(.is-replaying) .nfz-deck { display: none; }
-}
-
-/* ================================================== context layers */
-/* Weather radar keeps its own colors (the basemap tint doesn't touch it). */
-.nfz-radar { mix-blend-mode: screen; }
-
-/* Airports: quiet blue-gray, sectional-style symbols. */
-.nfz-apt, .nfz-nav { pointer-events: auto; }
-.nfz-apt svg, .nfz-nav svg { position: absolute; overflow: visible; }
-.nfz-apt svg { left: -9px; top: -9px; width: 18px; height: 18px; fill: none; stroke: #8fb4ff; stroke-width: 1.6; opacity: 0.85; filter: drop-shadow(0 0 1px #000); }
-.nfz-apt--small svg { stroke-width: 1.3; opacity: 0.6; }
-.nfz-apt span, .nfz-nav span {
-  position: absolute;
-  left: 9px;
-  top: 4px;
-  white-space: nowrap;
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 9.5px;
-  color: rgba(143, 180, 255, 0.85);
-  text-shadow: 0 0 3px #000, 0 0 2px #000;
-}
-/* Navaids: VOR family blue hexagons, NDBs magenta stippled rings. */
-.nfz-nav svg { left: -11px; top: -11px; width: 22px; height: 22px; fill: none; stroke: #6f9dff; stroke-width: 1.2; opacity: 0.8; }
-.nfz-nav svg .ear { fill: #6f9dff; stroke: none; }
-.nfz-nav svg .dot { fill: currentColor; stroke: none; }
-.nfz-nav--vor { color: #6f9dff; }
-.nfz-nav--ndb { color: #d58cf0; }
-.nfz-nav--ndb svg { stroke: #d58cf0; }
-.nfz-nav svg .ndb { stroke-dasharray: 1 2.2; stroke-width: 2; }
-.nfz-nav--ndb span { color: rgba(213, 140, 240, 0.85); }
-.nfz-nav span b { font-weight: 600; }
-
-/* Heatmap canvas. */
-.nfz-heat { position: absolute; pointer-events: none; opacity: 0.8; }
-
-/* Legend icons for the context layers. */
-.nfz-lg-high { flex: none; width: 10px; height: 10px; margin: 0 3px; border-radius: 50%; background: #0891b2; opacity: 0.5; }
-.nfz-lg-radar { flex: none; width: 16px; height: 9px; background: linear-gradient(90deg, #04e9e7, #01ff01, #fdf802, #fd9500, #fd0000); opacity: 0.7; }
-.nfz-lg-apt { flex: none; width: 11px; height: 11px; margin: 0 2.5px; border: 1.5px solid #8fb4ff; border-radius: 50%; }
-.nfz-lg-vor { flex: none; display: inline-block; width: 12px; height: 10px; background: #6f9dff; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); opacity: 0.85; }
-.nfz-lg-ndb { flex: none; display: inline-block; width: 10px; height: 10px; border: 2px dotted #d58cf0; border-radius: 50%; }
-.nfz-lg-night { flex: none; width: 16px; height: 10px; background: linear-gradient(90deg, rgba(2, 6, 23, 0) 0%, rgba(2, 6, 23, 0.9) 70%); border: 1px solid #2a2a32; }
-.nfz-lg-heat { flex: none; width: 16px; height: 10px; border-radius: 50%; background: radial-gradient(circle, #fff1f2 0%, #f472b6 30%, #c026d3 55%, rgba(91, 33, 182, 0) 75%); }
-
-/* ======================================================== sky replay */
-.nfz-mapbtn.is-replay { border-color: #f59e0b; color: #f59e0b; }
-.nfz-hud-strip .is-replay { border-color: #f59e0b; color: #fde68a; background: rgba(40, 26, 4, 0.9); }
-.nfz-hud-strip .is-replay b { color: #f59e0b; letter-spacing: 0.1em; }
-.nfz-strip-replay { margin-top: 6px; color: #f59e0b; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
-/* While replaying, the bottom-row controls move up to make room for the bar. */
-.is-replaying .leaflet-bottom { margin-bottom: 52px; }
-.is-replaying .nfz-hud-readout { bottom: 76px; }
-.is-replaying .nfz-strip { bottom: 118px; }
-.nfz-replay-bar {
-  position: absolute;
-  z-index: 1000;
-  left: 10px;
-  right: 10px;
-  bottom: 22px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  background: rgba(9, 10, 16, 0.94);
-  backdrop-filter: blur(8px);
-  border: 1px solid #2a2a32;
-  border-top: 2px solid #f59e0b;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  font-family: "JetBrains Mono", Consolas, monospace;
-  font-size: 11px;
-  color: #c9c9d1;
-}
-.nfz-rb-tag {
-  font-family: "Barlow Condensed", sans-serif;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #f59e0b;
-}
-.nfz-replay-bar .nfz-play { width: 30px; height: 30px; border-color: #f59e0b; background: rgba(245, 158, 11, 0.12); color: #fde68a; }
-.nfz-rb-track { position: relative; flex: 1; min-width: 120px; height: 30px; }
-.nfz-rb-track input[type="range"] {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 7px;
-  width: 100%;
-  margin: 0;
-  accent-color: #f59e0b;
-}
-.nfz-rb-have {
-  position: absolute;
-  right: 0;
-  top: 12px;
-  height: 6px;
-  background: rgba(245, 158, 11, 0.18);
-  border-left: 1px solid rgba(245, 158, 11, 0.6);
-}
-.nfz-rb-tick {
-  position: absolute;
-  bottom: -3px;
-  transform: translateX(-50%);
-  font-size: 9px;
-  color: #6b6b75;
-  pointer-events: none;
-}
-.nfz-rb-mark {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  width: 7px;
-  height: 7px;
-  margin-left: -3.5px;
-  padding: 0;
-  border: 1px solid #0a0a0c;
-  background: var(--mc);
-  transform: rotate(45deg);
-  cursor: pointer;
-}
-.nfz-rb-mark:hover { outline: 1px solid #f4f4f6; }
-.nfz-rb-time { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.2; }
-.nfz-rb-time b { color: #f4f4f6; font-weight: 600; font-variant-numeric: tabular-nums; }
-.nfz-rb-time em { font-style: normal; font-size: 10px; color: #9a9aa5; }
-.nfz-replay-bar .nfz-speeds button { padding: 2px 6px; }
-.nfz-replay-bar .nfz-speeds button.is-on { border-color: #f59e0b; color: #fde68a; }
-.nfz-rb-load:disabled { opacity: 0.55; cursor: default; }
-.nfz-rb-narrow { display: none; }
-@media (max-width: 760px) {
-  .nfz-replay-bar { flex-wrap: wrap; bottom: 18px; gap: 6px; }
-  .nfz-rb-track { flex-basis: 100%; order: 5; }
-  .nfz-rb-tag, .nfz-rb-wide { display: none; }
-  .nfz-rb-narrow { display: inline; }
-  .is-replaying .leaflet-bottom { margin-bottom: 92px; }
-  .is-replaying .nfz-strip { bottom: 150px; }
-  .is-replaying .nfz-deck { bottom: 128px; }
+  .nfz-mappage:has(.nfz-strip) .nfz-deck { display: none; }
 }

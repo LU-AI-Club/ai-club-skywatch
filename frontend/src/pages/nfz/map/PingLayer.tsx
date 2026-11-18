@@ -4,13 +4,11 @@ import * as L from "leaflet";
 import { useLeafletMap } from "../../../map/mapContext";
 import type { Detection } from "../../../api/types";
 import { severityColor } from "../severity";
-import { useReplayAt } from "./replayContext";
 
 export function PingLayer({ detections, pingIds }: { detections: Detection[]; pingIds?: ReadonlySet<string> }) {
   const map = useLeafletMap();
-  const replaying = useReplayAt() != null;
   useEffect(() => {
-    if (!map || replaying || !pingIds || pingIds.size === 0) return;
+    if (!map || !pingIds || pingIds.size === 0) return;
     const layer = L.layerGroup().addTo(map);
     for (const d of detections) {
       if (!pingIds.has(d.detection_id)) continue;
@@ -30,6 +28,6 @@ export function PingLayer({ detections, pingIds }: { detections: Detection[]; pi
     return () => {
       layer.remove();
     };
-  }, [map, pingIds, detections, replaying]);
+  }, [map, pingIds, detections]);
   return null;
 }

@@ -19,4 +19,4 @@ export function project(from: LatLon, courseDeg: number, nm: number): LatLon {
 }
 
 /** Lynchburg Regional Airport (KLYH), the center of our range rings. */
-export const KLYH: LatLon = { lat: 37.3267, lon: -79.2004 };
+export const KLYH: LatLon = { lat: 37.3267, lon: -79.2011 };

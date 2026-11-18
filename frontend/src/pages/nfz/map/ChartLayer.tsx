@@ -69,7 +69,7 @@ export function ChartLayer() {
     const left = map.containerPointToLatLng([6, 0]).lng;
     // Sectional charts tick every grid line once per minute of arc, with
     // longer ticks every 5' and 10'. Tick lengths are in screen pixels.
-    const tickEvery = zoom >= 10 ? 1 / 60 : zoom >= 8 ? 5 / 60 : 0;
+    const tickEvery = zoom >= 9 ? 1 / 60 : zoom >= 8 ? 5 / 60 : 0;
     const c0 = map.containerPointToLatLng([0, 0]);
     const c1 = map.containerPointToLatLng([1, 1]);
     const degPerPxLat = Math.abs(c0.lat - c1.lat);

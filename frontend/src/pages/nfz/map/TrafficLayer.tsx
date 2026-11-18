@@ -12,18 +12,15 @@ import * as L from "leaflet";
 import { useLeafletMap } from "../../../map/mapContext";
 import { useObservations } from "../../../api/observations";
 import { fetchJSON } from "../../../api/client";
-import type { AircraftFeature, AircraftProperties } from "../../../api/types";
+import type { AircraftProperties } from "../../../api/types";
 import { altitudeColor, altitudeFt, altitudeTag } from "../altitude";
-import { recordFixes, trailMinutesForZoom, trailRuns, trails, trendArrow, verticalRate, type Fix } from "../trails";
-import { useThrottled } from "../hooks/useThrottled";
+import { recordFixes, trailRuns, trails, trendArrow, verticalRate } from "../trails";
 import { project } from "../geo";
 import { parseTrack, type TrackResponse } from "../track";
 import { emergencyOf } from "../squawk";
 import type { FlaggedAircraft } from "../flagged";
 import { ensurePane, PANES } from "./panes";
 import { sweepAngle } from "./SweepLayer";
-import { placeTags, tagSize, type Slot, type TagRequest } from "./labels";
-import type { TagMode } from "./LayerSwitch";
 import { useZoom } from "./useZoom";
 import { esc } from "./html";
 
@@ -32,8 +29,6 @@ const MIN_MOVING_KNOTS = 40; // slower than this = on the ground: no pointer, no
 const MAX_FIX_AGE_HOURS = 0.1; // positions older than ~6 min count as stale (gray)
 const MAX_GLIDE_S = 20; // never extrapolate more than this past the last fix
 const TAG_MIN_ZOOM = 10; // ATC data tags appear from this zoom (or on hover)
-const LOW_FT = 5_000; // "key" tags: aircraft below this are shown
-const HIGH_FT = 18_000; // above every zone's ceiling: drawn dimmer
 const FADE = [0.15, 0.32, 0.65]; // trail opacity, oldest third → newest
 
 // A small airliner shape, nose pointing up (north) in a 24x24 box.
@@ -44,8 +39,6 @@ export const PLANE_PATH =
 export type HotAircraft = FlaggedAircraft;
 
 const isStale = (p: AircraftProperties) => !(p.position_age_hours <= MAX_FIX_AGE_HOURS);
-/** History up to a replay moment (all of it when live). */
-const upTo = (fixes: Fix[], at: number | null) => (at == null ? fixes : fixes.filter((f) => f.t <= at));
 export const callsignOf = (p: AircraftProperties) => (p.callsign ?? "").trim() || p.icao24.toUpperCase();
 
 function planeHtml(
@@ -67,8 +60,7 @@ function planeHtml(
   const lock = opts.flag
     ? `<span class="nfz-lock${opts.flag.selected ? " is-selected" : ""}" style="--lc:${opts.flag.color}"><i></i><i></i><i></i><i></i></span>`
     : "";
-  const band = ft > 0 && ft < LOW_FT ? "is-low" : ft > HIGH_FT ? "is-high" : "";
-  const cls = ["nfz-ac-inner", band, opts.flag && "is-hot", opts.selected && "is-picked", emerg && "is-emerg"].filter(Boolean).join(" ");
+  const cls = ["nfz-ac-inner", opts.flag && "is-hot", opts.selected && "is-picked", emerg && "is-emerg"].filter(Boolean).join(" ");
   return (
     `<div class="${cls}" style="--ac:${emerg ? "#ef4444" : color}">` +
     (opts.selected ? `<span class="nfz-pick"></span>` : "") +
@@ -86,21 +78,18 @@ export function TrafficLayer({
   mode,
   showPlanes = true,
   showTrails = true,
-  tagMode = "key",
+  showTags = true,
   hot,
   selected = null,
   onSelect,
   follow = false,
   onFollowChange,
   sweep = false,
-  aircraft: aircraftProp,
-  replayAt = null,
 }: {
   mode: "lines" | "planes";
   showPlanes?: boolean;
   showTrails?: boolean;
-  /** Which aircraft get data tags when zoomed in. */
-  tagMode?: TagMode;
+  showTags?: boolean;
   hot?: FlaggedAircraft;
   /** Selected aircraft id (ICAO hex), or null. */
   selected?: string | null;
@@ -110,53 +99,27 @@ export function TrafficLayer({
   onFollowChange?: (on: boolean) => void;
   /** Radar sweep running: planes light up as the beam passes them. */
   sweep?: boolean;
-  /** Aircraft to draw (sky replay passes past positions); default = the live feed. */
-  aircraft?: AircraftFeature[];
-  /** Sky replay moment (ms), or null for live. */
-  replayAt?: number | null;
 }) {
   const map = useLeafletMap();
-  const { aircraft: live } = useObservations();
-  const aircraft = aircraftProp ?? live;
+  const { aircraft } = useObservations();
   const zoom = useZoom(map);
-  // Trails redraw at most twice a second during replay.
-  const trailAircraft = useThrottled(aircraft, replayAt != null ? 500 : 0);
-  const trailAt = useThrottled(replayAt, replayAt != null ? 500 : 0);
-
-  // Always record the live feed (history keeps building during replay too).
-  useEffect(() => {
-    recordFixes(live);
-  }, [live]);
   const [hovered, setHovered] = useState<string | null>(null);
   const planeLayer = useRef<L.LayerGroup | null>(null);
   const markers = useRef(new Map<string, L.Marker>());
   const motion = useRef(new Map<string, Motion>());
-  const htmlCache = useRef(new Map<string, string>());
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
   const followRef = useRef({ follow, selected, sweep });
   followRef.current = { follow, selected, sweep };
   const planesOn = mode === "planes" && showPlanes;
 
-  // Data tags once zoomed in (CSS reads these classes): "key" shows low and
-  // important aircraft, "all" shows everyone.
+  // Data tags for every plane once zoomed in (CSS reads this class).
   useEffect(() => {
     if (!map) return;
     const el = map.getContainer();
-    const on = tagMode !== "off" && (zoom ?? 0) >= TAG_MIN_ZOOM;
-    el.classList.toggle("nfz-tags", on);
-    el.classList.toggle("nfz-tags-all", on && tagMode === "all");
-    return () => el.classList.remove("nfz-tags", "nfz-tags-all");
-  }, [map, zoom, tagMode]);
-
-  // Zoom bands for CSS: far = simplified planes, near = full detail (blurred shadows).
-  useEffect(() => {
-    if (!map) return;
-    const el = map.getContainer();
-    el.classList.toggle("nfz-far", (zoom ?? 9) <= 7);
-    el.classList.toggle("nfz-near", (zoom ?? 0) >= 10);
-    return () => el.classList.remove("nfz-far", "nfz-near");
-  }, [map, zoom]);
+    el.classList.toggle("nfz-tags", showTags && (zoom ?? 0) >= TAG_MIN_ZOOM);
+    return () => el.classList.remove("nfz-tags");
+  }, [map, zoom, showTags]);
 
   // Spotlight: while a plane is hovered, everything else dims.
   useEffect(() => {
@@ -178,26 +141,24 @@ export function TrafficLayer({
 
   // Trails (both styles) and direction pointers ("lines" style only).
   useEffect(() => {
+    recordFixes(aircraft);
     if (!map) return;
-    const minutes = trailMinutesForZoom(zoom);
     const pane = ensurePane(map, PANES.trails);
     const renderer = L.canvas({ pane, padding: 0.3 });
     const layer = L.layerGroup().addTo(map);
     const line = { renderer, interactive: false } as const;
     const focus = hovered ?? (mode === "planes" ? selected : null);
 
-    for (const a of trailAircraft) {
+    for (const a of aircraft) {
       const p = a.properties;
       const color = emergencyOf(p.squawk) ? "#ef4444" : altitudeColor(altitudeFt(p.altitude), isStale(p));
       const spot = focus === a.id;
-      // High traffic (above every zone) gets fainter trails to keep the map calm.
-      const high = (altitudeFt(p.altitude) ?? 0) > HIGH_FT && !hot?.has(`icao24:${p.icao24}`);
-      const dim = (hovered !== null && !spot ? 0.2 : 1) * (high && !spot ? 0.4 : 1);
+      const dim = hovered !== null && !spot ? 0.2 : 1;
 
       if (showTrails) {
-        for (const run of trailRuns(trails.get(a.id) ?? [], trailAt ?? undefined, minutes)) {
+        for (const run of trailRuns(trails.get(a.id) ?? [])) {
           // A soft glow under the newest stretch makes trails read as motion.
-          if (run.age === 2 && dim === 1 && !high) {
+          if (run.age === 2 && dim === 1) {
             L.polyline(run.points, { ...line, color, weight: spot ? 9 : 6, opacity: spot ? 0.22 : 0.1 }).addTo(layer);
           }
           L.polyline(run.points, {
@@ -235,7 +196,7 @@ export function TrafficLayer({
       layer.remove();
       renderer.remove();
     };
-  }, [map, trailAircraft, trailAt, mode, showTrails, zoom, hovered, selected, hot]);
+  }, [map, aircraft, mode, showTrails, zoom, hovered, selected]);
 
   // Plane icons: one marker per aircraft, kept and moved between refreshes
   // (not rebuilt), so hovering survives an update.
@@ -248,7 +209,6 @@ export function TrafficLayer({
       layer.remove();
       planeLayer.current = null;
       ms.clear();
-      htmlCache.current.clear();
       setHovered(null);
     };
   }, [map, planesOn]);
@@ -265,7 +225,7 @@ export function TrafficLayer({
       const html = planeHtml(p, altitudeColor(altitudeFt(p.altitude), stale), {
         flag: hot?.get(`icao24:${p.icao24}`),
         selected: selected === a.id,
-        trend: trendArrow(verticalRate(upTo(trails.get(a.id) ?? [], replayAt))),
+        trend: trendArrow(verticalRate(trails.get(a.id) ?? [])),
       });
       const t = Date.parse(p.observed_at);
       const course = p.cog ?? p.heading;
@@ -275,8 +235,7 @@ export function TrafficLayer({
         course,
         sog: p.sog,
         t: Number.isFinite(t) ? t : Date.now(),
-        // No gliding in replay: positions come from the replay clock.
-        moving: replayAt == null && !stale && course != null && p.sog != null && p.sog >= MIN_MOVING_KNOTS,
+        moving: !stale && course != null && p.sog != null && p.sog >= MIN_MOVING_KNOTS,
       });
       seen.add(a.id);
       let m = ms.get(a.id);
@@ -294,13 +253,9 @@ export function TrafficLayer({
         ms.set(id, m);
       } else {
         m.setLatLng([lat, lon]);
-        // Only rebuild the icon when it actually looks different.
-        if (htmlCache.current.get(a.id) !== html) {
-          const el = m.getElement();
-          if (el) el.innerHTML = html;
-        }
+        const el = m.getElement();
+        if (el) el.innerHTML = html;
       }
-      htmlCache.current.set(a.id, html);
       m.setZIndexOffset(selected === a.id ? 2000 : emergencyOf(p.squawk) ? 1500 : 0);
     }
     for (const [id, m] of ms) {
@@ -308,10 +263,9 @@ export function TrafficLayer({
         m.remove();
         ms.delete(id);
         motion.current.delete(id);
-        htmlCache.current.delete(id);
       }
     }
-  }, [map, aircraft, planesOn, hot, selected, replayAt]);
+  }, [map, aircraft, planesOn, hot, selected]);
 
   // Glide: between feed updates, move each plane along its course at its
   // speed (capped at MAX_GLIDE_S past its last fix), about 8 times a second.
@@ -327,7 +281,6 @@ export function TrafficLayer({
     let vecLine: L.Polyline | null = null;
     let vecTicks: L.Polyline[] = [];
     let vecLabels: L.Marker[] = [];
-    const litState = new Map<string, number>();
     const clearVec = () => {
       vecLayer.clearLayers();
       vecOwner = null;
@@ -396,31 +349,20 @@ export function TrafficLayer({
       }
 
       // Radar paint: brighten planes the sweep has just passed.
-      // Only planes whose glow actually changed are touched, and the glow
-      // filter is switched on (class is-lit) only while a plane is lit.
       if (sweeping) {
         const size = map.getSize();
         const cx = size.x / 2;
         const cy = size.y / 2;
         const beam = sweepAngle(performance.now());
-        for (const [id, m] of markers.current) {
+        for (const m of markers.current.values()) {
           const el = m.getElement();
           if (!el) continue;
           const c = map.latLngToContainerPoint(m.getLatLng());
           if (c.x < -40 || c.y < -40 || c.x > size.x + 40 || c.y > size.y + 40) continue;
           const angle = ((Math.atan2(c.x - cx, cy - c.y) * 180) / Math.PI + 360) % 360;
           const behind = (beam - angle + 360) % 360;
-          const lit = behind < 70 ? Math.round((1 - behind / 70) * 20) / 20 : 0;
-          const prev = litState.get(id) ?? 0;
-          if (lit === prev) continue;
-          litState.set(id, lit);
-          if (lit > 0) {
-            el.style.setProperty("--lit", String(lit));
-            if (!prev) el.classList.add("is-lit");
-          } else {
-            el.style.removeProperty("--lit");
-            el.classList.remove("is-lit");
-          }
+          const lit = behind < 70 ? 1 - behind / 70 : 0;
+          el.style.setProperty("--lit", lit.toFixed(2));
         }
       }
     };
@@ -428,68 +370,7 @@ export function TrafficLayer({
     return () => {
       cancelAnimationFrame(frame);
       vecLayer.remove();
-      for (const m of markers.current.values()) {
-        const el = m.getElement();
-        el?.style.removeProperty("--lit");
-        el?.classList.remove("is-lit");
-      }
-    };
-  }, [map, planesOn]);
-
-  // Data-tag placement: about once a second, plus after every pan/zoom and
-  // feed update. Only runs while tags are showing.
-  const hotRef = useRef(hot);
-  hotRef.current = hot;
-  useEffect(() => {
-    if (!map || !planesOn) return;
-    const slots = new Map<string, Slot>();
-    const layout = () => {
-      const box = map.getContainer();
-      if (!box.classList.contains("nfz-tags")) return;
-      const all = box.classList.contains("nfz-tags-all");
-      const size = map.getSize();
-      const reqs: TagRequest[] = [];
-      for (const [id, m] of markers.current) {
-        const el = m.getElement();
-        if (!el) continue;
-        const c = map.latLngToContainerPoint(m.getLatLng());
-        if (c.x < -60 || c.y < -60 || c.x > size.x + 60 || c.y > size.y + 60) continue;
-        const inner = el.firstElementChild as HTMLElement | null;
-        const call = inner?.querySelector(".nfz-tag b")?.textContent ?? "";
-        const emerg = !!inner?.classList.contains("is-emerg");
-        const flagged = !!inner?.classList.contains("is-hot");
-        const picked = id === followRef.current.selected;
-        const low = !!inner?.classList.contains("is-low");
-        if (!(all || low || emerg || flagged || picked)) continue; // this tag isn't showing
-        const altText = inner?.querySelector(".nfz-tag span")?.textContent ?? "";
-        const alt = parseInt(altText, 10);
-        const { w, h } = tagSize(call, emerg ? 3 : 2);
-        reqs.push({
-          id,
-          x: c.x,
-          y: c.y,
-          w,
-          h,
-          force: picked || emerg || flagged,
-          // selected > emergency > flagged > lower altitude first
-          priority: (picked ? 4000 : 0) + (emerg ? 3000 : 0) + (flagged ? 2000 : 0) + (Number.isFinite(alt) ? 1000 - Math.min(999, alt) : 0),
-          prev: slots.get(id),
-        });
-      }
-      const result = placeTags(reqs);
-      for (const [id, slot] of result) {
-        if (slots.get(id) === slot) continue;
-        slots.set(id, slot);
-        markers.current.get(id)?.getElement()?.setAttribute("data-slot", slot);
-      }
-    };
-    const timer = window.setInterval(layout, 1000);
-    map.on("moveend zoomend", layout);
-    const first = window.setTimeout(layout, 50);
-    return () => {
-      window.clearInterval(timer);
-      window.clearTimeout(first);
-      map.off("moveend zoomend", layout);
+      for (const m of markers.current.values()) m.getElement()?.style.removeProperty("--lit");
     };
   }, [map, planesOn]);
 

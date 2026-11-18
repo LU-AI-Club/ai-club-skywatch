@@ -12,7 +12,6 @@ import { ensureHatchDefs } from "./svgDefs";
 import { ensurePane, PANES } from "./panes";
 import { useZoom } from "./useZoom";
 import { esc } from "./html";
-import { asOf, useReplayAt } from "./replayContext";
 
 const MOA_LABEL_MIN_ZOOM = 9; // MOA names appear once you zoom in a little
 const ALT_LABEL_MIN_ZOOM = 9; // floor/ceiling under each label
@@ -32,16 +31,13 @@ export function ZoneLayer({
   const map = useLeafletMap();
   const files = useZoneFiles();
   const zoom = useZoom(map);
-  // During sky replay, zones light up only once their incursions have happened.
-  const at = useReplayAt();
-  const atBucket = at == null ? null : Math.floor(at / 30_000);
 
   useEffect(() => {
     if (!map) return;
     ensureHatchDefs();
     const labelPane = ensurePane(map, PANES.labels);
     const layer = L.layerGroup().addTo(map);
-    const hotZones = new Set(asOf(detections, at).map((d) => String(d.zone_id ?? "")));
+    const hotZones = new Set(detections.map((d) => String(d.zone_id ?? "")));
     const labelled = new Set<string>();
     const placed: Box[] = [];
     const infoById = new Map(toZones(files).map((z) => [z.id, z]));
@@ -143,8 +139,7 @@ export function ZoneLayer({
     return () => {
       layer.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, files, detections, zoom, focusZoneId, onZoneClick, atBucket]);
+  }, [map, files, detections, zoom, focusZoneId, onZoneClick]);
 
   return null;
 }

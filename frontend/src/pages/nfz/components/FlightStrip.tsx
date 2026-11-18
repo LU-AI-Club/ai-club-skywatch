@@ -7,7 +7,7 @@ import type { AircraftFeature, Detection } from "../../../api/types";
 import { useObservations } from "../../../api/observations";
 import { SeverityBadge } from "../../../components/SeverityBadge";
 import { altitudeFt } from "../altitude";
-import { ago, dms, zuluClock } from "../format";
+import { ago, dms } from "../format";
 import { trails, verticalRate, trendArrow } from "../trails";
 import { emergencyOf } from "../squawk";
 import { isRecent } from "../flagged";
@@ -31,24 +31,18 @@ export function FlightStrip({
   follow,
   onFollow,
   onClose,
-  aircraft: list,
-  replayAt = null,
 }: {
   id: string;
   detections: Detection[];
   follow: boolean;
   onFollow: (on: boolean) => void;
   onClose: () => void;
-  /** What the map is showing (sky replay passes past positions). */
-  aircraft?: AircraftFeature[];
-  replayAt?: number | null;
 }) {
-  const { aircraft: live } = useObservations();
-  const aircraft = list ?? live;
-  const found = aircraft.find((a) => a.id === id);
+  const { aircraft } = useObservations();
+  const live = aircraft.find((a) => a.id === id);
   const lastSeen = useRef<AircraftFeature | null>(null);
-  if (found) lastSeen.current = found;
-  const a = found ?? lastSeen.current;
+  if (live) lastSeen.current = live;
+  const a = live ?? lastSeen.current;
 
   if (!a) {
     return (
@@ -68,12 +62,10 @@ export function FlightStrip({
 
   const p = a.properties;
   const ft = altitudeFt(p.altitude);
-  const history = trails.get(a.id) ?? [];
-  const rate = verticalRate(replayAt == null ? history : history.filter((f) => f.t <= replayAt));
+  const rate = verticalRate(trails.get(a.id) ?? []);
   const emerg = emergencyOf(p.squawk);
   const mine = detections
-    .filter((d) => d.entity_id === `icao24:${p.icao24}` && isRecent(d, replayAt ?? Date.now()))
-    .filter((d) => replayAt == null || Date.parse(String(d.temporal_bounds_start)) <= replayAt)
+    .filter((d) => d.entity_id === `icao24:${p.icao24}` && isRecent(d))
     .sort((x, y) => Date.parse(String(y.last_detected_at)) - Date.parse(String(x.last_detected_at)))
     .slice(0, 4);
   const [lon, lat] = a.geometry.coordinates;
@@ -99,8 +91,7 @@ export function FlightStrip({
           SQUAWK {p.squawk} · {emerg.toUpperCase()}
         </div>
       )}
-      {replayAt != null && <div className="nfz-strip-replay">Replay · as of {zuluClock(replayAt)}</div>}
-      {!found && replayAt == null && <div className="nfz-strip-lost">Lost from the live feed · last known values</div>}
+      {!live && <div className="nfz-strip-lost">Lost from the live feed · last known values</div>}
       <dl className="nfz-strip-grid">
         <div>
           <dt>ALT</dt>
@@ -127,8 +118,8 @@ export function FlightStrip({
       <div className="nfz-strip-pos">
         {dms(lat, "lat")} {dms(lon, "lon")}
         <span>
-          KLYH {String(fromKlyh.brg).padStart(3, "0")}° / {fromKlyh.nm < 10 ? fromKlyh.nm.toFixed(1) : Math.round(fromKlyh.nm)} NM
-          {replayAt == null && <> · seen {ago(p.observed_at)}</>}
+          KLYH {String(fromKlyh.brg).padStart(3, "0")}° / {fromKlyh.nm < 10 ? fromKlyh.nm.toFixed(1) : Math.round(fromKlyh.nm)} NM · seen{" "}
+          {ago(p.observed_at)}
         </span>
       </div>
       {mine.length > 0 && (

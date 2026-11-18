@@ -19,13 +19,10 @@
     "react-router-dom": "6.26.2"
   },
   "devDependencies": {
-    "@testing-library/dom": "^10.4.2",
-    "@testing-library/react": "^16.3.3",
     "@types/leaflet": "1.9.12",
     "@types/react": "18.3.5",
     "@types/react-dom": "18.3.0",
     "@vitejs/plugin-react": "4.3.1",
-    "jsdom": "^25.0.1",
     "typescript": "5.5.4",
     "vite": "5.4.6",
     "vitest": "^2.1.9"

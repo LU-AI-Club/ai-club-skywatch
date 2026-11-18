@@ -119,7 +119,6 @@ export function MapPage() {
     f: () => mapRef.current?.toggleFullscreen(),
     "/": () => mapRef.current?.focusSearch(),
     Escape: () => mapRef.current?.clearSelection(),
-    r: () => mapRef.current?.toggleReplay(),
   });
 
   return (

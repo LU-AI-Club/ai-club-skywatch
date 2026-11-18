@@ -1,16 +1,14 @@
 // Find an aircraft by callsign or ICAO code; picking one selects it.
 import { forwardRef, useMemo, useState } from "react";
 import { useObservations } from "../../../api/observations";
-import type { AircraftFeature } from "../../../api/types";
 import { altitudeFt, altitudeTag } from "../altitude";
 import { callsignOf } from "./TrafficLayer";
 
-export const AircraftSearch = forwardRef<HTMLInputElement, { onPick: (id: string) => void; aircraft?: AircraftFeature[] }>(function AircraftSearch(
-  { onPick, aircraft: list },
+export const AircraftSearch = forwardRef<HTMLInputElement, { onPick: (id: string) => void }>(function AircraftSearch(
+  { onPick },
   ref,
 ) {
-  const { aircraft: live } = useObservations();
-  const aircraft = list ?? live;
+  const { aircraft } = useObservations();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(0);

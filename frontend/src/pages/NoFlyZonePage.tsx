@@ -162,7 +162,6 @@ export function NoFlyZonePage() {
     j: () => step(1),
     k: () => step(-1),
     f: () => mapRef.current?.toggleFullscreen(),
-    r: () => mapRef.current?.toggleReplay(),
     "/": () => searchRef.current?.focus(),
     "?": () => setHelp((h) => !h),
     Escape: (e) => {
