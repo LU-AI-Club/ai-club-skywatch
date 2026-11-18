@@ -62,8 +62,17 @@ conditions must hold.
 |---|---|---|
 | HIGH | < 0.5 nm | < 400 ft |
 | MEDIUM | < 1.5 nm | < 700 ft |
-| LOW | < 3 nm | < 1,000 ft |
+| LOW | < 3 nm | < 900 ft |
 
+
+**Additional gates**
+
+- **Maximum Current Separation (10 nautical miles):** Aircraft pairs more than 10 nautical miles apart are excluded because straight-line predictions become less reliable as the time to closest approach increases. The 10-nautical-mile limit keeps even the fastest-closing pairs to approximately 40 seconds of lookahead, improving prediction reliability.
+- **Minimum Altitude (5,000 feet MSL):** The detector excludes aircraft below 5,000 feet MSL because this traffic is primarily associated with pattern work, approaches, and departures. These situations require airport and runway context that the detector does not currently have; this detector is designed to identify en route proximity instead.
+
+The LOW vertical limit is 900 ft rather than the 1,000 ft standard: 1,000 ft
+*is* the standard vertical separation, and reported altitudes jitter around it
+by 25-30 ft, so a 1,000 ft limit flagged pairs that were correctly separated.
 
 **Where the numbers live:** every threshold is stored in a versioned
 configuration file, never hardcoded — `configs/detectors/proximity.yaml`.
@@ -72,17 +81,20 @@ configuration file, never hardcoded — `configs/detectors/proximity.yaml`.
 
 A SENTINEL `Detection` naming the two aircraft, a severity
 (LOW / MEDIUM / HIGH), a confidence score, factual explanation
+statements and known limitations.
+
 **Governance:** we never say "dangerous" or "violation." We report the
 distance, the altitude gap and the time to closest approach as observations. A
 separate Xenith service decides what those observations mean.
-- **Maximum Current Separation (10 nautical miles):** Aircraft pairs more than 10 nautical miles apart are excluded because straight-line predictions become less reliable as the time to closest approach increases. The 10-nautical-mile limit keeps even the fastest-closing pairs to approximately 40 seconds of lookahead, improving prediction reliability.
-- **Minimum Altitude (5,000 feet MSL):** The detector excludes aircraft below 5,000 feet MSL because this traffic is primarily associated with pattern work, approaches, and departures. These situations require airport and runway context that the detector does not currently have; this detector is designed to identify en route proximity instead.
 
 ## 6. Ground truth & evaluation
 
 Two approaches:
 
- verify the detector identifies qualifying
+1. **Synthetic scenarios** — we script encounters where the correct outcome is
+   known by construction. We have 16, covering head-on, diverging, stacked,
+   crossing, ground traffic, standard vertical separation, the altitude floor
+   and the distance gate. These verify the detector identifies qualifying
    encounters and does not flag scenarios that fall outside its rules.
 2. **Manual review of real data** — we review flagged pairs from real ADS-B
    data and record the judgements in a labeled evaluation set.
