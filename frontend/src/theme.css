@@ -264,3 +264,36 @@ a {
 .leaflet-popup-content {
   font-size: 13px;
 }
+
+/* Detector heartbeat line (components/DetectorHealth.tsx). Sits under a page
+   heading and reads as quiet metadata while healthy, so an empty detections
+   table below it reads as "nothing to report" rather than "this is broken".
+   Turns amber/red only when something is actually wrong. */
+.detector-health {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.detector-health__status {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .06em;
+  font-size: 11px;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+.detector-health--error {
+  color: var(--text);
+}
+.detector-health--error .detector-health__status {
+  color: var(--sev-critical);
+  border-color: var(--sev-critical);
+}
+.detector-health__error {
+  color: var(--sev-critical);
+}

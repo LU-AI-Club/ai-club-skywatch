@@ -29,10 +29,10 @@ export function ProximityPage() {
           starting point.
         </p>
       </div>
-	
-	<DetectorHealth />
-      
-	{error && <EmptyState kind="error" message={`Couldn't load detections: ${error}`} />}
+
+      <DetectorHealth />
+
+      {error && <EmptyState kind="error" message={`Couldn't load detections: ${error}`} />}
 
       <div className="stat-grid">
         <StatCard label="Detections (24h)" value={loading ? "…" : rows.length} />
