@@ -13,6 +13,9 @@ import {
   useNoFlyZoneDetections,
 } from "../api/hooks";
 import type { Detection } from "../api/types";
+import { AircraftSelectLayer } from "./overlays/AircraftSelectLayer";
+import { TrackLayer } from "./overlays/TrackLayer";
+import { FlightDetailsPane } from "./overlays/FlightDetailsPane";
 
 const OVERLAYS = [
   { key: "spoofing", label: "Spoofing", color: "#a855f7" },
@@ -65,6 +68,7 @@ export function MapPage() {
     proximity: true,
     "no-fly-zone": true,
   });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const { aircraft, lastUpdated, error } = useObservations();
 
   // All three always fetch (cheap); overlays render only when toggled on.
@@ -99,6 +103,11 @@ export function MapPage() {
           on[o.key] && data[o.key] ? (
             <DetectionOverlay key={o.key} detections={data[o.key]!} color={o.color} />
           ) : null,
+        )}
+        <AircraftSelectLayer selectedId={selectedId} onSelect={setSelectedId} />
+        <TrackLayer entityId={selectedId} />
+        {selectedId && (
+          <FlightDetailsPane entityId={selectedId} onClose={() => setSelectedId(null)} />
         )}
       </MapView>
 
