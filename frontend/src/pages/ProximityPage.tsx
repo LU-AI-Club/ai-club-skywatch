@@ -26,6 +26,11 @@ function smallest(rows: Detection[], key: string): number | null {
   return values.length ? Math.min(...values) : null;
 }
 
+// Entity ids are prefixed by their id scheme -- "icao24:a6b81a" for aircraft.
+// Strip whichever prefix is there rather than one literal, so the table keeps
+// showing bare hex if the scheme changes again (it changed once already, in #127).
+const ENTITY_PREFIX = /^[a-z0-9_]+:/i;
+
 function pair(row: Detection): string[] {
   return Array.isArray(row.member_entity_ids)
     ? row.member_entity_ids.filter((id): id is string => typeof id === "string")
@@ -117,7 +122,7 @@ export function ProximityPage() {
             <tbody>{sortedRows.map((row) => (
               <tr key={row.detection_id}>
                 <td className="aircraft-pair">{pair(row).length ? pair(row).map((id, index) => (
-                  <span key={`${id}-${index}`}>{index > 0 && <span className="pair-separator" aria-hidden="true">↔</span>}{id.replace(/^aircraft:/, "").toUpperCase()}</span>
+                  <span key={`${id}-${index}`}>{index > 0 && <span className="pair-separator" aria-hidden="true">↔</span>}{id.replace(ENTITY_PREFIX, "").toUpperCase()}</span>
                 )) : "—"}</td>
                 <td>{formatted(numeric(row, "predicted_horizontal_nm"), 2, "nm")}</td>
                 <td>{formatted(numeric(row, "predicted_vertical_ft"), 0, "ft")}</td>
