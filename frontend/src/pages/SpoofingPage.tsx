@@ -106,6 +106,7 @@ export function SpoofingPage() {
             </button>
           ))}
         </div>
+      <SpoofingSummary detections={rows} windowHours={24} />
 
         <button className="btn ghost" onClick={reload} disabled={loading}>
           {loading ? "Refreshing…" : "Refresh"}

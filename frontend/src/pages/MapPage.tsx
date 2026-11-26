@@ -23,6 +23,7 @@ const TEAM_OVERLAYS: Partial<
 > = {
   spoofing: SpoofingOverlay,
 };
+import { ProximityOverlay } from "./overlays/ProximityOverlay";
 
 const OVERLAYS = [
   { key: "spoofing", label: "Spoofing", color: "#a855f7" },
@@ -31,6 +32,8 @@ const OVERLAYS = [
 ] as const;
 
 type OverlayKey = (typeof OVERLAYS)[number]["key"];
+
+const SINCE_HOURS = 2;
 
 // A detector overlay: renders markers for detections that carry coordinates,
 // and cleans itself up. Rendered inside <MapView>, so it can grab the raw map.
@@ -78,9 +81,11 @@ export function MapPage() {
   const { aircraft, lastUpdated, error } = useObservations();
 
   // All three always fetch (cheap); overlays render only when toggled on.
-  const spoofing = useSpoofingDetections({ since_hours: 24 });
-  const proximity = useProximityDetections({ since_hours: 24 });
-  const noFlyZone = useNoFlyZoneDetections({ since_hours: 24 });
+  // 2 h while the proximity overlay is in development: recent detections still
+  // have both aircraft in the live feed. Was 24 h.
+  const spoofing = useSpoofingDetections({ since_hours: SINCE_HOURS });
+  const proximity = useProximityDetections({ since_hours: SINCE_HOURS });
+  const noFlyZone = useNoFlyZoneDetections({ since_hours: SINCE_HOURS });
   const data: Record<OverlayKey, Detection[] | null> = {
     spoofing: spoofing.data,
     proximity: proximity.data,
@@ -116,6 +121,10 @@ export function MapPage() {
           ) : (
             <DetectionOverlay key={o.key} detections={data[o.key]!} color={o.color} />
           );
+          // Proximity finds pairs, so it draws its own overlay (a line between
+          // the two aircraft); the others are one-aircraft findings, so a dot.
+          const Overlay = o.key === "proximity" ? ProximityOverlay : DetectionOverlay;
+          return <Overlay key={o.key} detections={data[o.key]!} color={o.color} />;
         })}
       </MapView>
 

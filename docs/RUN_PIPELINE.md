@@ -234,7 +234,7 @@ docker compose down -v
 ## Known gotchas
 
 - **Stale schema / "relation does not exist".** The schema in `db/schema/` only
-  loads on an *empty* volume. If you add or change a migration, the existing
+  loads on an _empty_ volume. If you add or change a migration, the existing
   volume keeps the old schema — run `docker compose down -v` then `up` to reload,
   or apply the one file by hand:
   `docker exec -i skywatch-db psql -U skywatch -d skywatch < db/schema/00X_xxx.sql`.
@@ -249,7 +249,7 @@ docker compose down -v
   code older than that, its detectors get no altitude, NIC/NACp, squawk or
   callsign, and still report `SUCCESS`. This runs the real reader on the last 5
   minutes and should show nearly every observation with altitude (`0 with
-  altitude` = rebuild with `--build` from current `main`):
+altitude` = rebuild with `--build` from current `main`):
   `docker compose --profile runners run --rm --no-deps --entrypoint python no-fly-zone-runner -c "import os, psycopg; from datetime import datetime, timedelta, UTC; from air.live.observations_reader import read_window; now = datetime.now(UTC); obs = read_window(psycopg.connect(os.environ['SKYWATCH_DB_DSN']), start=now - timedelta(minutes=5), end=now); print(len(obs), 'observations,', sum(o.altitude_ft is not None for o in obs), 'with altitude')"`
 - **Poller not inserting?** Check `docker logs skywatch-adsb-poller`. A
   `ConnectTimeout` means the machine is not on an allowlisted network (see

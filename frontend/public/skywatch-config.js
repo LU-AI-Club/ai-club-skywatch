@@ -8,7 +8,8 @@
   // When the app is served from the Vite dev port or the demo gateway, the API
   // is a separate origin on :8000. Otherwise assume API and UI share an origin.
   const localFrontend = isHttp && ["5173", "8081", "8090"].includes(loc.port);
-  const defaultApiBaseUrl = isHttp && !localFrontend ? loc.origin : "http://localhost:8000";
+  const defaultApiBaseUrl =
+    isHttp && !localFrontend ? loc.origin : "http://localhost:8000";
 
   window.SKYWATCH_CONFIG = {
     apiBaseUrl: defaultApiBaseUrl,
@@ -21,7 +22,8 @@
     // show recent history, or a dataset whose newest rows are older than an hour.
     observationsLookbackHours: 1,
     // Dark basemap, no API key required (Esri dark gray canvas).
-    tileUrl: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    tileUrl:
+      "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
     tileAttribution: "Tiles &copy; Esri",
     ...existing,
   };
