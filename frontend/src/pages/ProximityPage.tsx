@@ -41,6 +41,7 @@ function detectedAt(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
+import DetectorHealth from "../components/DetectorHealth";
 
 export function ProximityPage() {
   const [hours, setHours] = useState<Range>(336);
@@ -96,6 +97,8 @@ export function ProximityPage() {
           <button className="btn ghost" onClick={reload} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
         </div>
       </div>
+
+      <DetectorHealth />
 
       {error && <EmptyState kind="error" message={`Couldn't load detections: ${error}`} />}
       <div className="stat-grid">
