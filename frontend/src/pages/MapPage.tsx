@@ -13,6 +13,16 @@ import {
   useNoFlyZoneDetections,
 } from "../api/hooks";
 import type { Detection } from "../api/types";
+import { SpoofingOverlay } from "./overlays/SpoofingOverlay";
+
+// Detector-specific overlays. A key present here replaces the generic dot with
+// that team's own component; a key absent falls back to DetectionOverlay, so
+// adding one is additive and removing one cannot break the map.
+const TEAM_OVERLAYS: Partial<
+  Record<OverlayKey, (props: { detections: Detection[] }) => JSX.Element | null>
+> = {
+  spoofing: SpoofingOverlay,
+};
 import { ProximityOverlay } from "./overlays/ProximityOverlay";
 
 const OVERLAYS = [
@@ -102,6 +112,15 @@ export function MapPage() {
       <MapView style={{ height: "100%" }}>
         {OVERLAYS.map((o) => {
           if (!on[o.key] || !data[o.key]) return null;
+          // A team that has built its own overlay renders that instead of the
+          // generic dot. Kept as a lookup so each team owns its own file and
+          // three teams are not editing one block.
+          const Own = TEAM_OVERLAYS[o.key];
+          return Own ? (
+            <Own key={o.key} detections={data[o.key]!} />
+          ) : (
+            <DetectionOverlay key={o.key} detections={data[o.key]!} color={o.color} />
+          );
           // Proximity finds pairs, so it draws its own overlay (a line between
           // the two aircraft); the others are one-aircraft findings, so a dot.
           const Overlay = o.key === "proximity" ? ProximityOverlay : DetectionOverlay;

@@ -307,12 +307,18 @@ async def _detections(
     since_hours: float | None,
     limit: int,
     bbox: tuple[float | None, float | None, float | None, float | None],
+    extra: list[tuple[str, Any]] | None = None,
 ) -> JSONResponse:
     """Shared body for the three detector endpoints.
 
     Returns the rows as stored (``to_jsonb`` minus the ``position`` geometry),
     so whatever columns a team's table has — shared or detector-specific — flow
     through untouched. ``table`` comes from DETECTOR_TABLES, never user input.
+
+    ``extra`` lets one detector add filters the others have no use for, as
+    (sql_fragment, value) pairs. The fragment is written by the endpoint and
+    the value is always a parameter, so a caller's input never reaches the SQL
+    text. Default None, so the other two endpoints are unchanged.
     """
     min_lat, min_lon, max_lat, max_lon = bbox
     _validate_bbox(min_lat, min_lon, max_lat, max_lon)
@@ -332,6 +338,9 @@ async def _detections(
         clauses.append("latitude BETWEEN %s AND %s")
         clauses.append("longitude BETWEEN %s AND %s")
         params.extend([min_lat, max_lat, min_lon, max_lon])
+    for fragment, value in extra or []:
+        clauses.append(fragment)
+        params.append(value)
     params.append(limit)
 
     sql = f"""
@@ -345,6 +354,24 @@ async def _detections(
     return JSONResponse(content=jsonable_encoder([r["row"] for r in rows]))
 
 
+# The rules the spoofing detector can fire, as written into metadata.gate.
+# Listed rather than accepted free-form so an unknown value is a 422 the caller
+# can see, not an empty result they have to guess at.
+SPOOFING_GATES = (
+    "speed_delta_v1",
+    "turn_rate_v1",
+    "vrate_delta_v1",
+    "nic_floor_v1",
+    "identity_drift_v1",
+    "teleport_v1",
+    "subterrain_v1",
+    "coexistence_v1",
+    "pingpong_v1",
+    "reappear_v1",
+    "registry_mismatch_v1",
+)
+
+
 @app.get("/spoofing-detections")
 async def spoofing_detections(
     request: Request,
@@ -356,11 +383,89 @@ async def spoofing_detections(
     min_lon: float | None = Query(default=None, ge=-180, le=180),
     max_lat: float | None = Query(default=None, ge=-90, le=90),
     max_lon: float | None = Query(default=None, ge=-180, le=180),
+    gate: str | None = Query(
+        default=None,
+        description="Only findings from this rule, e.g. speed_delta_v1.",
+    ),
+    min_confidence: float | None = Query(
+        default=None, ge=0.0, le=1.0,
+        description="Only findings at or above this confidence.",
+    ),
 ) -> JSONResponse:
+    """Spoofing findings, with two filters the shared endpoint cannot provide.
+
+    The spoofing table has no detector-specific columns on purpose: a finding
+    is about one aircraft, and what varies between rules -- which gate fired,
+    the measured value against its threshold -- lives in ``metadata``. That
+    keeps the table stable when a rule is added, but it means "show me only the
+    speed anomalies" cannot be expressed through ``severity`` or ``entity_id``.
+
+    ``gate`` reaches into ``metadata`` to do it, using the GIN index the
+    migration created for exactly this. ``min_confidence`` is here because
+    severity is a coarse bucket and confidence is the continuous number behind
+    it; "LOW but 0.9 confident" is a different question from "LOW".
+
+    Both are additive. The rows come back in the same shape as every other
+    detector's, so nothing that already reads this endpoint has to change.
+    """
+    if gate is not None and gate not in SPOOFING_GATES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown gate {gate!r}; expected one of {list(SPOOFING_GATES)}",
+        )
+
+    extra: list[tuple[str, Any]] = []
+    if gate is not None:
+        # Parameterised, and matched against the tuple above, so nothing from
+        # the caller is ever interpolated into SQL.
+        extra.append(("metadata->>'gate' = %s", gate))
+    if min_confidence is not None:
+        extra.append(("confidence >= %s", min_confidence))
+
     return await _detections(
         request, DETECTOR_TABLES["spoofing"], severity, entity_id, since_hours,
-        limit, (min_lat, min_lon, max_lat, max_lon),
+        limit, (min_lat, min_lon, max_lat, max_lon), extra=extra,
     )
+
+
+@app.get("/spoofing-gates")
+async def spoofing_gates(
+    request: Request,
+    since_hours: float = Query(default=24.0, gt=0, le=720),
+) -> JSONResponse:
+    """How many findings each rule produced, newest window first.
+
+    A page can compute this from the detection list, but only for the rows it
+    already fetched -- which the ``limit`` caps. Counting in the database is
+    both honest and cheaper, and it lets the dashboard show "0" for a rule that
+    is live but quiet, which an empty list cannot distinguish from a rule that
+    does not exist.
+    """
+    sql = """
+        SELECT metadata->>'gate' AS gate,
+               count(*)          AS count,
+               max(last_detected_at) AS latest,
+               avg(confidence)   AS avg_confidence
+        FROM spoofing_detections
+        WHERE last_detected_at >= now() - make_interval(secs => %s)
+          AND metadata->>'gate' IS NOT NULL
+        GROUP BY 1
+        ORDER BY 2 DESC
+    """
+    rows = await _query(request, sql, [since_hours * 3600.0])
+    seen = {r["gate"]: r for r in rows}
+    out = [
+        {
+            "gate": g,
+            "count": int(seen[g]["count"]) if g in seen else 0,
+            "latest": seen[g]["latest"] if g in seen else None,
+            "avg_confidence": (
+                float(seen[g]["avg_confidence"]) if g in seen and seen[g]["avg_confidence"] is not None else None
+            ),
+        }
+        for g in SPOOFING_GATES
+    ]
+    return JSONResponse(content=jsonable_encoder(out))
 
 
 @app.get("/proximity-detections")
