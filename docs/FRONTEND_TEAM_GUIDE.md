@@ -50,6 +50,20 @@ Then open:
 > expected, not a bug. There's also older local data in the database you can use
 > while building.
 
+### Demo data for the Detections console
+
+If the detectors haven't produced recent findings, the `/cases` page is empty.
+Load a few ready-made sample cases (one per detector, with matching aircraft
+tracks near Lynchburg) so you have something to build against:
+
+```bash
+docker compose exec -T db psql -U skywatch -d skywatch < db/samples/console_demo.sql
+```
+
+It's safe to re-run (it replaces its own rows). To remove it later:
+`DELETE FROM observations WHERE source_id = 'sample';` and
+`DELETE FROM <your>_detections WHERE dedup_key LIKE 'sample-%';`.
+
 ### Build and run the containers
 
 The `api` and `frontend` are Docker images built from `api/` and `frontend/`. The
@@ -193,6 +207,79 @@ detection rows, so you can highlight the zone a detection is in. Don't use
 
 ---
 
+## 4. Your case-map overlay (the `/cases` scenario map)
+
+The **Detections** page (`/cases`) lists every detection on the left and opens
+one **case** on the right. Each case has a small **Scenario** map that shows
+*that one* detection. Out of the box it shows a shared starter — the aircraft's
+recent track, a dot at its latest position, and an orange ring where your
+detector fired. **Your job is to replace the starter with a picture of your
+finding**, the same way deliverable 3 does for the big map — but focused on a
+single case instead of all of them at once.
+
+**This is different from deliverable 3.** The `/map` overlay draws *all* your
+recent detections together (the spatial overview). The case map draws *one*
+detection in detail. They're separate files; build the `/map` overlay first.
+
+**File (yours):**
+
+| Team | Your case-map file |
+|------|--------------------|
+| **Spoofing** | `frontend/src/pages/caseMap/overlays/SpoofingCaseOverlay.tsx` |
+| **Proximity** | `frontend/src/pages/caseMap/overlays/ProximityCaseOverlay.tsx` |
+| **No-fly zone** | `frontend/src/pages/caseMap/overlays/NoFlyZoneCaseOverlay.tsx` |
+
+Your overlay is a small React component. It gets the detection row and draws on
+the shared Leaflet map with three helpers:
+
+```tsx
+import { useLeafletMap } from "../../../map/mapContext";      // the raw Leaflet map
+import { useCaseLayer, useAircraftTrack } from "../hooks";    // draw + fetch helpers
+import type { CaseOverlayProps } from "../../caseTypes";
+
+export function SpoofingCaseOverlay({ row }: CaseOverlayProps) {
+  const map = useLeafletMap();          // null until ready
+  const layer = useCaseLayer();         // a layer group that auto-cleans up
+  const track = useAircraftTrack(row.entity_id); // [lat,lon] pairs for the aircraft
+
+  useEffect(() => {
+    if (!map || !layer) return;
+    layer.clearLayers();
+    // ...draw L.polyline / L.circleMarker / L.geoJSON into `layer`...
+  }, [map, layer, track, row]);
+
+  return null; // you draw onto the map, not into the DOM
+}
+```
+
+- **`useCaseLayer()`** — everything you add to this layer is removed automatically
+  when the user picks another case, so you don't manage cleanup yourself.
+- **`useAircraftTrack(id)`** — returns one aircraft's recent track as `[lat, lon]`
+  pairs ready for `L.polyline`. It handles the id mismatch for you: detections use
+  `aircraft:<hex>` but the position feed is keyed `icao24:<hex>`, so always pass
+  it `row.entity_id` (or a bare hex) and it sorts the rest out.
+- **`row`** — the full detection: `severity`, `confidence`, `evidence`,
+  `metadata`, your own columns, `latitude`/`longitude`, `entity_id`.
+
+**What a good case map looks like per team:**
+- **Spoofing** — draw the aircraft's track and paint the *anomalous* part red
+  (the teleport jump, or the stretch where reported speed / vertical rate
+  disagreed). Read the gate and measured values from `row.metadata`.
+- **Proximity** — this case is a **pair**: `row.member_entity_ids` has both
+  aircraft. Call `useAircraftTrack` twice, draw both, and draw a line between
+  them at closest approach labelled with `row.predicted_horizontal_nm` /
+  `row.predicted_vertical_ft` / `row.t_cpa_seconds`.
+- **No-fly zone** — draw the **zone polygon** (`L.geoJSON`, from the same
+  airspace files as deliverable 3, matched on `row.zone_id`), shade it, and
+  highlight the part of the track inside it.
+
+You don't have to center the map — the console frames it on the detection for
+you. Just draw.
+
+**To see it with data**, load the demo cases (below) and open `/cases`.
+
+---
+
 ## What your detection rows contain
 
 **Every detector shares these columns:**
@@ -281,7 +368,11 @@ only ever as live as your detector is actually running.
   `*Page.tsx`, and your own overlay component. Coordinate before touching anything
   shared.
 - **Don't edit** the shared pieces unless you've agreed to: `src/map/MapView.tsx`,
-  `src/api/client.ts`, `src/components/`, `src/theme.css`, `src/App.tsx`, `Nav.tsx`.
+  `src/api/client.ts`, `src/components/`, `src/theme.css`, `src/App.tsx`, `Nav.tsx`,
+  and the shared case-map plumbing (`src/pages/CasesPage.tsx`,
+  `src/pages/caseMap/CaseMap.tsx`, `caseMap/registry.ts`, `caseMap/hooks.ts`,
+  `caseMap/DefaultCaseOverlay.tsx`). Your case overlay under
+  `caseMap/overlays/` **is** yours.
 - Keep the **API read-only**.
 - Show your detector's **own explanation**; don't recompute detections on the page.
 

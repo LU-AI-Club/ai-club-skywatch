@@ -15,6 +15,8 @@ import {
   useNoFlyZoneDetections,
 } from "../api/hooks";
 import type { Detection } from "../api/types";
+import { type CaseRow, type DetectorKey, DETECTOR_LABEL } from "./caseTypes";
+import { CaseMap } from "./caseMap/CaseMap";
 import { SeverityBadge } from "../components/SeverityBadge";
 import { EmptyState } from "../components/EmptyState";
 import { config } from "../config";
@@ -22,20 +24,6 @@ import { config } from "../config";
 // How far back the console looks, and the cap per detector feed.
 const SINCE_HOURS = 24;
 const PER_DETECTOR_LIMIT = 200;
-
-type DetectorKey = "spoofing" | "proximity" | "no-fly-zone";
-
-const DETECTOR_LABEL: Record<DetectorKey, string> = {
-  spoofing: "Spoofing",
-  proximity: "Proximity",
-  "no-fly-zone": "No-fly zone",
-};
-
-// A queue row is a detection tagged with which detector it came from, so one
-// merged list can show all three and still colour/filter by detector.
-interface CaseRow extends Detection {
-  _detector: DetectorKey;
-}
 
 // Columns every detection shares (rendered in the "Case details" block) plus
 // the fields we render elsewhere or never want in the generic dump. Anything
@@ -284,6 +272,13 @@ function CaseDetail({ row }: { row: CaseRow }) {
         </div>
         <SeverityBadge severity={row.severity} />
       </header>
+
+      {/* The scenario on a focused map. The detector's own overlay (team-owned)
+          draws the finding; see pages/caseMap/. */}
+      <section className="cases-block">
+        <h3>Scenario</h3>
+        <CaseMap key={row.detection_id} row={row} />
+      </section>
 
       {/* Core stored fields — the "general information from the case". */}
       <section className="cases-block">

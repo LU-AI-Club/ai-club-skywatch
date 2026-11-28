@@ -526,6 +526,18 @@ a {
   font-size: 13px;
   font-weight: 600;
 }
+.cases-map {
+  height: 320px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg);
+}
+.cases-map .leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+}
 .cases-tce {
   border: 1px dashed var(--border);
   border-radius: var(--radius);
