@@ -296,6 +296,7 @@ a {
 }
 .detector-health__error {
   color: var(--sev-critical);
+}
 /* Proximity map overlay: the miss-distance label at the pair's midpoint. */
 .leaflet-tooltip.proximity-label {
   background: var(--raised);
@@ -307,4 +308,258 @@ a {
 }
 .leaflet-tooltip-top.proximity-label::before {
   border-top-color: var(--accent);
+}
+
+/* ---- detections console (pages/CasesPage.tsx) ----
+   Master-detail: a scrollable detection queue on the left, the selected
+   detection's full case on the right. Stacks on narrow screens. */
+.cases-shell {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 12px;
+  height: calc(100vh - var(--nav-h));
+  padding: 12px;
+  overflow: hidden;
+}
+
+/* Queue */
+.cases-queue {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-height: 0;
+}
+.cases-queue__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.cases-queue__head h1 {
+  margin: 0;
+  font-size: 16px;
+}
+.cases-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+.cases-search {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.cases-search input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.cases-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  border: 1px solid var(--border);
+  background: var(--raised);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chip:hover {
+  color: var(--text);
+}
+.chip.active {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.cases-rows {
+  overflow-y: auto;
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-height: 0;
+}
+.cases-row {
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--raised);
+  border-radius: var(--radius);
+  padding: 10px 11px;
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+  color: var(--text);
+  font: inherit;
+}
+.cases-row:hover {
+  border-color: var(--muted);
+}
+.cases-row.active {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.cases-row__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cases-row__entity {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cases-row__meta {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Case detail */
+.cases-case {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-y: auto;
+  min-height: 0;
+}
+.cases-detail {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px 28px;
+}
+.cases-detail__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.cases-detail__head h1 {
+  margin: 0 0 3px;
+  font-size: 20px;
+}
+.cases-detail__sub {
+  color: var(--muted);
+  font-size: 13px;
+}
+.cases-block {
+  display: grid;
+  gap: 9px;
+}
+.cases-block h3 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.cases-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.cases-field {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--raised);
+  padding: 8px 10px;
+  min-width: 0;
+}
+.cases-field--wide {
+  grid-column: 1 / -1;
+}
+.cases-field__label {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 2px;
+  overflow-wrap: anywhere;
+}
+.cases-field__value {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.cases-field__value.mono,
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.cases-sublabel {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.cases-json {
+  margin: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow: auto;
+}
+.cases-maplink {
+  font-size: 13px;
+  font-weight: 600;
+}
+.cases-map {
+  height: 320px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg);
+}
+.cases-map .leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+}
+.cases-tce {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  background: var(--raised);
+}
+.cases-tce__note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 820px) {
+  .cases-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+  .cases-queue {
+    height: 60vh;
+  }
+  .cases-fields {
+    grid-template-columns: 1fr;
+  }
 }
